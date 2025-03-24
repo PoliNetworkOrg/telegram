@@ -3,8 +3,12 @@ on:
   push:
     branches: ['main']
     paths:
-      - '**.go'
-      - 'go.mod'
+      - '**.ts'
+      - '**.tsx'
+      - 'package.json'
+      - 'tsconfig.json'
+      - 'tsconfig.*.json'
+      - 'pnpm-lock.yaml'
       - Dockerfile
   workflow_dispatch:
 
