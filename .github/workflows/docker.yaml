@@ -29,4 +29,4 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/polinetworkorg/terraform:latest
+          tags: ghcr.io/polinetworkorg/telegram:latest
