@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node out/index.js",
     "build": "tsc",
-    "dev": "node --experimental-strip-types --env-file=.env src/index.ts",
+    "dev": "node --experimental-strip-types --env-file=.env --watch src/index.ts",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "pretty": "prettier --write ."
