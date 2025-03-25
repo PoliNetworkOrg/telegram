@@ -10,6 +10,7 @@ if (!process.env.BOT_TOKEN) {
   throw new Error('BOT_TOKEN environment variable is required!')
 }
 const bot = new Telegraf(process.env.BOT_TOKEN)
+
 bot.start(async (ctx) => {
   if (ctx.chat?.type !== 'private') {
     return
@@ -17,12 +18,23 @@ bot.start(async (ctx) => {
   ctx.setChatMenuButton({ type: 'commands' })
   ctx.reply('Welcome from PoliNetwork!')
 })
+
 bot.telegram.setMyCommands([
   { command: 'help', description: 'Help command' },
   { command: 'ping', description: 'Test command' },
 ])
-bot.help((ctx) => ctx.reply('This is a test!'))
+
+bot.help(async (ctx) => {
+  if (ctx.chat.type !== "private") {
+    await ctx.deleteMessage(ctx.message.message_id)
+    return;
+  }
+
+  ctx.reply('This is a test!') 
+})
+
 bot.command('ping', (ctx) => ctx.reply('pong'))
+
 bot.command('del', async (ctx) => {
   if (ctx.message.chat.type === 'private') {
     ctx.reply('This command is only available in groups.')
