@@ -89,17 +89,14 @@ export class Telex {
       const { username, id } = ctx.message.from
       if (username) setTelegramId(username, id)
     })
-    this.bot.on(message('text'), (ctx, next) => {
-      const text = Telex.getText(ctx.message)
-      if (text?.startsWith('/') && text !== "/help") {
-        this.commandPreamble(ctx, text.split(' ')[0].slice(1))
-      } else next()
-    })
     this.bot.on(message(), async (ctx, next) => {
-      next() // not sure if this should procede here
+      next() // not sure if this should proceed here
+      const text = Telex.getText(ctx.message)
+      if (text?.startsWith('/')) return
       const conv = this.conversations.get(ctx.message.chat.id)
       if (conv) conv.progress(ctx)
     })
+
     this.bot.start(async (ctx) => {
       if (ctx.chat.type !== 'private') {
         return
@@ -107,35 +104,33 @@ export class Telex {
       ctx.setChatMenuButton({ type: 'commands' })
       ctx.reply('Welcome from PoliNetwork! Type /help to get started.')
     })
-  }
-
-  createCommand<A extends CommandArgs, R extends CommandReplyTo>(
-    cmd: Command<A, R>
-  ) {
-    this.commands.push(cmd as Command<CommandArgs, CommandReplyTo>)
-    return this
-  }
-
-  start(cb: () => void) {
-    this.bot.telegram.setMyCommands([
-      { command: 'help', description: 'Display all available commands' },
-      //...this.commands.map((cmd) => ({
-      //  command: cmd.trigger,
-      //  description: cmd.description || 'No description',
-      //})),
-    ])
 
     this.bot.help((ctx) => {
       ctx.replyWithMarkdownV2(
         this.commands.map((cmd) => Telex.formatCommandUsage(cmd)).join('\n\n')
       )
     })
+  }
 
-    this.commands.forEach((cmd) => {
-      this.bot.command(cmd.trigger, (ctx, next) => {
-        next()
-      })
-    })
+  createCommand<A extends CommandArgs, R extends CommandReplyTo>(
+    cmd: Command<A, R>
+  ) {
+    this.commands.push(cmd as Command<CommandArgs, CommandReplyTo>)
+    this.bot.command(cmd.trigger, (ctx) =>
+      this.commandPreamble(ctx, cmd.trigger)
+    )
+    return this
+  }
+
+  start(cb: () => void) {
+    this.bot.telegram.setMyCommands([
+      { command: 'help', description: 'Display all available commands' },
+      // ...this.commands.map((cmd) => ({
+      //   command: cmd.trigger,
+      //   description: cmd.description || 'No description',
+      // })),
+    ])
+
     this.bot.launch(cb)
 
     process.once('SIGINT', () => this.bot.stop('SIGINT'))
