@@ -119,10 +119,10 @@ export class Telex {
   start(cb: () => void) {
     this.bot.telegram.setMyCommands([
       { command: 'help', description: 'Display all available commands' },
-      ...this.commands.map((cmd) => ({
-        command: cmd.trigger,
-        description: cmd.description || 'No description',
-      })),
+      //...this.commands.map((cmd) => ({
+      //  command: cmd.trigger,
+      //  description: cmd.description || 'No description',
+      //})),
     ])
 
     this.bot.help((ctx) => {
