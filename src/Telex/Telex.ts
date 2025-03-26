@@ -76,7 +76,7 @@ export class Telex {
       : ''
 
     return `/${cmd.trigger} ${args}\n*${cmd.description || 'No description'}*${argDescs}${replyTo}`.replace(
-      /[\[\]\(\)~`>#\+\-=|{}.!]/g,
+      /[[\]()~`>#+\-=|{}.!]/g,
       '\\$&'
     )
   }
