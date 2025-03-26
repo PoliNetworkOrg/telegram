@@ -91,7 +91,7 @@ export class Telex {
     })
     this.bot.on(message('text'), (ctx, next) => {
       const text = Telex.getText(ctx.message)
-      if (text?.startsWith('/')) {
+      if (text?.startsWith('/') && text !== "/help") {
         this.commandPreamble(ctx, text.split(' ')[0].slice(1))
       } else next()
     })
