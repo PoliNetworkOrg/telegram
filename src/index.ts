@@ -1,110 +1,56 @@
-import { Telegraf } from 'telegraf'
 import { logger } from './logger.ts'
-import type { Message } from 'telegraf/typings/core/types/typegram'
-import { message } from "telegraf/filters"
-import { getTelegramId, setTelegramId } from './redis.ts'
-
-//import { client } from './redis.ts'
-
-function getText(message: Message): string | null {
-  return 'text' in message && message.text !== undefined ? message.text : null
-}
+import { Telex } from './Telex/index.ts'
 
 if (!process.env.BOT_TOKEN) {
   throw new Error('BOT_TOKEN environment variable is required!')
 }
-const bot = new Telegraf(process.env.BOT_TOKEN)
+const bot = new Telex(process.env.BOT_TOKEN)
+  .createCommand({
+    trigger: 'name',
+    description: 'Quick conversation',
+    handler: async ({ conversation }) => {
+      const name = await conversation.ask('What is your name?')
+      await conversation.reply(`Hello, ${name}\\!`)
+    },
+  })
+  .createCommand({
+    trigger: 'ping',
+    description: 'Replies with pong',
+    handler: async ({ conversation }) => {
+      await conversation.reply('pong')
+    },
+  })
+  .createCommand({
+    trigger: 'del',
+    description: 'Deletes the replied to message',
+    reply: 'required',
+    handler: async ({ conversation, repliedTo }) => {
+      const tg = conversation.getLastCtx() // questo dovrebbe essere nascosto in Telex
+      const text = Telex.getText(repliedTo)
+      logger.info({
+        action: 'delete_message',
+        messageText: text ?? '[Not a text message]',
+        sender: repliedTo.from?.username,
+      })
+      await tg.deleteMessage(repliedTo.message_id)
+      await tg.deleteMessage(tg.message.message_id)
+    },
+  })
+  .createCommand({
+    trigger: 'userid',
+    description: 'Gets the ID of a username',
+    args: { username: { description: 'The username to get the ID of' } },
+    handler: async ({ conversation, args }) => {
+      const username = args.username.replace('@', '')
+      const id = await bot.getCachedId(username)
+      if (!id) {
+        logger.warn(`[userid] username @${username} not in our cache`)
+        await conversation.reply(`Username @${username} not in our cache`)
+        return
+      }
 
-bot.start(async (ctx) => {
-  if (ctx.chat?.type !== 'private') {
-    return
-  }
-  ctx.setChatMenuButton({ type: 'commands' })
-  ctx.reply('Welcome from PoliNetwork!')
-})
+      await conversation.reply(`Username \`@${username}\`\nid: \`${id}\``)
+    },
+  })
 
-bot.telegram.setMyCommands([
-  { command: 'help', description: 'Help command' },
-  { command: 'ping', description: 'Test command' },
-])
-
-bot.on(message("text"), (ctx, next) => {
-  next()
-  if (ctx.chat.type === "private") return;
-
-  const { username, id } = ctx.message.from
-  if (username) {
-    setTelegramId(username, id)
-  }
-})
-
-
-bot.help(async (ctx) => {
-  if (ctx.chat.type !== 'private') {
-    await ctx.deleteMessage(ctx.message.message_id)
-    return
-  }
-
-  ctx.reply('This is a test!')
-})
-
-bot.command('ping', (ctx) => ctx.reply('pong'))
-
-bot.command('del', async (ctx) => {
-  if (ctx.message.chat.type === 'private') {
-    ctx.reply('This command is only available in groups.')
-    return
-  }
-
-  if (ctx.message?.reply_to_message) {
-    const messageId = ctx.message.reply_to_message.message_id
-    const text = getText(ctx.message.reply_to_message)
-
-    logger.info({
-      action: 'delete_message',
-      messageText: text ?? '[Not a text message]',
-      sender: ctx.message.reply_to_message.from?.username,
-    })
-    await ctx.deleteMessage(messageId)
-    const reply = await ctx.reply('Message deleted!')
-    setTimeout(() => {
-      ctx.deleteMessage(ctx.message.message_id)
-      ctx.deleteMessage(reply.message_id)
-    }, 3000)
-  } else {
-    const reply = await ctx.reply('Please reply to a message to delete it.')
-    setTimeout(() => {
-      ctx.deleteMessage(ctx.message.message_id)
-      ctx.deleteMessage(reply.message_id)
-    }, 3000)
-  }
-})
-
-bot.command('userid', async (ctx) => {
-  if (ctx.message.chat.type !== 'private') {
-    return
-  }
-
-  const msg = ctx.message.text
-  const username = msg.split(" ")[1]?.replace("@", "")
-  if (!username){
-    logger.error("[userid] the first param must be a username")
-    return;
-  }
-
-  const id = await getTelegramId(username)
-  if (!id) { 
-    logger.warn(`[userid] username @${username} not in our cache`)
-    await ctx.reply(`Username @${username} not in our cache`)
-    return;
-  }
-
-  
-  await ctx.reply(`Username \`@${username}\`\nid: \`${id}\``, { parse_mode: "MarkdownV2" })
-})
-
-
-bot.launch(() => logger.info('Bot started!'))
-
-process.once('SIGINT', () => bot.stop('SIGINT'))
-process.once('SIGTERM', () => bot.stop('SIGTERM'))
+bot.start(() => logger.info('Bot started!'))
