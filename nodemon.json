@@ -1,6 +1,7 @@
 {
   "watch": ["src"],
   "ext": "ts,js,json",
-  "exec": "vite-node src/index.ts",
-  "signal": "SIGTERM"
+  "exec": "tsc --noEmit && vite-node src/index.ts",
+  "signal": "SIGTERM",
+  "onError": {"restart": false}
 }
