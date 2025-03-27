@@ -10,7 +10,7 @@ class InterruptedConversationError extends Error {
 }
 
 export interface RequiredArgumentOptions {
-  key: Readonly<string>
+  key: string
   description?: string
   optional?: boolean
 }
