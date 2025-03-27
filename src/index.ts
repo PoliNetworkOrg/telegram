@@ -1,9 +1,12 @@
+import "dotenv/config"
 import { logger } from './logger.ts'
 import { Telex } from './Telex/index.ts'
+
 
 if (!process.env.BOT_TOKEN) {
   throw new Error('BOT_TOKEN environment variable is required!')
 }
+
 const bot = new Telex(process.env.BOT_TOKEN)
   .createCommand({
     trigger: 'name',

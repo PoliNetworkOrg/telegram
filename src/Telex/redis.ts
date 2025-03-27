@@ -1,3 +1,4 @@
+import "dotenv/config"
 import redis from 'redis'
 
 export const client = await redis
