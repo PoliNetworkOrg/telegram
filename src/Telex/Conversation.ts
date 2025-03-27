@@ -10,7 +10,9 @@ class InterruptedConversationError extends Error {
 }
 
 export interface RequiredArgumentOptions {
+  key: Readonly<string>
   description?: string
+  optional?: boolean
 }
 export interface OptionalArgumentOptions extends RequiredArgumentOptions {
   optional: true
@@ -18,11 +20,12 @@ export interface OptionalArgumentOptions extends RequiredArgumentOptions {
 export type ArgumentOptions = RequiredArgumentOptions | OptionalArgumentOptions
 export type ArgumentType<T extends ArgumentOptions> =
   T extends OptionalArgumentOptions ? string | undefined : string
-export type ArgumentMap<A extends CommandArgs = CommandArgs> = {
-  [K in keyof A]: ArgumentType<A[K]>
-}
 
-export type CommandArgs = Record<string, ArgumentOptions>
+export type CommandArgs = ReadonlyArray<ArgumentOptions>
+
+export type ArgumentMap<A extends CommandArgs = CommandArgs> = {
+  [Entry in A[number] as Entry['key']]: ArgumentType<Entry>
+}
 export type CommandReplyTo = 'required' | 'optional' | undefined
 
 export interface Command<A extends CommandArgs, R extends CommandReplyTo> {

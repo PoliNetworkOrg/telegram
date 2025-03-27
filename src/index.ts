@@ -1,7 +1,6 @@
-import "dotenv/config"
+import 'dotenv/config'
 import { logger } from './logger.ts'
 import { Telex } from './Telex/index.ts'
-
 
 if (!process.env.BOT_TOKEN) {
   throw new Error('BOT_TOKEN environment variable is required!')
@@ -24,6 +23,19 @@ const bot = new Telex(process.env.BOT_TOKEN)
     },
   })
   .createCommand({
+    trigger: 'testargs',
+    description: 'Test args',
+    args: [
+      { key: 'arg1', description: 'first arg' },
+      { key: 'arg2', description: 'second arg', optional: false },
+      { key: 'arg3', description: 'the optional one', optional: true },
+    ],
+    handler: async ({ conversation, args }) => {
+      console.log(args)
+      await conversation.reply('pong')
+    },
+  })
+  .createCommand({
     trigger: 'del',
     description: 'Deletes the replied to message',
     reply: 'required',
@@ -42,7 +54,7 @@ const bot = new Telex(process.env.BOT_TOKEN)
   .createCommand({
     trigger: 'userid',
     description: 'Gets the ID of a username',
-    args: { username: { description: 'The username to get the ID of' } },
+    args: [{ key: 'username', description: 'The username to get the ID of' }],
     handler: async ({ conversation, args }) => {
       const username = args.username.replace('@', '')
       const id = await bot.getCachedId(username)

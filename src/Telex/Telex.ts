@@ -35,18 +35,22 @@ export class Telex {
     cmd: Command<CommandArgs, CommandReplyTo>
   ): Result<ArgumentMap, string> {
     const args: ArgumentMap = {}
-    const parts = msg.split(' ').slice(1)
-    for (const [i, [arg, options]] of Object.entries(
-      cmd.args || {}
-    ).entries()) {
-      if ('optional' in options && options.optional && !parts[i]) {
-        args[arg] = undefined
-      } else if (!parts[i]) {
-        return err(`Missing argument: ${arg}`)
+    if (!cmd.args || cmd.args.length === 0) return ok(args)
+
+    const words = msg.split(' ').slice(1)
+    for (const [i, { key, optional }] of cmd.args.entries()) {
+      if (!words[i]) {
+        if (optional) {
+          args[key] = undefined
+        } else {
+          return err(`Missing argument: ${key}`)
+        }
       } else {
-        args[arg] = parts[i]
+        args[key] =
+          i === cmd.args!.length - 1 ? words.slice(i).join(' ') : words[i]
       }
     }
+
     return ok(args)
   }
 
@@ -56,29 +60,29 @@ export class Telex {
    * @returns A markdown formatted string representing the usage of the command
    */
   static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo>): string {
-    const args = Object.entries(cmd.args || {})
-      .map(([arg, options]) => {
-        if ('optional' in options && options.optional) {
-          return `[_${arg}_]`
-        }
-        return `<_${arg}_>`
-      })
+    const args = (cmd.args ?? [])
+      .map(({ key, optional }) => (optional ? `[_${key}_]` : `<_${key}_>`))
       .join(' ')
 
-    const argDescs = Object.entries(cmd.args || {})
-      .map(([arg, options]) => {
-        return `\n  - _${arg}_: ${options.description || 'No description'}`
+    const argDescs = (cmd.args ?? [])
+      .map(({ key, description }) => {
+        return `- _${key}_: ${description ?? 'No description'}`
       })
-      .join('')
+      .join('\n')
 
     const replyTo = cmd.reply
-      ? `\n_Call while replying to a message_: *${cmd.reply}*`
+      ? `_Call while replying to a message_: *${cmd.reply.toUpperCase()}*`
       : ''
 
-    return `/${cmd.trigger} ${args}\n*${cmd.description || 'No description'}*${argDescs}${replyTo}`.replace(
-      /[[\]()~`>#+\-=|{}.!]/g,
-      '\\$&'
-    )
+    return [
+      `/${cmd.trigger} ${args}`,
+      `*${cmd.description ?? 'No description'}*`,
+      `${argDescs}`,
+      `${replyTo}`,
+    ]
+      .filter((s) => s.length > 0)
+      .join('\n')
+      .replace(/[[\]()~`>#+\-=|{}.!]/g, '\\$&')
   }
 
   constructor(token: string) {
@@ -112,10 +116,10 @@ export class Telex {
     })
   }
 
-  createCommand<A extends CommandArgs, R extends CommandReplyTo>(
+  createCommand<const A extends CommandArgs, R extends CommandReplyTo>(
     cmd: Command<A, R>
   ) {
-    this.commands.push(cmd as Command<CommandArgs, CommandReplyTo>)
+    this.commands.push(cmd as Command<A, R>)
     this.bot.command(cmd.trigger, (ctx) =>
       this.commandPreamble(ctx, cmd.trigger)
     )
