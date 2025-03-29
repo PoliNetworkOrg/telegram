@@ -1,21 +1,18 @@
 name: Docker Image CI
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - "**.ts"
-      - "**.tsx"
-      - "package.json"
-      - "tsconfig.json"
-      - "tsconfig.*.json"
-      - "pnpm-lock.yaml"
-      - Dockerfile
+  workflow_run:
+    workflows: [Test]
+    branches: [main]
+    types:
+      - completed
   workflow_dispatch:
 
 jobs:
+  on-success:
   build:
     name: Build
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3

@@ -1,4 +1,4 @@
-import { defineConfig } from "tsup";
+import { defineConfig } from "tsup"
 
 export default defineConfig({
   entry: ["src/bot.ts"],
@@ -8,5 +8,4 @@ export default defineConfig({
   clean: true,
   splitting: false,
   sourcemap: true,
-});
-
+})
