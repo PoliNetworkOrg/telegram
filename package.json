@@ -9,6 +9,7 @@
     "start": "node dist/bot.js",
     "build": "NODE_ENV=production tsup",
     "dev": "NODE_ENV=development tsx watch --clear-screen=false src/bot.ts",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint ./src",
     "lint:fix": "eslint ./src --fix",
     "format": "prettier --write ."
