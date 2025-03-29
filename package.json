@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node dist/bot.js",
     "build": "NODE_ENV=production tsup",
-    "dev": "NODE_ENV=development tsx watch src/bot.ts",
+    "dev": "NODE_ENV=development tsx watch --clear-screen=false src/bot.ts",
     "lint": "eslint ./src",
     "lint:fix": "eslint ./src --fix",
     "format": "prettier --write ."
