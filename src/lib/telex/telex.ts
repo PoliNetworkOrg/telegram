@@ -8,7 +8,7 @@ import {
   CommandArgs,
   CommandReplyTo,
   Conversation,
-} from "./Conversation.ts"
+} from "./conversation.ts"
 import { getTelegramId, setTelegramId } from "./redis.ts"
 
 export class Telex {

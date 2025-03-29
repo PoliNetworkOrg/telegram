@@ -1,7 +1,7 @@
 {
   "watch": ["src"],
   "ext": "ts,js,json",
-  "exec": "tsc --noEmit && vite-node src/index.ts",
+  "exec": "tsc --noEmit && vite-node ./src/bot.ts",
   "signal": "SIGTERM",
   "onError": { "restart": false }
 }
