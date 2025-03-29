@@ -16,6 +16,8 @@ export class Telex {
   commands: Command<CommandArgs, CommandReplyTo>[] = []
   conversations: Map<number, Conversation> = new Map()
 
+  private _onStop?: (reason?: string) => void = undefined
+
   static getText(message: Message): string | null {
     return "text" in message && message.text !== undefined ? message.text : null
   }
@@ -116,6 +118,11 @@ export class Telex {
     })
   }
 
+  onStop(cb: (reason?: string) => void) {
+    this._onStop = cb
+    return this
+  }
+
   createCommand<const A extends CommandArgs, R extends CommandReplyTo>(
     cmd: Command<A, R>
   ) {
@@ -137,8 +144,14 @@ export class Telex {
 
     this.bot.launch(cb)
 
-    process.once("SIGINT", () => this.bot.stop("SIGINT"))
-    process.once("SIGTERM", () => this.bot.stop("SIGTERM"))
+    process.once("SIGINT", () => this.stop("SIGINT"))
+    process.once("SIGTERM", () => this.stop("SIGTERM"))
+  }
+
+  stop(reason?: string) {
+    this.bot.stop("SIGINT")
+    this._onStop?.(reason)
+    process.exit(0)
   }
 
   commandPreamble(

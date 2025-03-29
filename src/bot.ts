@@ -67,5 +67,8 @@ const bot = new Telex(process.env.BOT_TOKEN)
       await conversation.reply(`Username \`@${username}\`\nid: \`${id}\``)
     },
   })
+  .onStop((reason) => {
+    logger.info(reason ? `Bot Stopped. Reason: ${reason}` : "Bot Stopped")
+  })
 
 bot.start(() => logger.info("Bot started!"))
