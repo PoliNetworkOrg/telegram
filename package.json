@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "PoliNetwork Telegram Moderation Bot",
-  "main": "bot.js",
+  "main": "./dist/bot.js",
   "type": "module",
   "scripts": {
     "start": "node dist/bot.js",
