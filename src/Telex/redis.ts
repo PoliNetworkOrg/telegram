@@ -1,5 +1,5 @@
 import "dotenv/config"
-import redis from 'redis'
+import redis from "redis"
 
 export const client = await redis
   .createClient({

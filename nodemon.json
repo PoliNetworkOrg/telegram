@@ -3,5 +3,5 @@
   "ext": "ts,js,json",
   "exec": "tsc --noEmit && vite-node src/index.ts",
   "signal": "SIGTERM",
-  "onError": {"restart": false}
+  "onError": { "restart": false }
 }

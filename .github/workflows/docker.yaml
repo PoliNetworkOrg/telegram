@@ -1,14 +1,14 @@
 name: Docker Image CI
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
     paths:
-      - '**.ts'
-      - '**.tsx'
-      - 'package.json'
-      - 'tsconfig.json'
-      - 'tsconfig.*.json'
-      - 'pnpm-lock.yaml'
+      - "**.ts"
+      - "**.tsx"
+      - "package.json"
+      - "tsconfig.json"
+      - "tsconfig.*.json"
+      - "pnpm-lock.yaml"
       - Dockerfile
   workflow_dispatch:
 

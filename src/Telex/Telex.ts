@@ -1,15 +1,15 @@
-import { err, ok, Result } from 'neverthrow'
-import { Context, Telegraf } from 'telegraf'
-import type { Message, Update } from 'telegraf/typings/core/types/typegram'
-import { message } from 'telegraf/filters'
+import { err, ok, Result } from "neverthrow"
+import { Context, Telegraf } from "telegraf"
+import type { Message, Update } from "telegraf/typings/core/types/typegram"
+import { message } from "telegraf/filters"
 import {
   ArgumentMap,
   Command,
   CommandArgs,
   CommandReplyTo,
   Conversation,
-} from './Conversation.ts'
-import { getTelegramId, setTelegramId } from './redis.ts'
+} from "./Conversation.ts"
+import { getTelegramId, setTelegramId } from "./redis.ts"
 
 export class Telex {
   bot: Telegraf
@@ -17,15 +17,15 @@ export class Telex {
   conversations: Map<number, Conversation> = new Map()
 
   static getText(message: Message): string | null {
-    return 'text' in message && message.text !== undefined ? message.text : null
+    return "text" in message && message.text !== undefined ? message.text : null
   }
 
   static parseReplyTo(
     msg: Message.TextMessage,
     cmd: Command<CommandArgs, CommandReplyTo>
-  ): Result<Parameters<typeof cmd.handler>[0]['repliedTo'], string> {
-    if (cmd.reply === 'required' && !msg.reply_to_message) {
-      return err('This command requires a reply')
+  ): Result<Parameters<typeof cmd.handler>[0]["repliedTo"], string> {
+    if (cmd.reply === "required" && !msg.reply_to_message) {
+      return err("This command requires a reply")
     }
     return ok(msg.reply_to_message ?? null)
   }
@@ -37,7 +37,7 @@ export class Telex {
     const args: ArgumentMap = {}
     if (!cmd.args || cmd.args.length === 0) return ok(args)
 
-    const words = msg.split(' ').slice(1)
+    const words = msg.split(" ").slice(1)
     for (const [i, { key, optional }] of cmd.args.entries()) {
       if (!words[i]) {
         if (optional) {
@@ -47,7 +47,7 @@ export class Telex {
         }
       } else {
         args[key] =
-          i === cmd.args!.length - 1 ? words.slice(i).join(' ') : words[i]
+          i === cmd.args!.length - 1 ? words.slice(i).join(" ") : words[i]
       }
     }
 
@@ -62,56 +62,56 @@ export class Telex {
   static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo>): string {
     const args = (cmd.args ?? [])
       .map(({ key, optional }) => (optional ? `[_${key}_]` : `<_${key}_>`))
-      .join(' ')
+      .join(" ")
 
     const argDescs = (cmd.args ?? [])
       .map(({ key, description }) => {
-        return `- _${key}_: ${description ?? 'No description'}`
+        return `- _${key}_: ${description ?? "No description"}`
       })
-      .join('\n')
+      .join("\n")
 
     const replyTo = cmd.reply
       ? `_Call while replying to a message_: *${cmd.reply.toUpperCase()}*`
-      : ''
+      : ""
 
     return [
       `/${cmd.trigger} ${args}`,
-      `*${cmd.description ?? 'No description'}*`,
+      `*${cmd.description ?? "No description"}*`,
       `${argDescs}`,
       `${replyTo}`,
     ]
       .filter((s) => s.length > 0)
-      .join('\n')
-      .replace(/[[\]()~`>#+\-=|{}.!]/g, '\\$&')
+      .join("\n")
+      .replace(/[[\]()~`>#+\-=|{}.!]/g, "\\$&")
   }
 
   constructor(token: string) {
     this.bot = new Telegraf(token)
     this.bot.on(message(), (ctx, next) => {
       next()
-      if (ctx.chat.type === 'private') return
+      if (ctx.chat.type === "private") return
       const { username, id } = ctx.message.from
       if (username) setTelegramId(username, id)
     })
     this.bot.on(message(), async (ctx, next) => {
       next() // not sure if this should proceed here
       const text = Telex.getText(ctx.message)
-      if (text?.startsWith('/')) return
+      if (text?.startsWith("/")) return
       const conv = this.conversations.get(ctx.message.chat.id)
       if (conv) conv.progress(ctx)
     })
 
     this.bot.start(async (ctx) => {
-      if (ctx.chat.type !== 'private') {
+      if (ctx.chat.type !== "private") {
         return
       }
-      ctx.setChatMenuButton({ type: 'commands' })
-      ctx.reply('Welcome from PoliNetwork! Type /help to get started.')
+      ctx.setChatMenuButton({ type: "commands" })
+      ctx.reply("Welcome from PoliNetwork! Type /help to get started.")
     })
 
     this.bot.help((ctx) => {
       ctx.replyWithMarkdownV2(
-        this.commands.map((cmd) => Telex.formatCommandUsage(cmd)).join('\n\n')
+        this.commands.map((cmd) => Telex.formatCommandUsage(cmd)).join("\n\n")
       )
     })
   }
@@ -128,7 +128,7 @@ export class Telex {
 
   start(cb: () => void) {
     this.bot.telegram.setMyCommands([
-      { command: 'help', description: 'Display all available commands' },
+      { command: "help", description: "Display all available commands" },
       // ...this.commands.map((cmd) => ({
       //   command: cmd.trigger,
       //   description: cmd.description || 'No description',
@@ -137,8 +137,8 @@ export class Telex {
 
     this.bot.launch(cb)
 
-    process.once('SIGINT', () => this.bot.stop('SIGINT'))
-    process.once('SIGTERM', () => this.bot.stop('SIGTERM'))
+    process.once("SIGINT", () => this.bot.stop("SIGINT"))
+    process.once("SIGTERM", () => this.bot.stop("SIGTERM"))
   }
 
   commandPreamble(
