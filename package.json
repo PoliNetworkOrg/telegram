@@ -6,7 +6,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node out/index.js",
+    "start": "node dist/index.js",
     "build": "tsc",
     "dev": "nodemon",
     "lint": "eslint .",

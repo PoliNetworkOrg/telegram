@@ -5,6 +5,7 @@
 
 # production
 /out
+/dist
 
 # misc
 .DS_Store

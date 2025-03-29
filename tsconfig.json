@@ -10,7 +10,7 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "strict": true,
-    "outDir": "out",
+    "outDir": "dist",
     "paths": {
       "@/*": ["./src/*"]
     }
