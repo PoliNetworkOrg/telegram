@@ -1,16 +1,16 @@
+import { createClient, type RedisClientType } from "redis"
 import "dotenv/config"
-import redis from "redis"
 
-export const client = await redis
-  .createClient({
-    socket: {
-      host: process.env.REDIS_HOST,
-      port: parseInt(process.env.REDIS_PORT!),
-    },
-    username: process.env.REDIS_USERNAME,
-    password: process.env.REDIS_PASSWORD,
-  })
-  .connect()
+const client: RedisClientType = createClient({
+  socket: {
+    host: process.env.REDIS_HOST,
+    port: parseInt(process.env.REDIS_PORT!),
+  },
+  username: process.env.REDIS_USERNAME,
+  password: process.env.REDIS_PASSWORD,
+})
+
+await client.connect()
 
 export async function getTelegramId(username: string): Promise<number | null> {
   const res = await client.get(`username:${username}:id`)
@@ -25,3 +25,5 @@ export async function setTelegramId(
 ): Promise<void> {
   await client.set(`username:${username}:id`, id)
 }
+
+export { client as redis }

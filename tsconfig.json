@@ -2,14 +2,15 @@
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
-    "moduleResolution": "node",
-    "rewriteRelativeImportExtensions": true,
-    "resolveJsonModule": true,
-
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "isolatedModules": true,
+    "moduleResolution": "bundler",
+    "declaration": false,
+    "declarationMap": false,
     "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
     "outDir": "dist",
     "paths": {
       "@/*": ["./src/*"]

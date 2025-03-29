@@ -1,6 +1,6 @@
 import { err, ok, Result } from "neverthrow"
 import { Context, Telegraf } from "telegraf"
-import type { Message, Update } from "telegraf/typings/core/types/typegram"
+import type { Message, Update } from "telegraf/types"
 import { message } from "telegraf/filters"
 import {
   ArgumentMap,
@@ -8,8 +8,8 @@ import {
   CommandArgs,
   CommandReplyTo,
   Conversation,
-} from "./conversation.ts"
-import { getTelegramId, setTelegramId } from "./redis.ts"
+} from "./conversation"
+import { getTelegramId, setTelegramId } from "./redis"
 
 export class Telex {
   bot: Telegraf

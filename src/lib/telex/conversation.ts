@@ -1,7 +1,7 @@
 import EventEmitter from "events"
 import type { Context as TelegrafContext } from "telegraf"
-import { Message, Update } from "telegraf/typings/core/types/typegram"
-import { TypedEmitter } from "./emitters.ts"
+import type { Message, Update } from "telegraf/types"
+import { TypedEmitter } from "./emitters"
 
 class InterruptedConversationError extends Error {
   constructor() {

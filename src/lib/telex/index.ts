@@ -1,2 +1,2 @@
-export * from "./telex.ts"
-export * from "./conversation.ts"
+export * from "./telex"
+export * from "./conversation"
