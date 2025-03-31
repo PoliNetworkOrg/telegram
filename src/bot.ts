@@ -3,6 +3,7 @@ import { Telex } from "@/lib/telex"
 import { logger } from "./logger"
 import { getTelegramId, setTelegramId } from "./utils/telegram-id"
 import { redis } from "./redis"
+import { getText } from "./utils/messages"
 
 if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN environment variable is required!")
@@ -46,7 +47,7 @@ const bot = new Telex(process.env.BOT_TOKEN)
     description: "Deletes the replied to message",
     reply: "required",
     handler: async ({ repliedTo, context }) => {
-      const { text, type } = Telex.getText(repliedTo)
+      const { text, type } = getText(repliedTo)
       logger.info({
         action: "delete_message",
         messageText: text ?? "[non-textual]",

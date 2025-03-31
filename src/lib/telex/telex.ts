@@ -13,27 +13,12 @@ import {
   RepliedTo,
 } from "./command"
 import type { ConversationContext, Context, Conversation } from "./context"
-
-type TextReturn =
-  | {
-      text: string
-      type: "TEXT" | "CAPTION"
-    }
-  | { text: null; type: "OTHER" }
+import { getText } from "@/utils/messages"
 
 export class Telex extends Bot<Context> {
   commands: Command<CommandArgs, CommandReplyTo>[] = []
 
   private _onStop?: (reason?: string) => void = undefined
-
-  static getText(message: Message): TextReturn {
-    if ("text" in message && message.text)
-      return { text: message.text, type: "TEXT" }
-    if ("caption" in message && message.caption)
-      return { text: message.caption, type: "CAPTION" }
-
-    return { text: null, type: "OTHER" }
-  }
 
   static parseReplyTo<R extends CommandReplyTo>(
     msg: Message,
@@ -156,7 +141,7 @@ export class Telex extends Bot<Context> {
             return
           }
 
-          const args = Telex.parseArgs(Telex.getText(ctx.msg).text ?? "", cmd)
+          const args = Telex.parseArgs(getText(ctx.msg).text ?? "", cmd)
           if (args.isErr()) {
             ctx.reply(
               `**Error**: ***${args.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`
