@@ -8,9 +8,21 @@ importers:
 
   .:
     dependencies:
+      '@grammyjs/conversations':
+        specifier: ^2.0.1
+        version: 2.0.1(grammy@1.35.1)
+      '@grammyjs/hydrate':
+        specifier: ^1.4.1
+        version: 1.4.1(grammy@1.35.1)
+      '@grammyjs/parse-mode':
+        specifier: ^1.11.1
+        version: 1.11.1(grammy@1.35.1)
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
+      grammy:
+        specifier: ^1.35.1
+        version: 1.35.1
       neverthrow:
         specifier: ^8.2.0
         version: 8.2.0
@@ -20,9 +32,6 @@ importers:
       redis:
         specifier: ^4.7.0
         version: 4.7.0
-      telegraf:
-        specifier: ^4.16.3
-        version: 4.16.3
     devDependencies:
       '@eslint/js':
         specifier: ^9.20.0
@@ -255,6 +264,27 @@ packages:
     resolution: {integrity: sha512-lB05FkqEdUg2AA0xEbUz0SnkXT1LcCTa438W4IWTUh4hdOnVbQyOJ81OrDXsJk/LSiJHubgGEFoR5EHq1NsH1A==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@grammyjs/conversations@2.0.1':
+    resolution: {integrity: sha512-wpOXa4do03JeTVbv42CqsiWRczycey/58mccQekprhNZzJb/GL+/xSx0CSIDoaHm7x2MeGgtmBbpu9tGZQkqng==}
+    engines: {node: ^12.20.0 || >=14.13.1}
+    peerDependencies:
+      grammy: ^1.20.1
+
+  '@grammyjs/hydrate@1.4.1':
+    resolution: {integrity: sha512-xvd7XXoVHEhxBV2M8UHDRYkZlv32JioHfs+0l+eN34mkJJJBchuRDgRY3fkVJko8o1hGFHHLAJJTlEs2OAMolA==}
+    engines: {node: ^12.20.0 || >=14.13.1}
+    peerDependencies:
+      grammy: ^1.20.1
+
+  '@grammyjs/parse-mode@1.11.1':
+    resolution: {integrity: sha512-7yEKVtXjNZsG8EX/AOtgR/7Af5QxcmAcTB31Nju+QELvL2uSQMJKlix5rkx695gqocUodLwWtuwCDGDoXGD2xg==}
+    engines: {node: '>=14.13.1'}
+    peerDependencies:
+      grammy: ^1.20.1
+
+  '@grammyjs/types@3.19.0':
+    resolution: {integrity: sha512-N0MS+RJG+AGSNuka1GWVj88oyK1oti4I0eQq6jGo4hic3P9MwFfnHjGQuIExZ3tlJUrZYwC/T7gk4Tu3+guJyg==}
+
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
     engines: {node: '>=18.18.0'}
@@ -445,9 +475,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@telegraf/types@7.1.0':
-    resolution: {integrity: sha512-kGevOIbpMcIlCDeorKGpwZmdH7kHbqlk/Yj6dEpJMKEQw5lk0KVQY0OLXaCswy8GqlIVLd5625OB+rAntP9xVw==}
-
   '@tsconfig/node10@1.0.11':
     resolution: {integrity: sha512-DcRjDCujK/kCk/cUe8Xz8ZSpm8mS3mNNpta+jGCA6USEDfktlNvm1+IuZ9eTcDbNk41BHwpHHeW+N1lKCz4zOw==}
 
@@ -584,15 +611,6 @@ packages:
   braces@3.0.3:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
     engines: {node: '>=8'}
-
-  buffer-alloc-unsafe@1.1.0:
-    resolution: {integrity: sha512-TEM2iMIEQdJ2yjPJoSIsldnleVaAk1oW3DBVUykyOLsEsFmEc9kn+SFFPz+gl54KQNxlDnAwCXosOS9Okx2xAg==}
-
-  buffer-alloc@1.2.0:
-    resolution: {integrity: sha512-CFsHQgjtW1UChdXgbyJGtnm+O/uLQeZdtbDo8mfUgYXCHSM1wgrVxXm6bSyrUuErEb+4sYVGCzASBRot7zyrow==}
-
-  buffer-fill@1.0.0:
-    resolution: {integrity: sha512-T7zexNBwiiaCOGDg9xNX9PBmjrubblRkENuptryuI64URkXDFum9il/JGL8Lm8wYfAXpredVXXZz7eMHilimiQ==}
 
   bundle-require@5.1.0:
     resolution: {integrity: sha512-3WrrOuZiyaaZPWiEt4G3+IffISVC9HYlWueJEBWED4ZH4aIAC2PnkdnuRrR94M+w6yGWn4AglWtJtBI8YqvgoA==}
@@ -835,6 +853,10 @@ packages:
     resolution: {integrity: sha512-OkToC372DtlQeje9/zHIo5CT8lRP/FUgEOKBEhU4e0abL7J7CD24fD9ohiLN5hagG/kWCYj4K5oaxxtj2Z0Dig==}
     engines: {node: '>=18'}
 
+  grammy@1.35.1:
+    resolution: {integrity: sha512-6kNMODaXVj0R+dqYcHqMyjOURsCUFGvVkd7z/dDO1H1cqrGW/kyAFc4oETUKkcyUN/X80N0DchNVuc2JmTPxPQ==}
+    engines: {node: ^12.20.0 || >=14.13.1}
+
   graphemer@1.4.0:
     resolution: {integrity: sha512-EtKwoO6kxCL9WO5xipiHTZlSzBm7WLT627TqC/uVRd0HKmq8NXyebnNYxDoBi7wt8eTWrUrKXCOVaFq9x1kgag==}
 
@@ -946,10 +968,6 @@ packages:
     resolution: {integrity: sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw==}
     engines: {node: '>=16 || 14 >=14.17'}
 
-  mri@1.2.0:
-    resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
-    engines: {node: '>=4'}
-
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
@@ -995,10 +1013,6 @@ packages:
 
   p-locate@5.0.0:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
-    engines: {node: '>=10'}
-
-  p-timeout@4.1.0:
-    resolution: {integrity: sha512-+/wmHtzJuWii1sXn3HCuH/FTwGhrp4tmJTxSKJbfS+vkipci6osxXM5mY0jUiRzWKMTgUT8l7HFbeSwZAynqHw==}
     engines: {node: '>=10'}
 
   package-json-from-dist@1.0.1:
@@ -1123,16 +1137,9 @@ packages:
   run-parallel@1.2.0:
     resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
 
-  safe-compare@1.1.4:
-    resolution: {integrity: sha512-b9wZ986HHCo/HbKrRpBJb2kqXMK9CEWIE1egeEvZsYn69ay3kdfl9nG3RyOcR+jInTDf7a86WQ1d4VJX7goSSQ==}
-
   safe-stable-stringify@2.5.0:
     resolution: {integrity: sha512-b3rppTKm9T+PsVCBEOUR46GWI7fdOs00VKZ1+9c1EWDaDMvjQc6tUwuFyIprgGgTcWoVHSKrU8H31ZHA2e0RHA==}
     engines: {node: '>=10'}
-
-  sandwich-stream@2.0.2:
-    resolution: {integrity: sha512-jLYV0DORrzY3xaz/S9ydJL6Iz7essZeAfnAavsJ+zsJGZ1MOnsS52yRjU3uF3pJa/lla7+wisp//fxOwOH8SKQ==}
-    engines: {node: '>= 0.10'}
 
   semver@7.7.1:
     resolution: {integrity: sha512-hlq8tAfn0m/61p4BVRcPzIGr6LKiMwo4VM6dGi6pt4qcRkmNzTcWq6eCEjEh+qXjkMDvPlOFFSGwQjoEa6gyMA==}
@@ -1194,11 +1201,6 @@ packages:
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
     engines: {node: '>=8'}
-
-  telegraf@4.16.3:
-    resolution: {integrity: sha512-yjEu2NwkHlXu0OARWoNhJlIjX09dRktiMQFsM678BAH/PEPVwctzL67+tvXqLCRQQvm3SDtki2saGO9hLlz68w==}
-    engines: {node: ^12.20.0 || >=14.13.1}
-    hasBin: true
 
   thenify-all@1.6.0:
     resolution: {integrity: sha512-RNxQH/qI8/t3thXJDwcstUO4zeqo64+Uy/+sNVRBx4Xn2OX+OZ9oP+iJnNFqplFra2ZUVeKCSa2oVWi3T4uVmA==}
@@ -1479,6 +1481,21 @@ snapshots:
       '@eslint/core': 0.10.0
       levn: 0.4.1
 
+  '@grammyjs/conversations@2.0.1(grammy@1.35.1)':
+    dependencies:
+      grammy: 1.35.1
+
+  '@grammyjs/hydrate@1.4.1(grammy@1.35.1)':
+    dependencies:
+      abort-controller: 3.0.0
+      grammy: 1.35.1
+
+  '@grammyjs/parse-mode@1.11.1(grammy@1.35.1)':
+    dependencies:
+      grammy: 1.35.1
+
+  '@grammyjs/types@3.19.0': {}
+
   '@humanfs/core@0.19.1': {}
 
   '@humanfs/node@0.16.6':
@@ -1623,8 +1640,6 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.37.0':
     optional: true
-
-  '@telegraf/types@7.1.0': {}
 
   '@tsconfig/node10@1.0.11': {}
 
@@ -1782,15 +1797,6 @@ snapshots:
   braces@3.0.3:
     dependencies:
       fill-range: 7.1.1
-
-  buffer-alloc-unsafe@1.1.0: {}
-
-  buffer-alloc@1.2.0:
-    dependencies:
-      buffer-alloc-unsafe: 1.1.0
-      buffer-fill: 1.0.0
-
-  buffer-fill@1.0.0: {}
 
   bundle-require@5.1.0(esbuild@0.25.1):
     dependencies:
@@ -2046,6 +2052,16 @@ snapshots:
 
   globals@15.14.0: {}
 
+  grammy@1.35.1:
+    dependencies:
+      '@grammyjs/types': 3.19.0
+      abort-controller: 3.0.0
+      debug: 4.4.0
+      node-fetch: 2.7.0
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
   graphemer@1.4.0: {}
 
   has-flag@4.0.0: {}
@@ -2133,8 +2149,6 @@ snapshots:
 
   minipass@7.1.2: {}
 
-  mri@1.2.0: {}
-
   ms@2.1.3: {}
 
   mz@2.7.0:
@@ -2176,8 +2190,6 @@ snapshots:
   p-locate@5.0.0:
     dependencies:
       p-limit: 3.1.0
-
-  p-timeout@4.1.0: {}
 
   package-json-from-dist@1.0.1: {}
 
@@ -2299,13 +2311,7 @@ snapshots:
     dependencies:
       queue-microtask: 1.2.3
 
-  safe-compare@1.1.4:
-    dependencies:
-      buffer-alloc: 1.2.0
-
   safe-stable-stringify@2.5.0: {}
-
-  sandwich-stream@2.0.2: {}
 
   semver@7.7.1: {}
 
@@ -2365,20 +2371,6 @@ snapshots:
   supports-color@7.2.0:
     dependencies:
       has-flag: 4.0.0
-
-  telegraf@4.16.3:
-    dependencies:
-      '@telegraf/types': 7.1.0
-      abort-controller: 3.0.0
-      debug: 4.4.0
-      mri: 1.2.0
-      node-fetch: 2.7.0
-      p-timeout: 4.1.0
-      safe-compare: 1.1.4
-      sandwich-stream: 2.0.2
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
 
   thenify-all@1.6.0:
     dependencies:
