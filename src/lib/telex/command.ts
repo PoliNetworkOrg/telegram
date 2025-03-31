@@ -1,6 +1,15 @@
-import { Conversation } from "@grammyjs/conversations"
-import { Context } from "grammy"
-import { Message } from "grammy/types"
+import type { Context } from "grammy"
+import type { Message } from "grammy/types"
+import type {
+  Conversation as GConversation,
+  ConversationFlavor,
+} from "@grammyjs/conversations"
+import type { HydrateFlavor } from "@grammyjs/hydrate"
+
+export type Conversation = GConversation<
+  ConversationFlavor<Context>,
+  HydrateFlavor<Context>
+>
 
 export interface RequiredArgumentOptions {
   key: string
@@ -31,7 +40,7 @@ export interface Command<A extends CommandArgs, R extends CommandReplyTo> {
   reply?: R
   description?: string
   handler: (cmd: {
-    context: Context
+    context: HydrateFlavor<Context>
     conversation: Conversation
     args: ArgumentMap<A>
     repliedTo: RepliedTo<R>

@@ -6,12 +6,14 @@ import {
   createConversation,
   type ConversationFlavor,
 } from "@grammyjs/conversations"
+import { hydrate, type HydrateFlavor } from "@grammyjs/hydrate"
 
 import {
   ArgumentMap,
   Command,
   CommandArgs,
   CommandReplyTo,
+  Conversation,
   RepliedTo,
 } from "./command"
 import { getTelegramId, setTelegramId } from "./redis"
@@ -24,7 +26,7 @@ type TextReturn =
   | { text: null; type: "OTHER" }
 
 export class Telex {
-  bot: Bot<ConversationFlavor<Context>>
+  bot: Bot<HydrateFlavor<ConversationFlavor<Context>>>
   commands: Command<CommandArgs, CommandReplyTo>[] = []
 
   private _onStop?: (reason?: string) => void = undefined
@@ -106,6 +108,7 @@ export class Telex {
   constructor(token: string) {
     this.bot = new Bot(token)
     this.bot.use(conversations())
+    this.bot.use(hydrate())
     this.bot.on("message", async (ctx, next) => {
       if (ctx.chat.type !== "private") {
         const { username, id } = ctx.message.from
@@ -139,34 +142,40 @@ export class Telex {
   ) {
     this.commands.push(cmd as Command<A, R>)
     this.bot.use(
-      createConversation(async (conv, ctx) => {
-        if (!ctx.has(":text")) return
+      createConversation(
+        async (conv: Conversation, ctx) => {
+          if (!ctx.has(":text")) return
 
-        const repliedTo = Telex.parseReplyTo(ctx.msg, cmd)
-        if (repliedTo.isErr()) {
-          ctx.reply(
-            `**Error**: ***${repliedTo.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`,
-            { parse_mode: "MarkdownV2" }
-          )
-          return
+          const repliedTo = Telex.parseReplyTo(ctx.msg, cmd)
+          if (repliedTo.isErr()) {
+            ctx.reply(
+              `**Error**: ***${repliedTo.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`,
+              { parse_mode: "MarkdownV2" }
+            )
+            return
+          }
+
+          const args = Telex.parseArgs(Telex.getText(ctx.msg).text ?? "", cmd)
+          if (args.isErr()) {
+            ctx.reply(
+              `**Error**: ***${args.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`,
+              { parse_mode: "MarkdownV2" }
+            )
+            return
+          }
+
+          await cmd.handler({
+            context: ctx,
+            conversation: conv,
+            args: args.value,
+            repliedTo: repliedTo.value,
+          })
+        },
+        {
+          id: cmd.trigger,
+          plugins: [hydrate()],
         }
-
-        const args = Telex.parseArgs(Telex.getText(ctx.msg).text ?? "", cmd)
-        if (args.isErr()) {
-          ctx.reply(
-            `**Error**: ***${args.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`,
-            { parse_mode: "MarkdownV2" }
-          )
-          return
-        }
-
-        await cmd.handler({
-          context: ctx,
-          conversation: conv,
-          args: args.value,
-          repliedTo: repliedTo.value,
-        })
-      }, cmd.trigger)
+      )
     )
     this.bot.command(cmd.trigger, async (ctx) => {
       await ctx.conversation.enter(cmd.trigger)

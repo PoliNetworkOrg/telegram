@@ -11,9 +11,12 @@ const bot = new Telex(process.env.BOT_TOKEN)
     trigger: "name",
     description: "Quick conversation",
     handler: async ({ conversation, context }) => {
-      context.reply("What is your name?")
+      const question = await context.reply("What is your name?")
       const { message } = await conversation.waitFor("message:text")
-      await context.reply(`Hello, ${message.text}\\!`)
+      await context.deleteMessage()
+      await message.delete()
+      await question.delete()
+      await context.reply(`Hello, ${message.text}!`)
     },
   })
   .createCommand({
