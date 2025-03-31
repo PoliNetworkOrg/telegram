@@ -1,16 +1,16 @@
 import type { Message } from "grammy/types"
 import { Conversation, ConversationContext } from "./context"
 
-export interface RequiredArgumentOptions {
+interface RequiredArgumentOptions {
   key: string
   description?: string
   optional?: boolean
 }
-export interface OptionalArgumentOptions extends RequiredArgumentOptions {
+interface OptionalArgumentOptions extends RequiredArgumentOptions {
   optional: true
 }
-export type ArgumentOptions = RequiredArgumentOptions | OptionalArgumentOptions
-export type ArgumentType<T extends ArgumentOptions> =
+type ArgumentOptions = RequiredArgumentOptions | OptionalArgumentOptions
+type ArgumentType<T extends ArgumentOptions> =
   T extends OptionalArgumentOptions ? string | undefined : string
 
 export type CommandArgs = ReadonlyArray<ArgumentOptions>
