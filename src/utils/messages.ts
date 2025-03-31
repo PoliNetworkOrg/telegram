@@ -1,4 +1,4 @@
-import type { Message } from "grammy/types";
+import type { Message } from "grammy/types"
 
 type TextReturn =
   | {
