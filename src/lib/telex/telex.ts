@@ -116,10 +116,15 @@ export class Telex extends Bot<Context> {
     )
     this.api.config.use(parseMode("MarkdownV2"))
     this.command("start", async (ctx) => {
+      const res = "Welcome from PoliNetwork\\! Type /help to get started\\."
       if (ctx.chat.type !== "private") {
+        const fromId = ctx.from?.id
+        if (fromId) ctx.api.sendMessage(fromId, res)
+        ctx.deleteMessage()
         return
+      } else {
+        ctx.reply(res)
       }
-      ctx.reply("Welcome from PoliNetwork! Type /help to get started.")
     })
 
     this.command("help", (ctx) => {
