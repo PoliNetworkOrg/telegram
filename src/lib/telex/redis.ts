@@ -10,7 +10,9 @@ const client: RedisClientType = createClient({
   password: process.env.REDIS_PASSWORD,
 })
 
-await client.connect()
+if (process.env.REDIS_HOST && process.env.REDIS_PORT) {
+  await client.connect()
+}
 
 export async function getTelegramId(username: string): Promise<number | null> {
   const res = await client.get(`username:${username}:id`)

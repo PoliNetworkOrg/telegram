@@ -1,2 +1,2 @@
 export * from "./telex"
-export * from "./conversation"
+export * from "./command"
