@@ -6,8 +6,8 @@
   "main": "./dist/bot.js",
   "type": "module",
   "scripts": {
-    "start": "node dist/bot.js",
-    "build": "NODE_ENV=production tsup",
+    "start": "NODE_ENV=production node dist/bot.js",
+    "build": "tsup",
     "dev": "NODE_ENV=development tsx watch --clear-screen=false src/bot.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ./src",
