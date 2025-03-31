@@ -5,10 +5,11 @@ import type {
   ConversationFlavor,
 } from "@grammyjs/conversations"
 import type { HydrateFlavor } from "@grammyjs/hydrate"
+import { ParseModeFlavor } from "@grammyjs/parse-mode"
 
 export type Conversation = GConversation<
   ConversationFlavor<Context>,
-  HydrateFlavor<Context>
+  ParseModeFlavor<HydrateFlavor<Context>>
 >
 
 export interface RequiredArgumentOptions {

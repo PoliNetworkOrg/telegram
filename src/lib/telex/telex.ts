@@ -17,6 +17,11 @@ import {
   RepliedTo,
 } from "./command"
 import { getTelegramId, setTelegramId } from "./redis"
+import {
+  hydrateReply,
+  parseMode,
+  type ParseModeFlavor,
+} from "@grammyjs/parse-mode"
 
 type TextReturn =
   | {
@@ -26,7 +31,7 @@ type TextReturn =
   | { text: null; type: "OTHER" }
 
 export class Telex {
-  bot: Bot<HydrateFlavor<ConversationFlavor<Context>>>
+  bot: Bot<ParseModeFlavor<HydrateFlavor<ConversationFlavor<Context>>>>
   commands: Command<CommandArgs, CommandReplyTo>[] = []
 
   private _onStop?: (reason?: string) => void = undefined
@@ -108,7 +113,7 @@ export class Telex {
   constructor(token: string) {
     this.bot = new Bot(token)
     this.bot.use(conversations())
-    this.bot.use(hydrate())
+    this.bot.api.config.use(parseMode("MarkdownV2"))
     this.bot.on("message", async (ctx, next) => {
       if (ctx.chat.type !== "private") {
         const { username, id } = ctx.message.from
@@ -126,8 +131,7 @@ export class Telex {
 
     this.bot.command("help", (ctx) => {
       ctx.reply(
-        this.commands.map((cmd) => Telex.formatCommandUsage(cmd)).join("\n\n"),
-        { parse_mode: "MarkdownV2" }
+        this.commands.map((cmd) => Telex.formatCommandUsage(cmd)).join("\n\n")
       )
     })
   }
@@ -149,8 +153,7 @@ export class Telex {
           const repliedTo = Telex.parseReplyTo(ctx.msg, cmd)
           if (repliedTo.isErr()) {
             ctx.reply(
-              `**Error**: ***${repliedTo.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`,
-              { parse_mode: "MarkdownV2" }
+              `**Error**: ***${repliedTo.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`
             )
             return
           }
@@ -158,8 +161,7 @@ export class Telex {
           const args = Telex.parseArgs(Telex.getText(ctx.msg).text ?? "", cmd)
           if (args.isErr()) {
             ctx.reply(
-              `**Error**: ***${args.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`,
-              { parse_mode: "MarkdownV2" }
+              `**Error**: ***${args.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`
             )
             return
           }
@@ -173,7 +175,14 @@ export class Telex {
         },
         {
           id: cmd.trigger,
-          plugins: [hydrate()],
+          plugins: [
+            hydrate(),
+            hydrateReply,
+            async (ctx, next) => {
+              ctx.api.config.use(parseMode("MarkdownV2"))
+              await next()
+            },
+          ],
         }
       )
     )
