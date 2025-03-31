@@ -41,10 +41,11 @@ const bot = new Telex(process.env.BOT_TOKEN)
     reply: "required",
     handler: async ({ conversation, repliedTo }) => {
       const tg = conversation.getLastCtx() // questo dovrebbe essere nascosto in Telex
-      const text = Telex.getText(repliedTo)
+      const { text, type } = Telex.getText(repliedTo)
       logger.info({
         action: "delete_message",
-        messageText: text ?? "[Not a text message]",
+        messageText: text ?? "[non-textual]",
+        messageType: type,
         sender: repliedTo.from?.username,
       })
       await tg.deleteMessage(repliedTo.message_id)

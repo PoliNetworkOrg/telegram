@@ -11,6 +11,13 @@ import {
 } from "./conversation"
 import { getTelegramId, setTelegramId } from "./redis"
 
+type TextReturn =
+  | {
+      text: string
+      type: "TEXT" | "CAPTION"
+    }
+  | { text: null; type: "OTHER" }
+
 export class Telex {
   bot: Telegraf
   commands: Command<CommandArgs, CommandReplyTo>[] = []
@@ -18,8 +25,12 @@ export class Telex {
 
   private _onStop?: (reason?: string) => void = undefined
 
-  static getText(message: Message): string | null {
-    return "text" in message && message.text !== undefined ? message.text : null
+  static getText(message: Message): TextReturn {
+    if ("text" in message) return { text: message.text, type: "TEXT" }
+    if ("caption" in message && message.caption)
+      return { text: message.caption, type: "CAPTION" }
+
+    return { text: null, type: "OTHER" }
   }
 
   static parseReplyTo(
@@ -97,7 +108,7 @@ export class Telex {
     })
     this.bot.on(message(), async (ctx, next) => {
       next() // not sure if this should proceed here
-      const text = Telex.getText(ctx.message)
+      const { text } = Telex.getText(ctx.message)
       if (text?.startsWith("/")) return
       const conv = this.conversations.get(ctx.message.chat.id)
       if (conv) conv.progress(ctx)
