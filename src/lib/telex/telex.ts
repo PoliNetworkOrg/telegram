@@ -12,7 +12,6 @@ import {
   CommandReplyTo,
   RepliedTo,
 } from "./command"
-import { getTelegramId, setTelegramId } from "./redis"
 import type { ConversationContext, Context, Conversation } from "./context"
 
 type TextReturn =
@@ -116,14 +115,6 @@ export class Telex extends Bot<Context> {
       })
     )
     this.api.config.use(parseMode("MarkdownV2"))
-    this.on("message", async (ctx, next) => {
-      if (ctx.chat.type !== "private") {
-        const { username, id } = ctx.message.from
-        if (username) setTelegramId(username, id)
-      }
-      await next()
-    })
-
     this.command("start", async (ctx) => {
       if (ctx.chat.type !== "private") {
         return
@@ -200,9 +191,5 @@ export class Telex extends Bot<Context> {
     await super.stop()
     this._onStop?.(reason)
     process.exit(0)
-  }
-
-  getCachedId(username: string): Promise<number | null> {
-    return getTelegramId(username)
   }
 }

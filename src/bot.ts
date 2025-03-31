@@ -1,6 +1,8 @@
 import "dotenv/config"
-import { logger } from "./logger"
 import { Telex } from "@/lib/telex"
+import { logger } from "./logger"
+import { getTelegramId, setTelegramId } from "./utils/telegram-id"
+import { redis } from "./redis"
 
 if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN environment variable is required!")
@@ -61,7 +63,7 @@ const bot = new Telex(process.env.BOT_TOKEN)
     args: [{ key: "username", description: "The username to get the ID of" }],
     handler: async ({ context, args }) => {
       const username = args.username.replace("@", "")
-      const id = await bot.getCachedId(username)
+      const id = await getTelegramId(username)
       if (!id) {
         logger.warn(`[userid] username @${username} not in our cache`)
         await context.reply(`Username @${username} not in our cache`)
@@ -71,8 +73,16 @@ const bot = new Telex(process.env.BOT_TOKEN)
       await context.reply(`Username \`@${username}\`\nid: \`${id}\``)
     },
   })
-  .onStop((reason) => {
+  .onStop(async (reason) => {
     logger.info(reason ? `Bot Stopped. Reason: ${reason}` : "Bot Stopped")
+    await redis.quit()
   })
 
+bot.on("message", async (ctx, next) => {
+  const { username, id } = ctx.message.from
+  if (username) setTelegramId(username, id)
+
+  await next()
+})
+ 
 bot.start({ onStart: () => logger.info("Bot started!") })
