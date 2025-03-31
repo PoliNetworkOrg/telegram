@@ -16,7 +16,7 @@ const bot = new Telex(process.env.BOT_TOKEN)
       await context.deleteMessage()
       await message.delete()
       await question.delete()
-      await context.reply(`Hello, ${message.text}!`)
+      await context.reply(`Hello, ${message.text}\\!`)
     },
   })
   .createCommand({
