@@ -75,4 +75,4 @@ const bot = new Telex(process.env.BOT_TOKEN)
     logger.info(reason ? `Bot Stopped. Reason: ${reason}` : "Bot Stopped")
   })
 
-bot.start(() => logger.info("Bot started!"))
+bot.start({ onStart: () => logger.info("Bot started!") })
