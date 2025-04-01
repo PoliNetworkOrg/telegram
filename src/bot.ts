@@ -10,7 +10,9 @@ if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN environment variable is required!")
 }
 
-const convStorageAdapter = new OurStorageAdapter<VersionedState<ConversationData>>("conv")
+const convStorageAdapter = new OurStorageAdapter<
+  VersionedState<ConversationData>
+>("conv")
 
 const bot = new Telex(process.env.BOT_TOKEN)
   .setup(convStorageAdapter)

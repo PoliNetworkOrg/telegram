@@ -44,11 +44,14 @@ try {
 }
 
 type WithRedisCallback<T> = (props: { client: typeof client }) => Promise<T>
-export function withRedis<T>(callback: WithRedisCallback<T>): Promise<T | null> {
+export function withRedis<T>(
+  callback: WithRedisCallback<T>
+): Promise<T | null> {
   if (client.isReady) return callback({ client })
   return new Promise((res) => res(null))
 }
 
 export const redis = client
-export const conversationAdapter = new RedisAdapter<VersionedState<ConversationData>>({ instance: client, ttl: 10, autoParseDates: true });
-
+export const conversationAdapter = new RedisAdapter<
+  VersionedState<ConversationData>
+>({ instance: client, ttl: 10, autoParseDates: true })

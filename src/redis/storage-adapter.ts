@@ -3,7 +3,7 @@ import { withRedis } from "@/redis"
 import type { StorageAdapter } from "grammy"
 
 export class OurStorageAdapter<T> implements StorageAdapter<T> {
-  constructor(private prefix: string){
+  constructor(private prefix: string) {
     if (prefix.endsWith(":")) {
       prefix.slice(0, -1)
     }
@@ -26,7 +26,7 @@ export class OurStorageAdapter<T> implements StorageAdapter<T> {
       return undefined
     }
   }
-  
+
   async write(key: string, value: T): Promise<void> {
     await withRedis(({ client }) => {
       return client.set(this.getKey(key), JSON.stringify(value))
