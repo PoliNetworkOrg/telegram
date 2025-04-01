@@ -10,9 +10,7 @@ interface OptionalArgumentOptions extends RequiredArgumentOptions {
   optional: true
 }
 type ArgumentOptions = RequiredArgumentOptions | OptionalArgumentOptions
-type ArgumentType<T extends ArgumentOptions> = T extends OptionalArgumentOptions
-  ? string | undefined
-  : string
+type ArgumentType<T extends ArgumentOptions> = T extends OptionalArgumentOptions ? string | undefined : string
 
 export type CommandArgs = ReadonlyArray<ArgumentOptions>
 export type RepliedTo<R extends CommandReplyTo> = R extends "required"

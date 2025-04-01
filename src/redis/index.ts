@@ -25,8 +25,7 @@ const client = createClient({
 
 client.on("error", (err) => {
   if (err.code === "ECONNREFUSED") return
-  else if (err instanceof SocketClosedUnexpectedlyError)
-    logger.error("[REDIS] connection lost")
+  else if (err instanceof SocketClosedUnexpectedlyError) logger.error("[REDIS] connection lost")
   else logger.error({ err }, "[REDIS] client error")
 })
 client.on("ready", () => logger.info("[REDIS] client connected"))
@@ -36,14 +35,11 @@ try {
   await client.connect()
   openSuccess = true
 } catch (_) {
-  logger.error(
-    "[REDIS] connection failed. Some functions may not work correctly. This should be addressed ASAP."
-  )
+  logger.error("[REDIS] connection failed. Some functions may not work correctly. This should be addressed ASAP.")
 }
 
-type Function<T> = (props: { client: typeof client }) => Promise<T>
-
-export function withRedis<T>(callback: Function<T>): Promise<T | null> {
+type WithRedisCallback<T> = (props: { client: typeof client }) => Promise<T>
+export function withRedis<T>(callback: WithRedisCallback<T>): Promise<T | null> {
   if (client.isReady) return callback({ client })
   return new Promise((res) => res(null))
 }

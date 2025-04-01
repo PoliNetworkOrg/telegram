@@ -1,17 +1,11 @@
 import { err, ok, Result } from "neverthrow"
-import { Bot, BotConfig, PollingOptions } from "grammy"
+import { Bot, StorageAdapter, type BotConfig, type PollingOptions } from "grammy"
 import type { Message } from "grammy/types"
-import { conversations, createConversation } from "@grammyjs/conversations"
+import { ConversationData, conversations, createConversation, VersionedState } from "@grammyjs/conversations"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 
-import {
-  ArgumentMap,
-  Command,
-  CommandArgs,
-  CommandReplyTo,
-  RepliedTo,
-} from "./command"
+import { ArgumentMap, Command, CommandArgs, CommandReplyTo, RepliedTo } from "./command"
 import type { ConversationContext, Context, Conversation } from "./context"
 import { getText } from "@/utils/messages"
 
@@ -30,10 +24,7 @@ export class Telex extends Bot<Context> {
     return ok((msg.reply_to_message ?? null) as RepliedTo<R>)
   }
 
-  static parseArgs(
-    msg: string,
-    cmd: Command<CommandArgs, CommandReplyTo>
-  ): Result<ArgumentMap, string> {
+  static parseArgs(msg: string, cmd: Command<CommandArgs, CommandReplyTo>): Result<ArgumentMap, string> {
     const args: ArgumentMap = {}
     if (!cmd.args || cmd.args.length === 0) return ok(args)
 
@@ -46,8 +37,7 @@ export class Telex extends Bot<Context> {
           return err(`Missing argument: ${key}`)
         }
       } else {
-        args[key] =
-          i === cmd.args!.length - 1 ? words.slice(i).join(" ") : words[i]
+        args[key] = i === cmd.args!.length - 1 ? words.slice(i).join(" ") : words[i]
       }
     }
 
@@ -60,9 +50,7 @@ export class Telex extends Bot<Context> {
    * @returns A markdown formatted string representing the usage of the command
    */
   static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo>): string {
-    const args = (cmd.args ?? [])
-      .map(({ key, optional }) => (optional ? `[_${key}_]` : `<_${key}_>`))
-      .join(" ")
+    const args = (cmd.args ?? []).map(({ key, optional }) => (optional ? `[_${key}_]` : `<_${key}_>`)).join(" ")
 
     const argDescs = (cmd.args ?? [])
       .map(({ key, description }) => {
@@ -70,16 +58,9 @@ export class Telex extends Bot<Context> {
       })
       .join("\n")
 
-    const replyTo = cmd.reply
-      ? `_Call while replying to a message_: *${cmd.reply.toUpperCase()}*`
-      : ""
+    const replyTo = cmd.reply ? `_Call while replying to a message_: *${cmd.reply.toUpperCase()}*` : ""
 
-    return [
-      `/${cmd.trigger} ${args}`,
-      `*${cmd.description ?? "No description"}*`,
-      `${argDescs}`,
-      `${replyTo}`,
-    ]
+    return [`/${cmd.trigger} ${args}`, `*${cmd.description ?? "No description"}*`, `${argDescs}`, `${replyTo}`]
       .filter((s) => s.length > 0)
       .join("\n")
       .replace(/[[\]()~`>#+\-=|{}.!]/g, "\\$&")
@@ -87,8 +68,12 @@ export class Telex extends Bot<Context> {
 
   constructor(token: string, config?: BotConfig<Context>) {
     super(token, config)
+  }
+
+  setup(adapter: StorageAdapter<VersionedState<ConversationData>>) {
     this.use(
       conversations<Context, ConversationContext>({
+        storage: adapter,
         plugins: [
           hydrate(),
           hydrateReply,
@@ -113,10 +98,10 @@ export class Telex extends Bot<Context> {
     })
 
     this.command("help", (ctx) => {
-      ctx.reply(
-        this.commands.map((cmd) => Telex.formatCommandUsage(cmd)).join("\n\n")
-      )
+      ctx.reply(this.commands.map((cmd) => Telex.formatCommandUsage(cmd)).join("\n\n"))
     })
+
+    return this
   }
 
   onStop(cb: (reason?: string) => void) {
@@ -124,9 +109,7 @@ export class Telex extends Bot<Context> {
     return this
   }
 
-  createCommand<const A extends CommandArgs, R extends CommandReplyTo>(
-    cmd: Command<A, R>
-  ) {
+  createCommand<const A extends CommandArgs, R extends CommandReplyTo>(cmd: Command<A, R>) {
     this.commands.push(cmd as Command<A, R>)
     this.use(
       createConversation(
@@ -135,17 +118,13 @@ export class Telex extends Bot<Context> {
 
           const repliedTo = Telex.parseReplyTo(ctx.msg, cmd)
           if (repliedTo.isErr()) {
-            ctx.reply(
-              `**Error**: ***${repliedTo.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`
-            )
+            ctx.reply(`**Error**: ***${repliedTo.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`)
             return
           }
 
           const args = Telex.parseArgs(getText(ctx.msg).text ?? "", cmd)
           if (args.isErr()) {
-            ctx.reply(
-              `**Error**: ***${args.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`
-            )
+            ctx.reply(`**Error**: ***${args.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`)
             return
           }
 
@@ -168,9 +147,7 @@ export class Telex extends Bot<Context> {
   }
 
   override start(options?: PollingOptions) {
-    this.api.setMyCommands([
-      { command: "help", description: "Display all available commands" },
-    ])
+    this.api.setMyCommands([{ command: "help", description: "Display all available commands" }])
 
     process.once("SIGINT", () => this.stop("SIGINT"))
     process.once("SIGTERM", () => this.stop("SIGTERM"))
