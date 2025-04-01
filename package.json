@@ -8,7 +8,7 @@
   "scripts": {
     "start": "NODE_ENV=production node dist/bot.js",
     "build": "tsup",
-    "dev:raw": "NODE_ENV=development tsx watch --clear-screen=false src/bot.ts",
+    "dev:raw": "NODE_ENV=development tsx watch --clear-screen=false --env-file=.env src/bot.ts",
     "dev": "pnpm run dev:raw | pino-pretty",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ./src",
@@ -38,7 +38,6 @@
     "@grammyjs/conversations": "^2.0.1",
     "@grammyjs/hydrate": "^1.4.1",
     "@grammyjs/parse-mode": "^1.11.1",
-    "dotenv": "^16.4.7",
     "grammy": "^1.35.1",
     "neverthrow": "^8.2.0",
     "pino": "^9.6.0",

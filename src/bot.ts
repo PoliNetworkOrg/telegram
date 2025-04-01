@@ -1,4 +1,3 @@
-import "dotenv/config"
 import { Telex } from "@/lib/telex"
 import { logger } from "./logger"
 import { getTelegramId, setTelegramId } from "./utils/telegram-id"

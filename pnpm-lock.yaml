@@ -17,9 +17,6 @@ importers:
       '@grammyjs/parse-mode':
         specifier: ^1.11.1
         version: 1.11.1(grammy@1.35.1)
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
       grammy:
         specifier: ^1.35.1
         version: 1.35.1
@@ -687,10 +684,6 @@ packages:
   diff@4.0.2:
     resolution: {integrity: sha512-58lmxKSA4BNyLz+HHMUzlOEpg09FV+ev6ZMe3vJihgdxzgcwZ8VoEEPmALCZG9LmqfVoNMMKpttIYTVG6uDY7A==}
     engines: {node: '>=0.3.1'}
-
-  dotenv@16.4.7:
-    resolution: {integrity: sha512-47qPchRCykZC03FhkYAhrvwU4xDBFIj1QPqaarj6mdM/hgUzfPHcpkHJOn3mJAufFeeAxAzeGsr5X0M4k6fLZQ==}
-    engines: {node: '>=12'}
 
   eastasianwidth@0.2.0:
     resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
@@ -1889,8 +1882,6 @@ snapshots:
   deep-is@0.1.4: {}
 
   diff@4.0.2: {}
-
-  dotenv@16.4.7: {}
 
   eastasianwidth@0.2.0: {}
 

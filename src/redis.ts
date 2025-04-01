@@ -1,4 +1,3 @@
-import "dotenv/config"
 import { createClient, SocketClosedUnexpectedlyError } from "redis"
 import { logger } from "@/logger"
 
