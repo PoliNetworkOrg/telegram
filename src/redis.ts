@@ -46,7 +46,7 @@ type Function<T> = (props: { client: typeof client }) => Promise<T>
 
 export function withRedis<T>(callback: Function<T>): Promise<T | null> {
   if (redis.isReady) return callback({ client })
-  return new Promise(res => res(null))
+  return new Promise((res) => res(null))
 }
 
 export const redis = client
