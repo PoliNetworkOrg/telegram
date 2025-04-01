@@ -1,49 +1,24 @@
 import { err, ok, Result } from "neverthrow"
-import { Bot, Context } from "grammy"
+import { Bot, BotConfig, PollingOptions } from "grammy"
 import type { Message } from "grammy/types"
-import {
-  conversations,
-  createConversation,
-  type ConversationFlavor,
-} from "@grammyjs/conversations"
-import { hydrate, type HydrateFlavor } from "@grammyjs/hydrate"
+import { conversations, createConversation } from "@grammyjs/conversations"
+import { hydrate } from "@grammyjs/hydrate"
+import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 
 import {
   ArgumentMap,
   Command,
   CommandArgs,
   CommandReplyTo,
-  Conversation,
   RepliedTo,
 } from "./command"
-import { getTelegramId, setTelegramId } from "./redis"
-import {
-  hydrateReply,
-  parseMode,
-  type ParseModeFlavor,
-} from "@grammyjs/parse-mode"
+import type { ConversationContext, Context, Conversation } from "./context"
+import { getText } from "@/utils/messages"
 
-type TextReturn =
-  | {
-      text: string
-      type: "TEXT" | "CAPTION"
-    }
-  | { text: null; type: "OTHER" }
-
-export class Telex {
-  bot: Bot<ParseModeFlavor<HydrateFlavor<ConversationFlavor<Context>>>>
+export class Telex extends Bot<Context> {
   commands: Command<CommandArgs, CommandReplyTo>[] = []
 
   private _onStop?: (reason?: string) => void = undefined
-
-  static getText(message: Message): TextReturn {
-    if ("text" in message && message.text)
-      return { text: message.text, type: "TEXT" }
-    if ("caption" in message && message.caption)
-      return { text: message.caption, type: "CAPTION" }
-
-    return { text: null, type: "OTHER" }
-  }
 
   static parseReplyTo<R extends CommandReplyTo>(
     msg: Message,
@@ -110,26 +85,34 @@ export class Telex {
       .replace(/[[\]()~`>#+\-=|{}.!]/g, "\\$&")
   }
 
-  constructor(token: string) {
-    this.bot = new Bot(token)
-    this.bot.use(conversations())
-    this.bot.api.config.use(parseMode("MarkdownV2"))
-    this.bot.on("message", async (ctx, next) => {
+  constructor(token: string, config?: BotConfig<Context>) {
+    super(token, config)
+    this.use(
+      conversations<Context, ConversationContext>({
+        plugins: [
+          hydrate(),
+          hydrateReply,
+          async (ctx, next) => {
+            ctx.api.config.use(parseMode("MarkdownV2"))
+            await next()
+          },
+        ],
+      })
+    )
+    this.api.config.use(parseMode("MarkdownV2"))
+    this.command("start", async (ctx) => {
+      const res = "Welcome from PoliNetwork\\! Type /help to get started\\."
       if (ctx.chat.type !== "private") {
-        const { username, id } = ctx.message.from
-        if (username) setTelegramId(username, id)
-      }
-      await next()
-    })
-
-    this.bot.command("start", async (ctx) => {
-      if (ctx.chat.type !== "private") {
+        const fromId = ctx.from?.id
+        if (fromId) ctx.api.sendMessage(fromId, res)
+        ctx.deleteMessage()
         return
+      } else {
+        ctx.reply(res)
       }
-      ctx.reply("Welcome from PoliNetwork! Type /help to get started.")
     })
 
-    this.bot.command("help", (ctx) => {
+    this.command("help", (ctx) => {
       ctx.reply(
         this.commands.map((cmd) => Telex.formatCommandUsage(cmd)).join("\n\n")
       )
@@ -145,9 +128,9 @@ export class Telex {
     cmd: Command<A, R>
   ) {
     this.commands.push(cmd as Command<A, R>)
-    this.bot.use(
+    this.use(
       createConversation(
-        async (conv: Conversation, ctx) => {
+        async (conv: Conversation, ctx: ConversationContext) => {
           if (!ctx.has(":text")) return
 
           const repliedTo = Telex.parseReplyTo(ctx.msg, cmd)
@@ -158,7 +141,7 @@ export class Telex {
             return
           }
 
-          const args = Telex.parseArgs(Telex.getText(ctx.msg).text ?? "", cmd)
+          const args = Telex.parseArgs(getText(ctx.msg).text ?? "", cmd)
           if (args.isErr()) {
             ctx.reply(
               `**Error**: ***${args.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`
@@ -175,48 +158,28 @@ export class Telex {
         },
         {
           id: cmd.trigger,
-          plugins: [
-            hydrate(),
-            hydrateReply,
-            async (ctx, next) => {
-              ctx.api.config.use(parseMode("MarkdownV2"))
-              await next()
-            },
-          ],
         }
       )
     )
-    this.bot.command(cmd.trigger, async (ctx) => {
+    this.command(cmd.trigger, async (ctx) => {
       await ctx.conversation.enter(cmd.trigger)
     })
     return this
   }
 
-  start(cb: () => void) {
-    this.bot.api.setMyCommands([
+  override start(options?: PollingOptions) {
+    this.api.setMyCommands([
       { command: "help", description: "Display all available commands" },
-      // ...this.commands.map((cmd) => ({
-      //   command: cmd.trigger,
-      //   description: cmd.description || 'No description',
-      // })),
     ])
-    this.bot.start({ onStart: cb })
 
     process.once("SIGINT", () => this.stop("SIGINT"))
     process.once("SIGTERM", () => this.stop("SIGTERM"))
+    return super.start(options)
   }
 
-  stop(reason?: string) {
-    this.bot.stop()
+  override async stop(reason?: string) {
+    await super.stop()
     this._onStop?.(reason)
     process.exit(0)
-  }
-
-  getCachedId(username: string): Promise<number | null> {
-    return getTelegramId(username)
-  }
-
-  get tg() {
-    return this.bot
   }
 }

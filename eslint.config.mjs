@@ -4,8 +4,10 @@ import tseslint from "typescript-eslint"
 import eslintConfigPrettier from "eslint-config-prettier"
 import neverthrow from "eslint-plugin-neverthrow"
 
-/** @type {import('eslint').Linter.Config[]} */
-export default [
+export default tseslint.config(
+  pluginJs.configs.recommended,
+  tseslint.configs.recommended,
+  eslintConfigPrettier,
   {
     languageOptions: {
       ecmaVersion: "latest",
@@ -17,7 +19,20 @@ export default [
     files: ["src/**/*.{js,mjs,cjs,ts}"],
     plugins: { neverthrow },
   },
-  pluginJs.configs.recommended,
-  ...tseslint.configs.recommended,
-  eslintConfigPrettier,
-]
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          args: "all",
+          argsIgnorePattern: "^_",
+          caughtErrors: "all",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
+  }
+)
