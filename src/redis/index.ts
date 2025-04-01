@@ -1,6 +1,5 @@
 import { createClient, SocketClosedUnexpectedlyError } from "redis"
 import { logger } from "@/logger"
-import { ConversationData, VersionedState } from "@grammyjs/conversations"
 
 let openSuccess = false
 const client = createClient({
