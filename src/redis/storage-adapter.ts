@@ -2,7 +2,7 @@ import { logger } from "@/logger"
 import { withRedis } from "@/redis"
 import type { StorageAdapter } from "grammy"
 
-export class OurStorageAdapter<T> implements StorageAdapter<T> {
+export class RedisAdapter<T> implements StorageAdapter<T> {
   constructor(private prefix: string) {
     if (prefix.endsWith(":")) {
       prefix.slice(0, -1)

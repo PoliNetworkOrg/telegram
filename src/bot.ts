@@ -3,16 +3,14 @@ import { logger } from "./logger"
 import { getTelegramId, setTelegramId } from "./utils/telegram-id"
 import { redis } from "./redis"
 import { getText } from "./utils/messages"
-import { OurStorageAdapter } from "./redis/storage-adapter"
+import { RedisAdapter } from "./redis/storage-adapter"
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 
 if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN environment variable is required!")
 }
 
-const convStorageAdapter = new OurStorageAdapter<
-  VersionedState<ConversationData>
->("conv")
+const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("conv")
 
 const bot = new Telex(process.env.BOT_TOKEN)
   .setup(convStorageAdapter)
