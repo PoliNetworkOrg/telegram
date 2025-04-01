@@ -1,7 +1,12 @@
 import { err, ok, Result } from "neverthrow"
-import { Bot, BotConfig, PollingOptions } from "grammy"
+import { Bot, StorageAdapter, type BotConfig, type PollingOptions } from "grammy"
 import type { Message } from "grammy/types"
-import { conversations, createConversation } from "@grammyjs/conversations"
+import {
+  ConversationData,
+  conversations,
+  createConversation,
+  VersionedState,
+} from "@grammyjs/conversations"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 
@@ -14,6 +19,7 @@ import {
 } from "./command"
 import type { ConversationContext, Context, Conversation } from "./context"
 import { getText } from "@/utils/messages"
+import { RedisAdapter } from "@grammyjs/storage-redis"
 
 export class Telex extends Bot<Context> {
   commands: Command<CommandArgs, CommandReplyTo>[] = []
@@ -87,8 +93,12 @@ export class Telex extends Bot<Context> {
 
   constructor(token: string, config?: BotConfig<Context>) {
     super(token, config)
+  }
+
+  setup(adapter: StorageAdapter<VersionedState<ConversationData>>) {
     this.use(
       conversations<Context, ConversationContext>({
+        storage: adapter,
         plugins: [
           hydrate(),
           hydrateReply,
@@ -117,6 +127,8 @@ export class Telex extends Bot<Context> {
         this.commands.map((cmd) => Telex.formatCommandUsage(cmd)).join("\n\n")
       )
     })
+
+    return this
   }
 
   onStop(cb: (reason?: string) => void) {

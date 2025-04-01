@@ -1,5 +1,7 @@
 import { createClient, SocketClosedUnexpectedlyError } from "redis"
 import { logger } from "@/logger"
+import { RedisAdapter } from "@grammyjs/storage-redis"
+import { ConversationData, VersionedState } from "@grammyjs/conversations"
 
 let openSuccess = false
 const client = createClient({
@@ -42,6 +44,7 @@ try {
 }
 
 type Function<T> = (props: { client: typeof client }) => Promise<T>
+export type WithStorage<T> = (callback: Function<T>) => Promise<T | null>
 
 export function withRedis<T>(callback: Function<T>): Promise<T | null> {
   if (client.isReady) return callback({ client })
@@ -49,3 +52,5 @@ export function withRedis<T>(callback: Function<T>): Promise<T | null> {
 }
 
 export const redis = client
+export const conversationAdapter = new RedisAdapter<VersionedState<ConversationData>>({ instance: client, ttl: 10, autoParseDates: true });
+
