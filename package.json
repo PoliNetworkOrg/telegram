@@ -8,7 +8,8 @@
   "scripts": {
     "start": "NODE_ENV=production node dist/bot.js",
     "build": "tsup",
-    "dev": "NODE_ENV=development tsx watch --clear-screen=false src/bot.ts",
+    "dev:raw": "NODE_ENV=development tsx watch --clear-screen=false src/bot.ts",
+    "dev": "pnpm run dev:raw | pino-pretty",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ./src",
     "lint:fix": "eslint ./src --fix",
@@ -25,6 +26,7 @@
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-neverthrow": "^1.1.4",
     "globals": "^15.14.0",
+    "pino-pretty": "^13.0.0",
     "prettier": "^3.4.2",
     "ts-node": "^10.9.2",
     "tsup": "^8.4.0",
