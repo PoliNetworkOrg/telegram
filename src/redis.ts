@@ -38,7 +38,7 @@ try {
   openSuccess = true
 } catch (_) {
   logger.error(
-    "[REDIS] connection failed. Some functions may not work correctly. This should be address ASAP."
+    "[REDIS] connection failed. Some functions may not work correctly. This should be addressed ASAP."
   )
 }
 
