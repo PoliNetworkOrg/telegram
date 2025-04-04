@@ -7,7 +7,7 @@ import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 
 import { ArgumentMap, Command, CommandArgs, CommandReplyTo, RepliedTo } from "./command"
 import type { ConversationContext, Context, Conversation } from "./context"
-import { getText } from "@/utils/messages"
+import { getText, sanitizeText } from "@/utils/messages"
 
 export class Telex extends Bot<Context> {
   commands: Command<CommandArgs, CommandReplyTo>[] = []
@@ -60,10 +60,11 @@ export class Telex extends Bot<Context> {
 
     const replyTo = cmd.reply ? `_Call while replying to a message_: *${cmd.reply.toUpperCase()}*` : ""
 
-    return [`/${cmd.trigger} ${args}`, `*${cmd.description ?? "No description"}*`, `${argDescs}`, `${replyTo}`]
-      .filter((s) => s.length > 0)
-      .join("\n")
-      .replace(/[[\]()~`>#+\-=|{}.!]/g, "\\$&")
+    return sanitizeText(
+      [`/${cmd.trigger} ${args}`, `*${cmd.description ?? "No description"}*`, `${argDescs}`, `${replyTo}`]
+        .filter((s) => s.length > 0)
+        .join("\n")
+    )
   }
 
   constructor(token: string, config?: BotConfig<Context>) {

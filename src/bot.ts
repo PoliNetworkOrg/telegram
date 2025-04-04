@@ -2,13 +2,16 @@ import { Telex } from "@/lib/telex"
 import { logger } from "./logger"
 import { getTelegramId, setTelegramId } from "./utils/telegram-id"
 import { redis } from "./redis"
-import { getText } from "./utils/messages"
+import { sanitizeText, getText } from "./utils/messages"
 import { RedisAdapter } from "./redis/storage-adapter"
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
+import { api, apiTestQuery } from "./backend"
 
 if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN environment variable is required!")
 }
+
+await apiTestQuery()
 
 const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("conv")
 
@@ -31,6 +34,21 @@ const bot = new Telex(process.env.BOT_TOKEN)
     description: "Replies with pong",
     handler: async ({ context }) => {
       await context.reply("pong")
+    },
+  })
+  .createCommand({
+    trigger: "testdb",
+    description: "Test postgres db through the backend",
+    handler: async ({ context }) => {
+      try {
+        const res = await api.test.dbQuery.query({ dbName: "tg" })
+        const str = res.map((r) => sanitizeText("- " + r)).join("\n")
+        await context.reply(
+          res.length > 0 ? "Elements inside `tg_test` table: \n" + str : "No elements inside `tg_test` table"
+        )
+      } catch (err) {
+        await context.reply("There was an error: \n" + err)
+      }
     },
   })
   .createCommand({

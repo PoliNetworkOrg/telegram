@@ -38,6 +38,8 @@
     "@grammyjs/conversations": "^2.0.1",
     "@grammyjs/hydrate": "^1.4.1",
     "@grammyjs/parse-mode": "^1.11.1",
+    "@polinetwork/backend": "^0.2.2",
+    "@trpc/client": "11",
     "grammy": "^1.35.1",
     "neverthrow": "^8.2.0",
     "pino": "^9.6.0",
