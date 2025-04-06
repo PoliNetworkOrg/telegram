@@ -15,5 +15,5 @@ export function getText(message: Message): TextReturn {
 }
 
 export function sanitizeText(text: string): string {
-  return text.replace(/[[\]()~`>#+\-=|{}.!]/g, "\\$&")
+  return text.replace(/[[\]()~`>#+\-=|{}.!_]/g, "\\$&")
 }

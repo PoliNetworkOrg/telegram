@@ -37,6 +37,28 @@ const bot = new Telex(process.env.BOT_TOKEN)
     },
   })
   .createCommand({
+    trigger: "getrole",
+    description: "Get role of userid",
+    args: [{ key: "userId" }],
+    handler: async ({ context, args }) => {
+      let userId: number | null = parseInt(args.userId)
+      if (isNaN(userId)) {
+        userId = await getTelegramId(args.userId)
+      }
+      if (userId === null) {
+        context.reply("Not a valid userId or username not in our cache")
+        return
+      }
+
+      try {
+        const { role } = await api.tg.permissions.getRole.query({ userId })
+        await context.reply(`Role: ${role}`)
+      } catch (err) {
+        await context.reply("There was an error: \n" + err)
+      }
+    },
+  })
+  .createCommand({
     trigger: "testdb",
     description: "Test postgres db through the backend",
     handler: async ({ context }) => {
@@ -87,13 +109,14 @@ const bot = new Telex(process.env.BOT_TOKEN)
     handler: async ({ context, args }) => {
       const username = args.username.replace("@", "")
       const id = await getTelegramId(username)
+      const sanitized = sanitizeText(username)
       if (!id) {
-        logger.warn(`[userid] username @${username} not in our cache`)
-        await context.reply(`Username @${username} not in our cache`)
+        logger.warn(`[userid] username @${sanitized} not in our cache`)
+        await context.reply(`Username @${sanitized} not in our cache`)
         return
       }
 
-      await context.reply(`Username \`@${username}\`\nid: \`${id}\``)
+      await context.reply(`Username \`@${sanitized}\`\nid: \`${id}\``)
     },
   })
   .onStop(async (reason) => {
