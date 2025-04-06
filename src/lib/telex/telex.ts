@@ -1,22 +1,22 @@
 import { err, ok, Result } from "neverthrow"
-import { Bot, StorageAdapter, type BotConfig, type PollingOptions } from "grammy"
+import { Bot, CommandContext, StorageAdapter, type BotConfig, type PollingOptions } from "grammy"
 import type { Message } from "grammy/types"
 import { ConversationData, conversations, createConversation, VersionedState } from "@grammyjs/conversations"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 
-import { ArgumentMap, Command, CommandArgs, CommandReplyTo, RepliedTo } from "./command"
+import type { ArgumentMap, Command, CommandArgs, CommandReplyTo, RepliedTo } from "./command"
 import type { ConversationContext, Context, Conversation } from "./context"
 import { getText, sanitizeText } from "@/utils/messages"
 
-export class Telex extends Bot<Context> {
-  commands: Command<CommandArgs, CommandReplyTo>[] = []
+export class Telex<RoleType extends string> extends Bot<Context> {
+  commands: Command<CommandArgs, CommandReplyTo, RoleType>[] = []
 
   private _onStop?: (reason?: string) => void = undefined
 
   static parseReplyTo<R extends CommandReplyTo>(
     msg: Message,
-    cmd: Command<CommandArgs, R>
+    cmd: Command<CommandArgs, R, string>
   ): Result<RepliedTo<R>, string> {
     if (cmd.reply === "required" && !msg.reply_to_message) {
       return err("This command requires a reply")
@@ -110,8 +110,21 @@ export class Telex extends Bot<Context> {
     return this
   }
 
-  createCommand<const A extends CommandArgs, R extends CommandReplyTo>(cmd: Command<A, R>) {
-    this.commands.push(cmd as Command<A, R>)
+  private permissionHandler:
+    | ((arg: {
+        userId: number
+        command: Command<CommandArgs, CommandReplyTo, RoleType>
+        context: CommandContext<Context>
+      }) => Promise<boolean>)
+    | undefined = undefined
+
+  permissionChecker(cb: NonNullable<typeof this.permissionHandler>) {
+    this.permissionHandler = cb
+    return this
+  }
+
+  createCommand<const A extends CommandArgs, R extends CommandReplyTo>(cmd: Command<A, R, RoleType>) {
+    this.commands.push(cmd as Command<A, R, RoleType>)
     this.use(
       createConversation(
         async (conv: Conversation, ctx: ConversationContext) => {
@@ -142,6 +155,12 @@ export class Telex extends Bot<Context> {
       )
     )
     this.command(cmd.trigger, async (ctx) => {
+      if (
+        cmd.requiresRoles &&
+        !(await this.permissionHandler?.({ userId: ctx.from!.id, command: cmd, context: ctx }))
+      ) {
+        return
+      }
       await ctx.conversation.enter(cmd.trigger)
     })
     return this

@@ -5,7 +5,7 @@ import { redis } from "./redis"
 import { sanitizeText, getText } from "./utils/messages"
 import { RedisAdapter } from "./redis/storage-adapter"
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
-import { api, apiTestQuery } from "./backend"
+import { api, apiTestQuery, Role } from "./backend"
 
 if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN environment variable is required!")
@@ -15,10 +15,22 @@ await apiTestQuery()
 
 const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("conv")
 
-const bot = new Telex(process.env.BOT_TOKEN)
+const bot = new Telex<Role>(process.env.BOT_TOKEN)
   .setup(convStorageAdapter)
+  .permissionChecker(async ({ userId, command, context }) => {
+    const { role } = await api.tg.permissions.getRole.query({ userId })
+    if (command.requiresRoles?.includes(role as Role) ?? false) {
+      return true
+    } else {
+      context.reply(
+        `*You don't have permission to use this command\\!*\nYour role is \`${role}\`\\.\nRequired role\\(s\\): \`${command.requiresRoles?.join(", ")}\`\\.`
+      )
+      return false
+    }
+  })
   .createCommand({
     trigger: "name",
+    requiresRoles: ["admin"],
     description: "Quick conversation",
     handler: async ({ conversation, context }) => {
       const question = await context.reply("What is your name?")

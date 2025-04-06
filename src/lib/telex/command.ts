@@ -1,5 +1,5 @@
 import type { Message } from "grammy/types"
-import { Conversation, ConversationContext } from "./context"
+import type { Conversation, ConversationContext } from "./context"
 
 interface RequiredArgumentOptions {
   key: string
@@ -23,9 +23,10 @@ export type ArgumentMap<A extends CommandArgs = CommandArgs> = {
 }
 export type CommandReplyTo = "required" | "optional" | undefined
 
-export interface Command<A extends CommandArgs, R extends CommandReplyTo> {
+export interface Command<A extends CommandArgs, R extends CommandReplyTo, RoleType extends string = string> {
   trigger: string
   args?: A
+  requiresRoles?: RoleType[]
   reply?: R
   description?: string
   handler: (cmd: {
