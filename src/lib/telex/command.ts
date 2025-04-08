@@ -36,11 +36,7 @@ interface GroupPermissions<TRole extends string> extends PrivatePermissions<TRol
 }
 type Permissions<TRole extends string, S extends CommandScope> = S extends "private"
   ? PrivatePermissions<TRole>
-  : S extends "group"
-    ? GroupPermissions<TRole>
-    : S extends "both"
-      ? GroupPermissions<TRole>
-      : undefined
+  : GroupPermissions<TRole>
 
 export interface Command<
   A extends CommandArgs,
@@ -49,7 +45,7 @@ export interface Command<
   TRole extends string = string,
 > {
   trigger: string
-  scope: S
+  scope?: S
   args?: A
   permissions?: Permissions<TRole, S>
   reply?: R
@@ -65,8 +61,7 @@ export interface Command<
 export function isAllowedInGroups<A extends CommandArgs, R extends CommandReplyTo, TRole extends string = string>(
   cmd: Command<A, R, CommandScope, TRole>
 ): cmd is Command<A, R, "group" | "both", TRole> {
-  if (cmd.scope !== "group" && cmd.scope !== "both") return false
-  return true
+  return cmd.scope !== "private"
 }
 
 export function isAllowedInPrivateOnly<A extends CommandArgs, R extends CommandReplyTo, TRole extends string = string>(
