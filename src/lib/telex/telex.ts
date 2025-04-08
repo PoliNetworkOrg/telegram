@@ -189,15 +189,15 @@ export class Telex<TRole extends string> extends Bot<Context> {
           return
         }
 
-        const allowed = await this.permissionHandler?.({ command: cmd, context: ctx })
+        const allowed = await this.permissionHandler({ command: cmd, context: ctx })
         if (!allowed) {
           this.logger?.info(
             { command_permissions: cmd.permissions },
-            `[TELEX] command '/${cmd.trigger}' invoked by ${ctx.from?.username ?? ctx.from?.id ?? "<unknown>"} without permissions`
+            `[TELEX] command '/${cmd.trigger}' invoked by @${ctx.from?.username ?? "<unknown>"} [${ctx.from?.id ?? "<unknown>"}] without permissions`
           )
           const reply = await ctx.reply("You are not allowed to execute this command")
           await ctx.deleteMessage()
-          setTimeout(() => ctx.deleteMessages([reply.message_id]), 3000)
+          setTimeout(() => reply.delete(), 3000)
           return
         }
       }
