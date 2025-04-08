@@ -17,20 +17,37 @@ const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("c
 
 const bot = new Telex<Role>(process.env.BOT_TOKEN)
   .setup(convStorageAdapter)
-  .permissionChecker(async ({ userId, command, context }) => {
-    const { role } = await api.tg.permissions.getRole.query({ userId })
-    if (command.requiresRoles?.includes(role as Role) ?? false) {
-      return true
-    } else {
-      context.reply(
-        `*You don't have permission to use this command\\!*\nYour role is \`${role}\`\\.\nRequired role\\(s\\): \`${command.requiresRoles?.join(", ")}\`\\.`
-      )
-      return false
-    }
+  .setLogger(logger)
+  .setPermissionChecker(async () => {
+  // TODO: the type inference in this function is not working
+  // it is expected that if I check for command.scope === "group"
+  // I get a GroupPermissions obj, while at this time I get a type union between
+  // the two permissions type
+  //
+  //.setPermissionChecker(async ({ command, context }) => {
+    //const perms = command.permissions!
+    //if (command.scope === "group") {
+    //
+    //command.permissions.allowedGroupAdmins
+    //}
+
+    //const { role } = await api.tg.permissions.getRole.query({ userId })
+    //if (command.requiresRoles?.includes(role as Role) ?? false) {
+    //  return true
+    //} else {
+    //  context.reply(
+    //    `*You don't have permission to use this command\\!*\nYour role is \`${role}\`\\.\nRequired role\\(s\\): \`${command.requiresRoles?.join(", ")}\`\\.`
+    //  )
+    //  return false
+    //}
+    return false
   })
   .createCommand({
     trigger: "name",
-    requiresRoles: ["admin"],
+    scope: "private",
+    permissions: {
+      allowedRoles: ["admin"],
+    },
     description: "Quick conversation",
     handler: async ({ conversation, context }) => {
       const question = await context.reply("What is your name?")
@@ -43,6 +60,7 @@ const bot = new Telex<Role>(process.env.BOT_TOKEN)
   })
   .createCommand({
     trigger: "ping",
+    scope: "private",
     description: "Replies with pong",
     handler: async ({ context }) => {
       await context.reply("pong")
@@ -50,6 +68,7 @@ const bot = new Telex<Role>(process.env.BOT_TOKEN)
   })
   .createCommand({
     trigger: "getrole",
+    scope: "private",
     description: "Get role of userid",
     args: [{ key: "userId" }],
     handler: async ({ context, args }) => {
@@ -72,6 +91,7 @@ const bot = new Telex<Role>(process.env.BOT_TOKEN)
   })
   .createCommand({
     trigger: "testdb",
+    scope: "private",
     description: "Test postgres db through the backend",
     handler: async ({ context }) => {
       try {
@@ -87,6 +107,7 @@ const bot = new Telex<Role>(process.env.BOT_TOKEN)
   })
   .createCommand({
     trigger: "testargs",
+    scope: "private",
     description: "Test args",
     args: [
       { key: "arg1", description: "first arg" },
@@ -100,6 +121,11 @@ const bot = new Telex<Role>(process.env.BOT_TOKEN)
   })
   .createCommand({
     trigger: "del",
+    scope: "group",
+    permissions: {
+      allowedRoles: ["admin", "owner", "direttivo"],
+      allowedGroupAdmins: true
+    },
     description: "Deletes the replied to message",
     reply: "required",
     handler: async ({ repliedTo, context }) => {
@@ -116,6 +142,7 @@ const bot = new Telex<Role>(process.env.BOT_TOKEN)
   })
   .createCommand({
     trigger: "userid",
+    scope: "private",
     description: "Gets the ID of a username",
     args: [{ key: "username", description: "The username to get the ID of" }],
     handler: async ({ context, args }) => {

@@ -5,18 +5,25 @@ import { ConversationData, conversations, createConversation, VersionedState } f
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 
-import type { ArgumentMap, Command, CommandArgs, CommandReplyTo, RepliedTo } from "./command"
+import type { ArgumentMap, Command, CommandArgs, CommandReplyTo, CommandScope, RepliedTo } from "./command"
 import type { ConversationContext, Context, Conversation } from "./context"
 import { getText, sanitizeText } from "@/utils/messages"
+import { Logger } from "pino"
 
-export class Telex<RoleType extends string> extends Bot<Context> {
-  commands: Command<CommandArgs, CommandReplyTo, RoleType>[] = []
+type PermissionHandler<TRole extends string> = (arg: {
+  context: CommandContext<Context>
+  command: Command<CommandArgs, CommandReplyTo, CommandScope, TRole>
+}) => Promise<boolean>
 
-  private _onStop?: (reason?: string) => void = undefined
+export class Telex<TRole extends string> extends Bot<Context> {
+  commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
+  private permissionHandler?: PermissionHandler<TRole>
+  private logger?: Logger
+  private _onStop?: (reason?: string) => void
 
   static parseReplyTo<R extends CommandReplyTo>(
     msg: Message,
-    cmd: Command<CommandArgs, R, string>
+    cmd: Command<CommandArgs, R, CommandScope>
   ): Result<RepliedTo<R>, string> {
     if (cmd.reply === "required" && !msg.reply_to_message) {
       return err("This command requires a reply")
@@ -24,7 +31,7 @@ export class Telex<RoleType extends string> extends Bot<Context> {
     return ok((msg.reply_to_message ?? null) as RepliedTo<R>)
   }
 
-  static parseArgs(msg: string, cmd: Command<CommandArgs, CommandReplyTo>): Result<ArgumentMap, string> {
+  static parseArgs(msg: string, cmd: Command<CommandArgs, CommandReplyTo, CommandScope>): Result<ArgumentMap, string> {
     const args: ArgumentMap = {}
     if (!cmd.args || cmd.args.length === 0) return ok(args)
 
@@ -49,7 +56,7 @@ export class Telex<RoleType extends string> extends Bot<Context> {
    * @param cmd The command to print usage for
    * @returns A markdown formatted string representing the usage of the command
    */
-  static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo>): string {
+  static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo, CommandScope>): string {
     const args = (cmd.args ?? []).map(({ key, optional }) => (optional ? `[_${key}_]` : `<_${key}_>`)).join(" ")
 
     const argDescs = (cmd.args ?? [])
@@ -59,9 +66,17 @@ export class Telex<RoleType extends string> extends Bot<Context> {
       .join("\n")
 
     const replyTo = cmd.reply ? `_Call while replying to a message_: *${cmd.reply.toUpperCase()}*` : ""
+    const scope =
+      cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
 
     return sanitizeText(
-      [`/${cmd.trigger} ${args}`, `*${cmd.description ?? "No description"}*`, `${argDescs}`, `${replyTo}`]
+      [
+        `/${cmd.trigger} ${args}`,
+        `*${cmd.description ?? "No description"}*`,
+        `${argDescs}`,
+        `${replyTo}`,
+        `Scope: *${scope}*`,
+      ]
         .filter((s) => s.length > 0)
         .join("\n")
     )
@@ -110,21 +125,20 @@ export class Telex<RoleType extends string> extends Bot<Context> {
     return this
   }
 
-  private permissionHandler:
-    | ((arg: {
-        userId: number
-        command: Command<CommandArgs, CommandReplyTo, RoleType>
-        context: CommandContext<Context>
-      }) => Promise<boolean>)
-    | undefined = undefined
+  setLogger(logger: Logger) {
+    this.logger = logger
+    return this
+  }
 
-  permissionChecker(cb: NonNullable<typeof this.permissionHandler>) {
+  setPermissionChecker(cb: PermissionHandler<TRole>) {
     this.permissionHandler = cb
     return this
   }
 
-  createCommand<const A extends CommandArgs, R extends CommandReplyTo>(cmd: Command<A, R, RoleType>) {
-    this.commands.push(cmd as Command<A, R, RoleType>)
+  createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
+    cmd: Command<A, R, S, TRole>
+  ) {
+    this.commands.push(cmd)
     this.use(
       createConversation(
         async (conv: Conversation, ctx: ConversationContext) => {
@@ -156,11 +170,38 @@ export class Telex<RoleType extends string> extends Bot<Context> {
     )
     this.command(cmd.trigger, async (ctx) => {
       if (
-        cmd.requiresRoles &&
-        !(await this.permissionHandler?.({ userId: ctx.from!.id, command: cmd, context: ctx }))
+        (cmd.scope === "private" && ctx.chat.type !== "private") ||
+        (cmd.scope === "group" && ctx.chat.type !== "supergroup" && ctx.chat.type !== "group")
       ) {
+        await ctx.deleteMessage()
+        this.logger?.info(
+          `[TELEX] command '/${cmd.trigger}' with scope '${cmd.scope}' invoked by ${ctx.from?.username ?? ctx.from?.id ?? "<unknown>"} in a '${ctx.chat.type}' chat.`
+        )
         return
       }
+
+      if (cmd.permissions) {
+        if (!this.permissionHandler) {
+          this.logger?.error(
+            `[TELEX] permissionHandler not configured, but command '/${cmd.trigger}' requires permissions`
+          )
+          await ctx.deleteMessage()
+          return
+        }
+
+        const allowed = await this.permissionHandler?.({ command: cmd, context: ctx })
+        if (!allowed) {
+          this.logger?.info(
+            { command_permissions: cmd.permissions },
+            `[TELEX] command '/${cmd.trigger}' invoked by ${ctx.from?.username ?? ctx.from?.id ?? "<unknown>"} without permissions`
+          )
+          const reply = await ctx.reply("You are not allowed to execute this command")
+          await ctx.deleteMessage()
+          setTimeout(() => ctx.deleteMessages([reply.message_id]), 3000)
+          return
+        }
+      }
+
       await ctx.conversation.enter(cmd.trigger)
     })
     return this

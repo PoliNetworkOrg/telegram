@@ -23,10 +23,35 @@ export type ArgumentMap<A extends CommandArgs = CommandArgs> = {
 }
 export type CommandReplyTo = "required" | "optional" | undefined
 
-export interface Command<A extends CommandArgs, R extends CommandReplyTo, RoleType extends string = string> {
+export type CommandScope = "private" | "group" | "both"
+
+interface PrivatePermissions<TRole extends string> {
+  allowedRoles?: TRole[]
+  excludedRoles?: TRole[]
+}
+interface GroupPermissions<TRole extends string> extends PrivatePermissions<TRole> {
+  allowedGroupAdmins: boolean
+  allowedGroupsId?: number[]
+  excludedGroupsId?: number[]
+}
+type Permissions<TRole extends string, S extends CommandScope> = S extends "private"
+  ? PrivatePermissions<TRole>
+  : S extends "group"
+    ? GroupPermissions<TRole>
+    : S extends "both"
+      ? GroupPermissions<TRole>
+      : undefined
+
+export interface Command<
+  A extends CommandArgs,
+  R extends CommandReplyTo,
+  S extends CommandScope,
+  TRole extends string = string,
+> {
   trigger: string
+  scope: S
   args?: A
-  requiresRoles?: RoleType[]
+  permissions?: Permissions<TRole, S>
   reply?: R
   description?: string
   handler: (cmd: {
