@@ -197,7 +197,7 @@ export class Telex<TRole extends string> extends Bot<Context> {
           )
           const reply = await ctx.reply("You are not allowed to execute this command")
           await ctx.deleteMessage()
-          setTimeout(() => reply.delete(), 3000)
+          setTimeout(() => ctx.deleteMessages([reply.message_id]), 3000)
           return
         }
       }
