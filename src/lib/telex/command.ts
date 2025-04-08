@@ -61,3 +61,16 @@ export interface Command<
     repliedTo: RepliedTo<R>
   }) => Promise<void>
 }
+
+export function isAllowedInGroups<A extends CommandArgs, R extends CommandReplyTo, TRole extends string = string>(
+  cmd: Command<A, R, CommandScope, TRole>
+): cmd is Command<A, R, "group" | "both", TRole> {
+  if (cmd.scope !== "group" && cmd.scope !== "both") return false
+  return true
+}
+
+export function isAllowedInPrivateOnly<A extends CommandArgs, R extends CommandReplyTo, TRole extends string = string>(
+  cmd: Command<A, R, CommandScope, TRole>
+): cmd is Command<A, R, "private", TRole> {
+  return cmd.scope === "private"
+}

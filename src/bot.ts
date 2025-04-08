@@ -1,4 +1,4 @@
-import { Telex } from "@/lib/telex"
+import { isAllowedInGroups, isAllowedInPrivateOnly, Telex } from "@/lib/telex"
 import { logger } from "./logger"
 import { getTelegramId, setTelegramId } from "./utils/telegram-id"
 import { redis } from "./redis"
@@ -18,18 +18,16 @@ const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("c
 const bot = new Telex<Role>(process.env.BOT_TOKEN)
   .setup(convStorageAdapter)
   .setLogger(logger)
-  .setPermissionChecker(async () => {
-  // TODO: the type inference in this function is not working
-  // it is expected that if I check for command.scope === "group"
-  // I get a GroupPermissions obj, while at this time I get a type union between
-  // the two permissions type
-  //
-  //.setPermissionChecker(async ({ command, context }) => {
-    //const perms = command.permissions!
-    //if (command.scope === "group") {
-    //
-    //command.permissions.allowedGroupAdmins
-    //}
+  .setPermissionChecker(async ({ command }) => {
+    if (isAllowedInGroups(command)) {
+      const _ = command.permissions
+      //    ^ GroupPermissions | undefined
+    }
+
+    if (isAllowedInPrivateOnly(command)) {
+      const _ = command.permissions
+      //    ^ PrivatePermissions | undefined
+    }
 
     //const { role } = await api.tg.permissions.getRole.query({ userId })
     //if (command.requiresRoles?.includes(role as Role) ?? false) {
@@ -124,7 +122,7 @@ const bot = new Telex<Role>(process.env.BOT_TOKEN)
     scope: "group",
     permissions: {
       allowedRoles: ["admin", "owner", "direttivo"],
-      allowedGroupAdmins: true
+      allowedGroupAdmins: true,
     },
     description: "Deletes the replied to message",
     reply: "required",
