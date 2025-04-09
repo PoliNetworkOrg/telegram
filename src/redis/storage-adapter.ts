@@ -1,5 +1,5 @@
 import { logger } from "@/logger"
-import { withRedis } from "@/redis"
+import { ready, withRedis } from "@/redis"
 import type { StorageAdapter } from "grammy"
 
 export class RedisAdapter<T> implements StorageAdapter<T> {
@@ -7,6 +7,10 @@ export class RedisAdapter<T> implements StorageAdapter<T> {
     if (prefix.endsWith(":")) {
       prefix.slice(0, -1)
     }
+  }
+
+  async ready(): Promise<boolean> {
+    return await ready()
   }
 
   private getKey(key: string): string {

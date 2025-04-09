@@ -1,4 +1,4 @@
-import { isAllowedInGroups, isAllowedInPrivateOnly, Telex } from "@/lib/telex"
+import { isAllowedInGroups, isAllowedInPrivateOnly, ManagedCommands, Context } from "@/lib/managed-commands"
 import { logger } from "./logger"
 import { getTelegramId, setTelegramId } from "./utils/telegram-id"
 import { redis } from "./redis"
@@ -6,6 +6,7 @@ import { sanitizeText, getText } from "./utils/messages"
 import { RedisAdapter } from "./redis/storage-adapter"
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 import { api, apiTestQuery, Role } from "./backend"
+import { Bot } from "grammy"
 
 if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN environment variable is required!")
@@ -15,10 +16,12 @@ await apiTestQuery()
 
 const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("conv")
 
-const bot = new Telex<Role>(process.env.BOT_TOKEN)
-  .setup(convStorageAdapter)
-  .setLogger(logger)
-  .setPermissionChecker(async ({ command }) => {
+const bot = new Bot<Context>(process.env.BOT_TOKEN)
+
+const commands = new ManagedCommands<Role>({
+  adapter: (await convStorageAdapter.ready()) ? convStorageAdapter : undefined,
+  logger,
+  permissionHandler: async ({ command }) => {
     if (isAllowedInGroups(command)) {
       const _ = command.permissions
       //    ^ GroupPermissions | undefined
@@ -29,17 +32,9 @@ const bot = new Telex<Role>(process.env.BOT_TOKEN)
       //    ^ PrivatePermissions | undefined
     }
 
-    //const { role } = await api.tg.permissions.getRole.query({ userId })
-    //if (command.requiresRoles?.includes(role as Role) ?? false) {
-    //  return true
-    //} else {
-    //  context.reply(
-    //    `*You don't have permission to use this command\\!*\nYour role is \`${role}\`\\.\nRequired role\\(s\\): \`${command.requiresRoles?.join(", ")}\`\\.`
-    //  )
-    //  return false
-    //}
-    return false
-  })
+    return true
+  },
+})
   .createCommand({
     trigger: "name",
     scope: "private",
@@ -156,10 +151,8 @@ const bot = new Telex<Role>(process.env.BOT_TOKEN)
       await context.reply(`Username \`@${sanitized}\`\nid: \`${id}\``)
     },
   })
-  .onStop(async (reason) => {
-    logger.info(reason ? `Bot Stopped. Reason: ${reason}` : "Bot Stopped")
-    await redis.quit()
-  })
+
+bot.use(commands.middleware())
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
@@ -168,4 +161,7 @@ bot.on("message", async (ctx, next) => {
   await next()
 })
 
-bot.start({ onStart: () => logger.info("Bot started!") })
+bot.start({ onStart: () => logger.info("Bot started!") }).then(async () => {
+  logger.info("Bot Stopped")
+  await redis.quit()
+})

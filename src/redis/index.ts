@@ -31,11 +31,18 @@ client.on("error", (err) => {
 client.on("ready", () => logger.info("[REDIS] client connected"))
 client.on("end", () => logger.info("[REDIS] client disconnected"))
 
-try {
-  await client.connect()
-  openSuccess = true
-} catch (_) {
-  logger.error("[REDIS] connection failed. Some functions may not work correctly. This should be addressed ASAP.")
+export async function ready(): Promise<boolean> {
+  if (client.isOpen) return true
+  if (client.isReady) return true
+
+  try {
+    await client.connect()
+    openSuccess = true
+    return true
+  } catch (_) {
+    logger.error("[REDIS] connection failed. Some functions may not work correctly. This should be addressed ASAP.")
+    return false
+  }
 }
 
 type WithRedisCallback<T> = (props: { client: typeof client }) => Promise<T>

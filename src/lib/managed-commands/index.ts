@@ -1,25 +1,50 @@
+export * from "./command"
+export * from "./context"
+import { CommandContext, Composer, MemorySessionStorage, MiddlewareFn, MiddlewareObj } from "grammy"
+import { ArgumentMap, Command, CommandArgs, CommandReplyTo, CommandScope, RepliedTo } from "./command"
+import { ChatMember, Message } from "grammy/types"
 import { err, ok, Result } from "neverthrow"
-import { Bot, CommandContext, StorageAdapter, type BotConfig, type PollingOptions } from "grammy"
-import type { Message } from "grammy/types"
-import { ConversationData, conversations, createConversation, VersionedState } from "@grammyjs/conversations"
+import { getText, sanitizeText } from "@/utils/messages"
+import { ConversationData, conversations, ConversationStorage, createConversation } from "@grammyjs/conversations"
+import { Context, Conversation, ConversationContext } from "./context"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 
-import type { ArgumentMap, Command, CommandArgs, CommandReplyTo, CommandScope, RepliedTo } from "./command"
-import type { ConversationContext, Context, Conversation } from "./context"
-import { getText, sanitizeText } from "@/utils/messages"
-import { Logger } from "pino"
-
-type PermissionHandler<TRole extends string> = (arg: {
+export type PermissionHandler<TRole extends string> = (arg: {
   context: CommandContext<Context>
   command: Command<CommandArgs, CommandReplyTo, CommandScope, TRole>
 }) => Promise<boolean>
 
-export class Telex<TRole extends string> extends Bot<Context> {
-  commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
-  private permissionHandler?: PermissionHandler<TRole>
-  private logger?: Logger
-  private _onStop?: (reason?: string) => void
+type DefaultRoles = ChatMember["status"]
+const defaultPermissionHandler: PermissionHandler<string> = async ({ context, command }) => {
+  const { allowedRoles, excludedRoles } = command.permissions ?? {}
+  if (!context.from) return false
+  const member = await context.getChatMember(context.from.id)
+
+  if (allowedRoles && !allowedRoles.includes(member.status)) return false
+  if (excludedRoles && excludedRoles.includes(member.status)) return false
+
+  return true
+}
+
+interface Logger {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  info: (...message: any[]) => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  error: (...message: any[]) => void
+}
+
+export interface ManagedCommandsOptions<TRole extends string, C extends Context> {
+  adapter: ConversationStorage<C, ConversationData>
+  permissionHandler: PermissionHandler<TRole>
+  logger: Logger
+}
+
+export class ManagedCommands<TRole extends string = DefaultRoles, C extends Context = Context>
+  implements MiddlewareObj<C>
+{
+  private composer = new Composer<C>()
+  private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
 
   static parseReplyTo<R extends CommandReplyTo>(
     msg: Message,
@@ -82,12 +107,24 @@ export class Telex<TRole extends string> extends Bot<Context> {
     )
   }
 
-  constructor(token: string, config?: BotConfig<Context>) {
-    super(token, config)
-  }
+  private permissionHandler: PermissionHandler<TRole>
+  private logger: Logger
 
-  setup(adapter: StorageAdapter<VersionedState<ConversationData>>) {
-    this.use(
+  constructor(options?: Partial<ManagedCommandsOptions<TRole, C>>) {
+    const { adapter, permissionHandler, logger } = {
+      adapter: new MemorySessionStorage(),
+      permissionHandler: defaultPermissionHandler,
+      logger: {
+        info: (...message: unknown[]) => console.log(...message),
+        error: (...message: unknown[]) => console.error(...message),
+      },
+      ...options,
+    } satisfies ManagedCommandsOptions<TRole, C>
+
+    this.permissionHandler = permissionHandler
+    this.logger = logger
+
+    this.composer.use(
       conversations<Context, ConversationContext>({
         storage: adapter,
         plugins: [
@@ -100,59 +137,30 @@ export class Telex<TRole extends string> extends Bot<Context> {
         ],
       })
     )
-    this.api.config.use(parseMode("MarkdownV2"))
-    this.command("start", async (ctx) => {
-      const res = "Welcome from PoliNetwork\\! Type /help to get started\\."
-      if (ctx.chat.type !== "private") {
-        const fromId = ctx.from?.id
-        if (fromId) ctx.api.sendMessage(fromId, res)
-        ctx.deleteMessage()
-        return
-      } else {
-        ctx.reply(res)
-      }
+
+    this.composer.command("help", (ctx) => {
+      ctx.reply(this.commands.map((cmd) => ManagedCommands.formatCommandUsage(cmd)).join("\n\n"))
     })
-
-    this.command("help", (ctx) => {
-      ctx.reply(this.commands.map((cmd) => Telex.formatCommandUsage(cmd)).join("\n\n"))
-    })
-
-    return this
-  }
-
-  onStop(cb: (reason?: string) => void) {
-    this._onStop = cb
-    return this
-  }
-
-  setLogger(logger: Logger) {
-    this.logger = logger
-    return this
-  }
-
-  setPermissionChecker(cb: PermissionHandler<TRole>) {
-    this.permissionHandler = cb
-    return this
   }
 
   createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
     cmd: Command<A, R, S, TRole>
   ) {
     this.commands.push(cmd)
-    this.use(
+    this.composer.use(
       createConversation(
         async (conv: Conversation, ctx: ConversationContext) => {
           if (!ctx.has(":text")) return
 
-          const repliedTo = Telex.parseReplyTo(ctx.msg, cmd)
+          const repliedTo = ManagedCommands.parseReplyTo(ctx.msg, cmd)
           if (repliedTo.isErr()) {
-            ctx.reply(`**Error**: ***${repliedTo.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`)
+            ctx.reply(`**Error**: ***${repliedTo.error}***\n\nUsage:\n${ManagedCommands.formatCommandUsage(cmd)}`)
             return
           }
 
-          const args = Telex.parseArgs(getText(ctx.msg).text ?? "", cmd)
+          const args = ManagedCommands.parseArgs(getText(ctx.msg).text ?? "", cmd)
           if (args.isErr()) {
-            ctx.reply(`**Error**: ***${args.error}***\n\nUsage:\n${Telex.formatCommandUsage(cmd)}`)
+            ctx.reply(`**Error**: ***${args.error}***\n\nUsage:\n${ManagedCommands.formatCommandUsage(cmd)}`)
             return
           }
 
@@ -168,22 +176,22 @@ export class Telex<TRole extends string> extends Bot<Context> {
         }
       )
     )
-    this.command(cmd.trigger, async (ctx) => {
+    this.composer.command(cmd.trigger, async (ctx) => {
       if (
         (cmd.scope === "private" && ctx.chat.type !== "private") ||
         (cmd.scope === "group" && ctx.chat.type !== "supergroup" && ctx.chat.type !== "group")
       ) {
         await ctx.deleteMessage()
-        this.logger?.info(
-          `[TELEX] command '/${cmd.trigger}' with scope '${cmd.scope}' invoked by ${ctx.from?.username ?? ctx.from?.id ?? "<unknown>"} in a '${ctx.chat.type}' chat.`
+        this.logger.info(
+          `[ManagedCommands] command '/${cmd.trigger}' with scope '${cmd.scope}' invoked by ${ctx.from?.username ?? ctx.from?.id ?? "<unknown>"} in a '${ctx.chat.type}' chat.`
         )
         return
       }
 
       if (cmd.permissions) {
         if (!this.permissionHandler) {
-          this.logger?.error(
-            `[TELEX] permissionHandler not configured, but command '/${cmd.trigger}' requires permissions`
+          this.logger.error(
+            `[ManagedCommands] permissionHandler not configured, but command '/${cmd.trigger}' requires permissions`
           )
           await ctx.deleteMessage()
           return
@@ -191,9 +199,9 @@ export class Telex<TRole extends string> extends Bot<Context> {
 
         const allowed = await this.permissionHandler({ command: cmd, context: ctx })
         if (!allowed) {
-          this.logger?.info(
+          this.logger.info(
             { command_permissions: cmd.permissions },
-            `[TELEX] command '/${cmd.trigger}' invoked by @${ctx.from?.username ?? "<unknown>"} [${ctx.from?.id ?? "<unknown>"}] without permissions`
+            `[ManagedCommands] command '/${cmd.trigger}' invoked by @${ctx.from?.username ?? "<unknown>"} [${ctx.from?.id ?? "<unknown>"}] without permissions`
           )
           const reply = await ctx.reply("You are not allowed to execute this command")
           await ctx.deleteMessage()
@@ -207,17 +215,7 @@ export class Telex<TRole extends string> extends Bot<Context> {
     return this
   }
 
-  override start(options?: PollingOptions) {
-    this.api.setMyCommands([{ command: "help", description: "Display all available commands" }])
-
-    process.once("SIGINT", () => this.stop("SIGINT"))
-    process.once("SIGTERM", () => this.stop("SIGTERM"))
-    return super.start(options)
-  }
-
-  override async stop(reason?: string) {
-    await super.stop()
-    this._onStop?.(reason)
-    process.exit(0)
+  middleware: () => MiddlewareFn<C> = () => {
+    return this.composer.middleware()
   }
 }
