@@ -28,9 +28,18 @@ const defaultPermissionHandler: PermissionHandler<string> = async ({ context, co
   return true
 }
 
+interface LogFn {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  <T extends object>(obj: T, msg?: string, ...args: any[]): void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (obj: unknown, msg?: string, ...args: any[]): void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (msg: string, ...args: any[]): void
+}
+
 interface Logger {
-  info: (...message: unknown[]) => void
-  error: (...message: unknown[]) => void
+  info: LogFn
+  error: LogFn
 }
 const defaultLogger: Logger = {
   info: console.log,
