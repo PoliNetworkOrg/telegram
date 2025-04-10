@@ -1,5 +1,6 @@
-export * from "./command"
-export * from "./context"
+export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
+export { Context } from "./context"
+
 import { CommandContext, Composer, MemorySessionStorage, MiddlewareFn, MiddlewareObj } from "grammy"
 import { ArgumentMap, Command, CommandArgs, CommandReplyTo, CommandScope, RepliedTo } from "./command"
 import { ChatMember, Message } from "grammy/types"
