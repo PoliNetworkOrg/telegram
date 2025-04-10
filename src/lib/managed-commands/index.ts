@@ -178,7 +178,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       ) {
         await ctx.deleteMessage()
         this.logger.info(
-          `[ManagedCommands] command '/${cmd.trigger}' with scope '${cmd.scope}' invoked by ${ctx.from?.username ?? ctx.from?.id ?? "<unknown>"} in a '${ctx.chat.type}' chat.`
+          `[ManagedCommands] command '/${cmd.trigger}' with scope '${cmd.scope}' invoked by ${this.printUsername(ctx)} in a '${ctx.chat.type}' chat.`
         )
         return
       }
@@ -188,7 +188,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
         if (!allowed) {
           this.logger.info(
             { command_permissions: cmd.permissions },
-            `[ManagedCommands] command '/${cmd.trigger}' invoked by @${ctx.from?.username ?? "<unknown>"} [${ctx.from?.id ?? "<unknown>"}] without permissions`
+            `[ManagedCommands] command '/${cmd.trigger}' invoked by ${this.printUsername(ctx)} without permissions`
           )
           const reply = await ctx.reply("You are not allowed to execute this command")
           await ctx.deleteMessage()
@@ -200,6 +200,11 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       await ctx.conversation.enter(cmd.trigger)
     })
     return this
+  }
+
+  private printUsername(ctx: CommandContext<C>) {
+    if (!ctx.from) return "<N/A>"
+    return `@${ctx.from.username ?? "<unset>"} [${ctx.from.id}]`
   }
 
   middleware: () => MiddlewareFn<C> = () => {
