@@ -1,4 +1,4 @@
-import { isAllowedInGroups, isAllowedInPrivateOnly, ManagedCommands, Context } from "@/lib/managed-commands"
+import { isAllowedInGroups, ManagedCommands, Context } from "@/lib/managed-commands"
 import { logger } from "./logger"
 import { getTelegramId, setTelegramId } from "./utils/telegram-id"
 import { redis } from "./redis"
@@ -25,18 +25,31 @@ bot.use(hydrateReply)
 const commands = new ManagedCommands<Role>({
   adapter: (await convStorageAdapter.ready()) ? convStorageAdapter : undefined,
   logger,
-  permissionHandler: async ({ command }) => {
+  permissionHandler: async ({ command, context: ctx }) => {
+    if (!command.permissions) return true
+    if (!ctx.from) return false
+
+    const { allowedRoles, excludedRoles } = command.permissions
+
     if (isAllowedInGroups(command)) {
-      const _ = command.permissions
-      //    ^ GroupPermissions | undefined
+      const { allowedGroupAdmins, allowedGroupsId, excludedGroupsId } = command.permissions
+      const { status: groupRole } = await ctx.getChatMember(ctx.from.id)
+
+      if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
+      if (excludedGroupsId && excludedGroupsId.includes(ctx.chatId)) return false
+      if (allowedGroupAdmins) {
+        const isDbAdmin = await api.tg.permissions.checkGroup.query({ userId: ctx.from.id, groupId: ctx.chatId })
+        const isTgAdmin = groupRole === "administrator" || groupRole === "creator"
+        if (isDbAdmin || isTgAdmin) return true
+      }
     }
 
-    if (isAllowedInPrivateOnly(command)) {
-      const _ = command.permissions
-      //    ^ PrivatePermissions | undefined
-    }
+    const { role } = await api.tg.permissions.getRole.query({ userId: ctx.from.id })
+    const userRole = role as Role
+    if (allowedRoles && !allowedRoles.includes(userRole)) return false
+    if (excludedRoles && excludedRoles.includes(userRole)) return false
 
-    return false
+    return true
   },
 })
   .createCommand({
