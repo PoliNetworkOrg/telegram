@@ -1,5 +1,5 @@
 export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
-export { Context } from "./context"
+export type { Context } from "./context"
 
 import { CommandContext, Composer, MemorySessionStorage, MiddlewareFn, MiddlewareObj } from "grammy"
 import { ArgumentMap, Command, CommandArgs, CommandReplyTo, CommandScope, RepliedTo } from "./command"
