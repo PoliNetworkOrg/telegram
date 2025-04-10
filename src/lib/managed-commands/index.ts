@@ -151,6 +151,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
   ) {
     cmd.scope = cmd.scope ?? ("both" as S)
     this.commands.push(cmd)
+    this.commands.sort((a, b) => a.trigger.localeCompare(b.trigger))
     this.composer.use(
       createConversation(
         async (conv: Conversation, ctx: ConversationContext) => {
