@@ -7,6 +7,8 @@ import { RedisAdapter } from "./redis/storage-adapter"
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 import { api, apiTestQuery, Role } from "./backend"
 import { Bot } from "grammy"
+import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
+import { hydrate } from "@grammyjs/hydrate"
 
 if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN environment variable is required!")
@@ -17,6 +19,8 @@ await apiTestQuery()
 const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("conv")
 
 const bot = new Bot<Context>(process.env.BOT_TOKEN)
+bot.use(hydrate())
+bot.use(hydrateReply)
 
 const commands = new ManagedCommands<Role>({
   adapter: (await convStorageAdapter.ready()) ? convStorageAdapter : undefined,
@@ -32,7 +36,7 @@ const commands = new ManagedCommands<Role>({
       //    ^ PrivatePermissions | undefined
     }
 
-    return true
+    return false
   },
 })
   .createCommand({
@@ -152,7 +156,8 @@ const commands = new ManagedCommands<Role>({
     },
   })
 
-bot.use(commands.middleware())
+bot.api.config.use(parseMode("MarkdownV2"))
+bot.use(commands)
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
@@ -161,7 +166,15 @@ bot.on("message", async (ctx, next) => {
   await next()
 })
 
-bot.start({ onStart: () => logger.info("Bot started!") }).then(async () => {
-  logger.info("Bot Stopped")
+bot.start({ onStart: () => logger.info("Bot started!") })
+
+async function terminate(signal: NodeJS.Signals) {
+  logger.warn(`Received ${signal}, shutting down...`)
+  await bot.stop()
+  logger.info("Bot stopped!")
   await redis.quit()
-})
+  logger.info("Redis connection closed!")
+  process.exit(0)
+}
+process.on("SIGINT", terminate)
+process.on("SIGTERM", terminate)

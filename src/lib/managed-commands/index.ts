@@ -154,13 +154,13 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
 
           const repliedTo = ManagedCommands.parseReplyTo(ctx.msg, cmd)
           if (repliedTo.isErr()) {
-            ctx.reply(`**Error**: ***${repliedTo.error}***\n\nUsage:\n${ManagedCommands.formatCommandUsage(cmd)}`)
+            await ctx.reply(`**Error**: ***${repliedTo.error}***\n\nUsage:\n${ManagedCommands.formatCommandUsage(cmd)}`)
             return
           }
 
           const args = ManagedCommands.parseArgs(getText(ctx.msg).text ?? "", cmd)
           if (args.isErr()) {
-            ctx.reply(`**Error**: ***${args.error}***\n\nUsage:\n${ManagedCommands.formatCommandUsage(cmd)}`)
+            await ctx.reply(`**Error**: ***${args.error}***\n\nUsage:\n${ManagedCommands.formatCommandUsage(cmd)}`)
             return
           }
 
@@ -205,7 +205,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
           )
           const reply = await ctx.reply("You are not allowed to execute this command")
           await ctx.deleteMessage()
-          setTimeout(() => ctx.deleteMessages([reply.message_id]), 3000)
+          setTimeout(() => reply.delete(), 3000)
           return
         }
       }
