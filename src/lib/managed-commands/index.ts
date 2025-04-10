@@ -145,7 +145,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       const text = ctx.message?.text ?? ""
       const [_, cmdArg] = text.replaceAll("/", "").split(" ")
       if (cmdArg) {
-        const cmd = this.commands.find(c => c.trigger === cmdArg)
+        const cmd = this.commands.find((c) => c.trigger === cmdArg)
         if (!cmd) return ctx.reply("Command not found\\. See /help\\.")
 
         return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
