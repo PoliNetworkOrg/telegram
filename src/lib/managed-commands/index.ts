@@ -29,10 +29,9 @@ const defaultPermissionHandler: PermissionHandler<string> = async ({ context, co
 }
 
 interface Logger {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  info: (...message: any[]) => void
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  error: (...message: any[]) => void
+  info: (...message: unknown[]) => void
+  error: (...message: unknown[]) => void
+}
 }
 
 export interface ManagedCommandsOptions<TRole extends string, C extends Context> {
