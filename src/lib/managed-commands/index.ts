@@ -140,6 +140,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
   createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
     cmd: Command<A, R, S, TRole>
   ) {
+    cmd.scope = cmd.scope ?? ("both" as S)
     this.commands.push(cmd)
     this.composer.use(
       createConversation(
@@ -183,14 +184,6 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       }
 
       if (cmd.permissions) {
-        if (!this.permissionHandler) {
-          this.logger.error(
-            `[ManagedCommands] permissionHandler not configured, but command '/${cmd.trigger}' requires permissions`
-          )
-          await ctx.deleteMessage()
-          return
-        }
-
         const allowed = await this.permissionHandler({ command: cmd, context: ctx })
         if (!allowed) {
           this.logger.info(
