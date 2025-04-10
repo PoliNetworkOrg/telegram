@@ -32,6 +32,9 @@ interface Logger {
   info: (...message: unknown[]) => void
   error: (...message: unknown[]) => void
 }
+const defaultLogger: Logger = {
+  info: console.log,
+  error: console.error,
 }
 
 export interface ManagedCommandsOptions<TRole extends string, C extends Context> {
@@ -45,6 +48,9 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
 {
   private composer = new Composer<C>()
   private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
+  private permissionHandler: PermissionHandler<TRole>
+  private logger: Logger
+  private adapter: ConversationStorage<C, ConversationData>
 
   static parseReplyTo<R extends CommandReplyTo>(
     msg: Message,
@@ -107,26 +113,14 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     )
   }
 
-  private permissionHandler: PermissionHandler<TRole>
-  private logger: Logger
-
   constructor(options?: Partial<ManagedCommandsOptions<TRole, C>>) {
-    const { adapter, permissionHandler, logger } = {
-      adapter: new MemorySessionStorage(),
-      permissionHandler: defaultPermissionHandler,
-      logger: {
-        info: (...message: unknown[]) => console.log(...message),
-        error: (...message: unknown[]) => console.error(...message),
-      },
-      ...options,
-    } satisfies ManagedCommandsOptions<TRole, C>
-
-    this.permissionHandler = permissionHandler
-    this.logger = logger
+    this.permissionHandler = options?.permissionHandler ?? defaultPermissionHandler
+    this.logger = options?.logger ?? defaultLogger
+    this.adapter = options?.adapter ?? new MemorySessionStorage()
 
     this.composer.use(
       conversations<Context, ConversationContext>({
-        storage: adapter,
+        storage: this.adapter,
         plugins: [
           hydrate(),
           hydrateReply,
