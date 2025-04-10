@@ -32,10 +32,9 @@ bot.start({ onStart: () => logger.info("Bot started!") })
 
 async function terminate(signal: NodeJS.Signals) {
   logger.warn(`Received ${signal}, shutting down...`)
+  await redis.quit() // close event logged in redis file
   await bot.stop()
   logger.info("Bot stopped!")
-  await redis.quit()
-  logger.info("Redis connection closed!")
   process.exit(0)
 }
 process.on("SIGINT", terminate)
