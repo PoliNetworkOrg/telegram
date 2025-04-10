@@ -107,7 +107,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       })
       .join("\n")
 
-    const replyTo = cmd.reply ? `: *${cmd.reply.toUpperCase()}*` : ""
+    const replyTo = cmd.reply ? `_Call while replying to a message_: *${cmd.reply.toUpperCase()}*` : ""
     const scope =
       cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
 
