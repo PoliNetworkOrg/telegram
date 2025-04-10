@@ -116,7 +116,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       `_Desc_: *${cmd.description ? sanitizeText(cmd.description) : "No description"}*`,
       `_Scope_: *${scope}*`,
       `${replyTo}`,
-      `${argDescs}`,
+      cmd.args?.length ? `_Args_: \n${argDescs}` : "",
     ]
       .filter((s) => s.length > 0)
       .join("\n")
