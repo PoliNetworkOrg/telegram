@@ -97,29 +97,29 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
    * @returns A markdown formatted string representing the usage of the command
    */
   static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo, CommandScope>): string {
-    const args = (cmd.args ?? []).map(({ key, optional }) => (optional ? `[_${key}_]` : `<_${key}_>`)).join(" ")
+    const args = (cmd.args ?? [])
+      .map(({ key, optional }) => (optional ? `\\[_${sanitizeText(key)}_\\]` : `\\<_${sanitizeText(key)}_\\>`))
+      .join(" ")
 
     const argDescs = (cmd.args ?? [])
       .map(({ key, description }) => {
-        return `- _${key}_: ${description ?? "No description"}`
+        return `\\- _${sanitizeText(key)}_: ${description ? sanitizeText(description) : "No description"}`
       })
       .join("\n")
 
-    const replyTo = cmd.reply ? `_Call while replying to a message_: *${cmd.reply.toUpperCase()}*` : ""
+    const replyTo = cmd.reply ? `: *${cmd.reply.toUpperCase()}*` : ""
     const scope =
       cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
 
-    return sanitizeText(
-      [
-        `/${cmd.trigger} ${args}`,
-        `*${cmd.description ?? "No description"}*`,
-        `${argDescs}`,
-        `${replyTo}`,
-        `Scope: *${scope}*`,
-      ]
-        .filter((s) => s.length > 0)
-        .join("\n")
-    )
+    return [
+      `/${sanitizeText(cmd.trigger)} ${args}`,
+      `_Desc_: *${cmd.description ? sanitizeText(cmd.description) : "No description"}*`,
+      `_Scope_: *${scope}*`,
+      `${replyTo}`,
+      `${argDescs}`,
+    ]
+      .filter((s) => s.length > 0)
+      .join("\n")
   }
 
   constructor(options?: Partial<ManagedCommandsOptions<TRole, C>>) {
