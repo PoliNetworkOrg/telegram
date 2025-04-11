@@ -5,7 +5,7 @@ import { RedisAdapter } from "./redis/storage-adapter"
 import { logger } from "./logger"
 import { getTelegramId } from "./utils/telegram-id"
 import { getText } from "./utils/messages"
-import { format } from "./utils/format"
+import { fmt } from "./utils/format"
 
 const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("conv")
 
@@ -52,7 +52,7 @@ export const commands = new ManagedCommands<Role>({
       await context.deleteMessage()
       await message.delete()
       await question.delete()
-      await context.reply(format(() => `Hello, ${message.text}!`))
+      await context.reply(fmt(() => `Hello, ${message.text}!`))
     },
   })
   .createCommand({
@@ -60,7 +60,7 @@ export const commands = new ManagedCommands<Role>({
     scope: "private",
     description: "Test the formatting",
     handler: async ({ context }) => {
-      const response = format(({ n, b, i, u, code, codeblock, link, strikethrough, spoiler }) => [
+      const response = fmt(({ n, b, i, u, code, codeblock, link, strikethrough, spoiler }) => [
         `This is a message to`,
         b`test formatting`,
         `with`,
@@ -108,7 +108,7 @@ export const commands = new ManagedCommands<Role>({
 
       try {
         const { role } = await api.tg.permissions.getRole.query({ userId })
-        await context.reply(format(({ b }) => [`Role:`, b`${role}`]))
+        await context.reply(fmt(({ b }) => [`Role:`, b`${role}`]))
       } catch (err) {
         await context.reply("There was an error: \n" + err)
       }
@@ -122,7 +122,7 @@ export const commands = new ManagedCommands<Role>({
       try {
         const res = await api.test.dbQuery.query({ dbName: "tg" })
         await context.reply(
-          format(({ code }) =>
+          fmt(({ code }) =>
             res.length > 0
               ? [`Elements inside`, code`tg_test`, `table:`, ...res.map((r) => `\n- ${r}`)]
               : [`No elements inside`, code`tg_test`, `table`]
@@ -178,10 +178,10 @@ export const commands = new ManagedCommands<Role>({
       const id = await getTelegramId(username)
       if (!id) {
         logger.warn(`[/userid] username @${username} not in our cache`)
-        await context.reply(format(() => `Username @${username} not in our cache`))
+        await context.reply(fmt(() => `Username @${username} not in our cache`))
         return
       }
 
-      await context.reply(format(({ code }) => [`Username: @${username}`, `\nid:`, code`${id}`]))
+      await context.reply(fmt(({ code }) => [`Username: @${username}`, `\nid:`, code`${id}`]))
     },
   })

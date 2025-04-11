@@ -94,20 +94,20 @@ type FormatOptions = {
  *
  * `NOTE`: if you split your message into multiple formats, you must use the `skip` formatter to join them
  * ```typescript
- * const part1 = format({ b } => [b`hello`, `world`])
- * const part2 = format({ i } => [i`everything`, `is`])
- * const response = format(({ skip, u }) => [skip`${part1}`, skip`${part2}`, u`fine`])
+ * const part1 = fmt({ b } => [b`hello`, `world`])
+ * const part2 = fmt({ i } => [i`everything`, `is`])
+ * const response = fmt(({ skip, u }) => [skip`${part1}`, skip`${part2}`, u`fine`])
  * ```
  *
  * `NOTE`: You should put parts without formatting in their own strings.
  * If you want to compose formatted and not formatted in a single string,
  * please use the `n` formatter for the non-formatted parts
  * ```typescript
- * const response = format(({ n, b }) => n`(normal with ${b`bold`})`)
+ * const response = fmt(({ n, b }) => n`(normal with ${b`bold`})`)
  * ```
  *
  * @example
- * const message = format(({ b, i, link, code }) => [
+ * const message = fmt(({ b, i, link, code }) => [
  *   "User:",
  *   b`John Doe`,
  *   i`(ID: 12345)`,
@@ -118,7 +118,7 @@ type FormatOptions = {
  * ], { sep: "\n", end: "\n--- End of Report ---" });
  * // Produces a multi-line message with bold, italic, code, and link formatting.
  */
-export function format(cb: (formatters: Formatters) => string | string[], opts: FormatOptions = {}): string {
+export function fmt(cb: (formatters: Formatters) => string | string[], opts: FormatOptions = {}): string {
   const res = typeof cb === "function" ? cb(formatters) : cb
   const end = opts.end ?? ""
   const sep = opts.sep ?? " "

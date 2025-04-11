@@ -10,7 +10,7 @@ import { ConversationData, conversations, ConversationStorage, createConversatio
 import { Context, Conversation, ConversationContext } from "./context"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
-import { format } from "@/utils/format"
+import { fmt } from "@/utils/format"
 
 export type PermissionHandler<TRole extends string> = (arg: {
   context: CommandContext<Context>
@@ -102,7 +102,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     const scope =
       cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
 
-    return format(({ n, b, i }) => [
+    return fmt(({ n, b, i }) => [
       `/${cmd.trigger}`,
       ...args.map(({ key, optional }) => (optional ? n`[${i`${key}`}]` : n`<${i`${key}`}>`)),
       i`\nDesc:`,
@@ -139,7 +139,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       const [_, cmdArg] = text.replaceAll("/", "").split(" ")
       if (cmdArg) {
         const cmd = this.commands.find((c) => c.trigger === cmdArg)
-        if (!cmd) return ctx.reply(format(() => "Command not found. See /help."))
+        if (!cmd) return ctx.reply(fmt(() => "Command not found. See /help."))
 
         return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
       }
@@ -162,7 +162,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
           const repliedTo = ManagedCommands.parseReplyTo(ctx.msg, cmd)
           if (repliedTo.isErr()) {
             await ctx.reply(
-              format(({ b }) => [
+              fmt(({ b }) => [
                 `Error:`,
                 b`${repliedTo.error}`,
                 `\n\nUsage:`,
@@ -175,7 +175,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
           const args = ManagedCommands.parseArgs(getText(ctx.msg).text ?? "", cmd)
           if (args.isErr()) {
             await ctx.reply(
-              format(({ b, skip }) => [
+              fmt(({ b, skip }) => [
                 `Error:`,
                 b`${args.error}`,
                 `\n\nUsage:`,
