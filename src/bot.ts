@@ -1,11 +1,12 @@
-import { Telex } from "@/lib/telex"
+import { Context } from "@/lib/managed-commands"
 import { logger } from "./logger"
-import { getTelegramId, setTelegramId } from "./utils/telegram-id"
+import { setTelegramId } from "./utils/telegram-id"
 import { redis } from "./redis"
-import { sanitizeText, getText } from "./utils/messages"
-import { RedisAdapter } from "./redis/storage-adapter"
-import type { ConversationData, VersionedState } from "@grammyjs/conversations"
-import { api, apiTestQuery, Role } from "./backend"
+import { apiTestQuery } from "./backend"
+import { Bot } from "grammy"
+import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
+import { hydrate } from "@grammyjs/hydrate"
+import { commands } from "./commands"
 
 if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN environment variable is required!")
@@ -13,128 +14,12 @@ if (!process.env.BOT_TOKEN) {
 
 await apiTestQuery()
 
-const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("conv")
+const bot = new Bot<Context>(process.env.BOT_TOKEN)
+bot.use(hydrate())
+bot.use(hydrateReply)
 
-const bot = new Telex<Role>(process.env.BOT_TOKEN)
-  .setup(convStorageAdapter)
-  .permissionChecker(async ({ userId, command, context }) => {
-    const { role } = await api.tg.permissions.getRole.query({ userId })
-    if (command.requiresRoles?.includes(role as Role) ?? false) {
-      return true
-    } else {
-      context.reply(
-        `*You don't have permission to use this command\\!*\nYour role is \`${role}\`\\.\nRequired role\\(s\\): \`${command.requiresRoles?.join(", ")}\`\\.`
-      )
-      return false
-    }
-  })
-  .createCommand({
-    trigger: "name",
-    requiresRoles: ["admin"],
-    description: "Quick conversation",
-    handler: async ({ conversation, context }) => {
-      const question = await context.reply("What is your name?")
-      const { message } = await conversation.waitFor("message:text")
-      await context.deleteMessage()
-      await message.delete()
-      await question.delete()
-      await context.reply(`Hello, ${message.text}\\!`)
-    },
-  })
-  .createCommand({
-    trigger: "ping",
-    description: "Replies with pong",
-    handler: async ({ context }) => {
-      await context.reply("pong")
-    },
-  })
-  .createCommand({
-    trigger: "getrole",
-    description: "Get role of userid",
-    args: [{ key: "userId" }],
-    handler: async ({ context, args }) => {
-      let userId: number | null = parseInt(args.userId)
-      if (isNaN(userId)) {
-        userId = await getTelegramId(args.userId)
-      }
-      if (userId === null) {
-        context.reply("Not a valid userId or username not in our cache")
-        return
-      }
-
-      try {
-        const { role } = await api.tg.permissions.getRole.query({ userId })
-        await context.reply(`Role: ${role}`)
-      } catch (err) {
-        await context.reply("There was an error: \n" + err)
-      }
-    },
-  })
-  .createCommand({
-    trigger: "testdb",
-    description: "Test postgres db through the backend",
-    handler: async ({ context }) => {
-      try {
-        const res = await api.test.dbQuery.query({ dbName: "tg" })
-        const str = res.map((r) => sanitizeText("- " + r)).join("\n")
-        await context.reply(
-          res.length > 0 ? "Elements inside `tg_test` table: \n" + str : "No elements inside `tg_test` table"
-        )
-      } catch (err) {
-        await context.reply("There was an error: \n" + err)
-      }
-    },
-  })
-  .createCommand({
-    trigger: "testargs",
-    description: "Test args",
-    args: [
-      { key: "arg1", description: "first arg" },
-      { key: "arg2", description: "second arg", optional: false },
-      { key: "arg3", description: "the optional one", optional: true },
-    ],
-    handler: async ({ context, args }) => {
-      console.log(args)
-      await context.reply("pong")
-    },
-  })
-  .createCommand({
-    trigger: "del",
-    description: "Deletes the replied to message",
-    reply: "required",
-    handler: async ({ repliedTo, context }) => {
-      const { text, type } = getText(repliedTo)
-      logger.info({
-        action: "delete_message",
-        messageText: text ?? "[non-textual]",
-        messageType: type,
-        sender: repliedTo.from?.username,
-      })
-      await context.deleteMessages([repliedTo.message_id])
-      await context.deleteMessage()
-    },
-  })
-  .createCommand({
-    trigger: "userid",
-    description: "Gets the ID of a username",
-    args: [{ key: "username", description: "The username to get the ID of" }],
-    handler: async ({ context, args }) => {
-      const username = args.username.replace("@", "")
-      const id = await getTelegramId(username)
-      const sanitized = sanitizeText(username)
-      if (!id) {
-        logger.warn(`[userid] username @${sanitized} not in our cache`)
-        await context.reply(`Username @${sanitized} not in our cache`)
-        return
-      }
-
-      await context.reply(`Username \`@${sanitized}\`\nid: \`${id}\``)
-    },
-  })
-  .onStop(async (reason) => {
-    logger.info(reason ? `Bot Stopped. Reason: ${reason}` : "Bot Stopped")
-    await redis.quit()
-  })
+bot.api.config.use(parseMode("MarkdownV2"))
+bot.use(commands)
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
@@ -144,3 +29,13 @@ bot.on("message", async (ctx, next) => {
 })
 
 bot.start({ onStart: () => logger.info("Bot started!") })
+
+async function terminate(signal: NodeJS.Signals) {
+  logger.warn(`Received ${signal}, shutting down...`)
+  await redis.quit() // close event logged in redis file
+  await bot.stop()
+  logger.info("Bot stopped!")
+  process.exit(0)
+}
+process.on("SIGINT", terminate)
+process.on("SIGTERM", terminate)
