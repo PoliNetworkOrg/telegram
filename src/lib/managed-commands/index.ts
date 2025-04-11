@@ -5,11 +5,12 @@ import { CommandContext, Composer, MemorySessionStorage, MiddlewareFn, Middlewar
 import { ArgumentMap, Command, CommandArgs, CommandReplyTo, CommandScope, RepliedTo } from "./command"
 import { ChatMember, Message } from "grammy/types"
 import { err, ok, Result } from "neverthrow"
-import { getText, sanitizeText } from "@/utils/messages"
+import { getText } from "@/utils/messages"
 import { ConversationData, conversations, ConversationStorage, createConversation } from "@grammyjs/conversations"
 import { Context, Conversation, ConversationContext } from "./context"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
+import { format } from "@/utils/format"
 
 export type PermissionHandler<TRole extends string> = (arg: {
   context: CommandContext<Context>
@@ -97,29 +98,21 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
    * @returns A markdown formatted string representing the usage of the command
    */
   static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo, CommandScope>): string {
-    const args = (cmd.args ?? [])
-      .map(({ key, optional }) => (optional ? `\\[_${sanitizeText(key)}_\\]` : `\\<_${sanitizeText(key)}_\\>`))
-      .join(" ")
-
-    const argDescs = (cmd.args ?? [])
-      .map(({ key, description }) => {
-        return `\\- _${sanitizeText(key)}_: ${description ? sanitizeText(description) : "No description"}`
-      })
-      .join("\n")
-
-    const replyTo = cmd.reply ? `_Call while replying to a message_: *${cmd.reply.toUpperCase()}*` : ""
+    const args = cmd.args ?? []
     const scope =
       cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
 
-    return [
-      `/${sanitizeText(cmd.trigger)} ${args}`,
-      `_Desc_: *${cmd.description ? sanitizeText(cmd.description) : "No description"}*`,
-      `_Scope_: *${scope}*`,
-      `${replyTo}`,
-      cmd.args?.length ? `_Args_: \n${argDescs}` : "",
-    ]
-      .filter((s) => s.length > 0)
-      .join("\n")
+    return format(({ n, b, i }) => [
+      `/${cmd.trigger}`,
+      ...args.map(({ key, optional }) => (optional ? n`[${i`${key}`}]` : n`<${i`${key}`}>`)),
+      i`\nDesc:`,
+      b`${cmd.description ?? "No description"}`,
+      i`\nScope:`,
+      b`${scope}`,
+      ...(cmd.reply ? [i`\nCall while replying to a message:`, b`${cmd.reply!.toUpperCase()}`] : []),
+      args.length ? i`\nArgs:` : ``,
+      ...args.flatMap(({ key, description }) => [`\n-`, i`${key}:`, description ?? "No description"]),
+    ])
   }
 
   constructor(options?: Partial<ManagedCommandsOptions<TRole, C>>) {
@@ -146,7 +139,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       const [_, cmdArg] = text.replaceAll("/", "").split(" ")
       if (cmdArg) {
         const cmd = this.commands.find((c) => c.trigger === cmdArg)
-        if (!cmd) return ctx.reply("Command not found\\. See /help\\.")
+        if (!cmd) return ctx.reply(format(() => "Command not found. See /help."))
 
         return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
       }
@@ -168,13 +161,27 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
 
           const repliedTo = ManagedCommands.parseReplyTo(ctx.msg, cmd)
           if (repliedTo.isErr()) {
-            await ctx.reply(`**Error**: ***${repliedTo.error}***\n\nUsage:\n${ManagedCommands.formatCommandUsage(cmd)}`)
+            await ctx.reply(
+              format(({ b }) => [
+                `Error:`,
+                b`${repliedTo.error}`,
+                `\n\nUsage:`,
+                `\n${ManagedCommands.formatCommandUsage(cmd)}`,
+              ])
+            )
             return
           }
 
           const args = ManagedCommands.parseArgs(getText(ctx.msg).text ?? "", cmd)
           if (args.isErr()) {
-            await ctx.reply(`**Error**: ***${args.error}***\n\nUsage:\n${ManagedCommands.formatCommandUsage(cmd)}`)
+            await ctx.reply(
+              format(({ b, skip }) => [
+                `Error:`,
+                b`${args.error}`,
+                `\n\nUsage:`,
+                skip`\n${ManagedCommands.formatCommandUsage(cmd)}`,
+              ])
+            )
             return
           }
 

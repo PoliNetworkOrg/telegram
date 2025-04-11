@@ -4,7 +4,8 @@ import { isAllowedInGroups, ManagedCommands } from "./lib/managed-commands"
 import { RedisAdapter } from "./redis/storage-adapter"
 import { logger } from "./logger"
 import { getTelegramId } from "./utils/telegram-id"
-import { getText, sanitizeText } from "./utils/messages"
+import { getText } from "./utils/messages"
+import { format } from "./utils/format"
 
 const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("conv")
 
@@ -51,7 +52,35 @@ export const commands = new ManagedCommands<Role>({
       await context.deleteMessage()
       await message.delete()
       await question.delete()
-      await context.reply(`Hello, ${message.text}\\!`)
+      await context.reply(format(() => `Hello, ${message.text}!`))
+    },
+  })
+  .createCommand({
+    trigger: "format",
+    scope: "private",
+    description: "Test the formatting",
+    handler: async ({ context }) => {
+      const response = format(({ n, b, i, u, code, codeblock, link, strikethrough, spoiler }) => [
+        `This is a message to`,
+        b`test formatting`,
+        `with`,
+        i`multiple examples`,
+        `like`,
+        b`${u`concatened`}`,
+        b`${u`multiple ${i`concatened`}`}`,
+        `(also`,
+        b`${i`concatened ${u`multiple`}`}`,
+        `) and`,
+        link(b`incredible links`, "https://polinetwork.org"),
+        `and`,
+        code`codeblocks`,
+        codeblock`const assoc = 'polinetwork'`,
+        `and other strange formatters:`,
+        strikethrough`striked`,
+        spoiler`spoiler`,
+        n`(also normal with ${b`bold`})`,
+      ])
+      await context.reply(response)
     },
   })
   .createCommand({
@@ -79,7 +108,7 @@ export const commands = new ManagedCommands<Role>({
 
       try {
         const { role } = await api.tg.permissions.getRole.query({ userId })
-        await context.reply(`Role: ${role}`)
+        await context.reply(format(({ b }) => [`Role:`, b`${role}`]))
       } catch (err) {
         await context.reply("There was an error: \n" + err)
       }
@@ -92,9 +121,12 @@ export const commands = new ManagedCommands<Role>({
     handler: async ({ context }) => {
       try {
         const res = await api.test.dbQuery.query({ dbName: "tg" })
-        const str = res.map((r) => sanitizeText("- " + r)).join("\n")
         await context.reply(
-          res.length > 0 ? "Elements inside `tg_test` table: \n" + str : "No elements inside `tg_test` table"
+          format(({ code }) =>
+            res.length > 0
+              ? [`Elements inside`, code`tg_test`, `table:`, ...res.map((r) => `\n- ${r}`)]
+              : [`No elements inside`, code`tg_test`, `table`]
+          )
         )
       } catch (err) {
         await context.reply("There was an error: \n" + err)
@@ -144,13 +176,12 @@ export const commands = new ManagedCommands<Role>({
     handler: async ({ context, args }) => {
       const username = args.username.replace("@", "")
       const id = await getTelegramId(username)
-      const sanitized = sanitizeText(username)
       if (!id) {
-        logger.warn(`[userid] username @${sanitized} not in our cache`)
-        await context.reply(`Username @${sanitized} not in our cache`)
+        logger.warn(`[/userid] username @${username} not in our cache`)
+        await context.reply(format(() => `Username @${username} not in our cache`))
         return
       }
 
-      await context.reply(`Username \`@${sanitized}\`\nid: \`${id}\``)
+      await context.reply(format(({ code }) => [`Username: @${username}`, `\nid:`, code`${id}`]))
     },
   })
