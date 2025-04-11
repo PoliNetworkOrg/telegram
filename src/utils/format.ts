@@ -66,7 +66,7 @@ const formatters: Formatters = {
   code: makeFormatter("`"),
   codeblock: makeFormatter("```\n"),
   skip: (str, ...val) => {
-    const msg = `${BYPASS_ESCAPE}${parseTemplateString(s => s, str, ...val)}`
+    const msg = `${BYPASS_ESCAPE}${parseTemplateString((s) => s, str, ...val)}`
     return msg
   },
   link: (text, link) => {
