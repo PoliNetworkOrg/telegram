@@ -10,6 +10,7 @@
     "build": "tsup",
     "dev:raw": "NODE_ENV=development tsx watch --clear-screen=false --env-file=.env src/bot.ts",
     "dev": "pnpm run dev:raw | pino-pretty",
+    "test": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ./src",
     "lint:fix": "eslint ./src --fix",
@@ -32,7 +33,8 @@
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.23.0"
+    "typescript-eslint": "^8.23.0",
+    "vitest": "^3.1.1"
   },
   "dependencies": {
     "@grammyjs/conversations": "^2.0.1",
