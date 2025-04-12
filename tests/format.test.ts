@@ -77,7 +77,12 @@ describe("fmt: message format utility", () => {
     const r1 = fmt(({ b }) => b`bold thing`)
     const r1_2 = fmt(({ i, skip }) => i`i need some italic for the ${skip`${r1}`}`)
 
-    const msg = fmt(({ u, skip, code }) => [u`everything underlined and ${skip`${r1_2}`}`, code`some code is never wrong`], { sep: "\n", end: "great end" })
-    expect(msg).toBe("__everything underlined and _i need some italic for the *bold thing*_**__\n`some code is never wrong`great end")
+    const msg = fmt(
+      ({ u, skip, code }) => [u`everything underlined and ${skip`${r1_2}`}`, code`some code is never wrong`],
+      { sep: "\n", end: "great end" }
+    )
+    expect(msg).toBe(
+      "__everything underlined and _i need some italic for the *bold thing*_**__\n`some code is never wrong`great end"
+    )
   })
 })
