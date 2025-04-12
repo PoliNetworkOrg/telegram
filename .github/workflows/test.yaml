@@ -20,6 +20,8 @@ jobs:
           cache: pnpm
       - name: Install Dependencies
         run: pnpm install
+      - name: Unit Test
+        run: pnpm run test
       - name: Typecheck
         run: pnpm run typecheck
       - name: Lint
