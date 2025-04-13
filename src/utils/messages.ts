@@ -13,7 +13,3 @@ export function getText(message: Message): TextReturn {
 
   return { text: null, type: "OTHER" }
 }
-
-export function sanitizeText(text: string): string {
-  return text.replace(/[[\]()~`>#+\-=|{}.!_]/g, "\\$&")
-}
