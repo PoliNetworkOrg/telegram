@@ -197,19 +197,23 @@ export const commands = new ManagedCommands<Role>({
         await context.reply(fmt(() => `You need to set a username to use this command`))
         return
       }
-      const { success } = await api.tg.link.link.query({
+      const res = await api.tg.link.link.query({
         code,
         telegramId: context.from.id,
         telegramUsername: context.from.username,
       })
-      if (success) {
+      if ("error" in res) {
+        logger.error(res.error)
+        await context.reply(fmt(() => `Invalid code or your username does not match.`))
+        return
+      }
+
+      if (res.success) {
         await context.reply(
           fmt(({ b }) => [b`Code verified!`, `This telegram account is now linked in the admin dashboard.`], {
             sep: "\n",
           })
         )
-      } else {
-        await context.reply(fmt(() => `Invalid code or your username does not match.`))
       }
     },
   })
