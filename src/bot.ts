@@ -23,12 +23,16 @@ bot.use(commands)
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
-  if (username) setTelegramId(username, id)
+  if (username) await setTelegramId(username, id)
 
   await next()
 })
 
-bot.start({ onStart: () => logger.info("Bot started!") })
+void bot.start({
+  onStart: () => {
+    logger.info("Bot started!")
+  },
+})
 
 async function terminate(signal: NodeJS.Signals) {
   logger.warn(`Received ${signal}, shutting down...`)
@@ -37,5 +41,5 @@ async function terminate(signal: NodeJS.Signals) {
   logger.info("Bot stopped!")
   process.exit(0)
 }
-process.on("SIGINT", terminate)
-process.on("SIGTERM", terminate)
+process.on("SIGINT", () => void terminate("SIGINT"))
+process.on("SIGTERM", () => void terminate("SIGTERM"))
