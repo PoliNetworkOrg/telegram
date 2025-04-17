@@ -2,7 +2,7 @@ import { TRPC_PATH, type AppRouter } from "@polinetwork/backend"
 import { createTRPCClient, httpBatchLink, TRPCClient, TRPCClientError } from "@trpc/client"
 import { logger } from "./logger"
 
-const url = "http://" + process.env.BACKEND_URL + TRPC_PATH
+const url = "http://" + (process.env.BACKEND_URL ?? "") + TRPC_PATH
 export const api = createTRPCClient<AppRouter>({ links: [httpBatchLink({ url })] })
 
 export type Role = Parameters<TRPCClient<AppRouter>["tg"]["permissions"]["setRole"]["query"]>[0]["role"]

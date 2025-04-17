@@ -11,6 +11,7 @@ import { Context, Conversation, ConversationContext } from "./context"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import { fmt } from "@/utils/format"
+import type { LogFn } from "pino"
 
 export type PermissionHandler<TRole extends string> = (arg: {
   context: CommandContext<Context>
@@ -29,15 +30,6 @@ const defaultPermissionHandler: PermissionHandler<string> = async ({ context, co
   return true
 }
 
-interface LogFn {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  <T extends object>(obj: T, msg?: string, ...args: any[]): void
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (obj: unknown, msg?: string, ...args: any[]): void
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (msg: string, ...args: any[]): void
-}
-
 interface Logger {
   info: LogFn
   error: LogFn
@@ -48,8 +40,48 @@ const defaultLogger: Logger = {
 }
 
 export interface ManagedCommandsOptions<TRole extends string, C extends Context> {
+  /**
+   * The storage adapter to use for persisting conversations.
+   * - {@link https://grammy.dev/plugins/conversations#persisting-conversations conversations plugin documentation}
+   * - {@link https://grammy.dev/plugins/session sessions documentation}
+   * @default MemorySessionStorage
+   */
   adapter: ConversationStorage<C, ConversationData>
+
+  /**
+   * The permission handler to use for checking user permissions.
+   *
+   * By default, this checks the user's status in the chat (e.g. admin, member,
+   * etc.) against the allowed and excluded roles.
+   *
+   * You can override this to implement your own permission logic.
+   * @example
+   * ```ts
+   * const commands = new ManagedCommands({
+   *   permissionHandler: async ({ command, context }) => {
+   *     const { allowedRoles, excludedRoles } = command.permissions
+   *     if (Math.random() > 0.5) return true // don't gable, kids
+   *     return false
+   *   },
+   * })
+   * ```
+   */
   permissionHandler: PermissionHandler<TRole>
+
+  /**
+   * The logger to use for logging messages, you can pass your pino logger here
+   * @example
+   * ```ts
+   * import pino from "pino"
+   * const logger = pino({
+   *   level: "info",
+   * })
+   * const commands = new ManagedCommands({
+   *   logger: logger,
+   * })
+   * ```
+   * @default console.log
+   */
   logger: Logger
 }
 
@@ -62,7 +94,13 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
   private logger: Logger
   private adapter: ConversationStorage<C, ConversationData>
 
-  static parseReplyTo<R extends CommandReplyTo>(
+  /**
+   * Parses the `reply_to_message` field from the message object
+   * @param msg The message object to parse
+   * @param cmd The command object to check for requirement
+   * @returns A Result containing the parsed `reply_to_message` or an error message
+   */
+  private static parseReplyTo<R extends CommandReplyTo>(
     msg: Message,
     cmd: Command<CommandArgs, R, CommandScope>
   ): Result<RepliedTo<R>, string> {
@@ -72,7 +110,16 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     return ok((msg.reply_to_message ?? null) as RepliedTo<R>)
   }
 
-  static parseArgs(msg: string, cmd: Command<CommandArgs, CommandReplyTo, CommandScope>): Result<ArgumentMap, string> {
+  /**
+   * Parses the arguments from the command message
+   * @param msg The message object to parse
+   * @param cmd The command object to check for arguments requirement
+   * @returns A Result containing the parsed arguments as an {@link ArgumentMap} or an error message
+   */
+  private static parseArgs(
+    msg: string,
+    cmd: Command<CommandArgs, CommandReplyTo, CommandScope>
+  ): Result<ArgumentMap, string> {
     const args: ArgumentMap = {}
     if (!cmd.args || cmd.args.length === 0) return ok(args)
 
@@ -85,7 +132,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
           return err(`Missing argument: ${key}`)
         }
       } else {
-        args[key] = i === cmd.args!.length - 1 ? words.slice(i).join(" ") : words[i]
+        args[key] = i === cmd.args.length - 1 ? words.slice(i).join(" ") : words[i]
       }
     }
 
@@ -97,7 +144,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
    * @param cmd The command to print usage for
    * @returns A markdown formatted string representing the usage of the command
    */
-  static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo, CommandScope>): string {
+  private static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo, CommandScope>): string {
     const args = cmd.args ?? []
     const scope =
       cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
@@ -109,12 +156,57 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       b`${cmd.description ?? "No description"}`,
       i`\nScope:`,
       b`${scope}`,
-      ...(cmd.reply ? [i`\nCall while replying to a message:`, b`${cmd.reply!.toUpperCase()}`] : []),
+      ...(cmd.reply ? [i`\nCall while replying to a message:`, b`${cmd.reply.toUpperCase()}`] : []),
       args.length ? i`\nArgs:` : ``,
       ...args.flatMap(({ key, description }) => [`\n-`, i`${key}:`, description ?? "No description"]),
     ])
   }
 
+  /**
+   * Creates a new instance of ManagedCommands, which can be used as a middleware
+   * @example
+   * ```ts
+   * const commands = new ManagedCommands()
+   * commands.createCommand({
+   *   trigger: "ping",
+   *   description: "Replies with pong",
+   *   handler: async ({ context }) => {
+   *     await context.reply("pong")
+   *   },
+   * })
+   *
+   * bot.use(commands)
+   * ```
+   *
+   * @param TRole You can pass a custom role type that extends string, for example:
+   * @example
+   * ```ts
+   * type MyRole = "cool" | "not_cool"
+   * const commands = new ManagedCommands<MyRole>({
+   *   permissionHandler: async ({ command, context }) => {
+   *     const { allowedRoles, excludedRoles } = command.permissions
+   *     if (allowedRoles && !allowedRoles.includes("cool")) return false
+   *     return true
+   *   },
+   * })
+   *
+   * commands.createCommand({
+   *   trigger: "ping",
+   *   description: "Replies with pong",
+   *   permissions: {
+   *     allowedRoles: ["cool"],
+   *     excludedRoles: ["not_cool"],
+   *   },
+   *   handler: async ({ context }) => {
+   *     await context.reply("pong")
+   *   },
+   * })
+   *
+   * bot.use(commands)
+   * ```
+   *
+   * @param options The options to use for the ManagedCommands instance
+   */
   constructor(options?: Partial<ManagedCommandsOptions<TRole, C>>) {
     this.permissionHandler = options?.permissionHandler ?? defaultPermissionHandler
     this.logger = options?.logger ?? defaultLogger
@@ -144,21 +236,29 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
         return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
       }
 
-      ctx.reply(this.commands.map((cmd) => ManagedCommands.formatCommandUsage(cmd)).join("\n\n"))
+      return ctx.reply(this.commands.map((cmd) => ManagedCommands.formatCommandUsage(cmd)).join("\n\n"))
     })
   }
 
+  /**
+   * Creates a new command and adds it to the list of commands
+   * @param cmd The options for the command to create, see {@link Command}
+   * @returns The ManagedCommands instance for chaining
+   */
   createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
     cmd: Command<A, R, S, TRole>
   ) {
-    cmd.scope = cmd.scope ?? ("both" as S)
-    this.commands.push(cmd)
-    this.commands.sort((a, b) => a.trigger.localeCompare(b.trigger))
+    cmd.scope = cmd.scope ?? ("both" as S) // default to both
+    this.commands.push(cmd) // add the command to the list
+    this.commands.sort((a, b) => a.trigger.localeCompare(b.trigger)) // sort the commands by alphabetical order of the trigger
+
+    // create a conversation that handles the command execution
     this.composer.use(
       createConversation(
         async (conv: Conversation, ctx: ConversationContext) => {
-          if (!ctx.has(":text")) return
+          if (!ctx.has(":text")) return // how would this even happen? lets be sure that it's always a text message
 
+          // check for the repliedTo requirement
           const repliedTo = ManagedCommands.parseReplyTo(ctx.msg, cmd)
           if (repliedTo.isErr()) {
             await ctx.reply(
@@ -172,6 +272,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
             return
           }
 
+          // Parse arguments and construct the argument map
           const args = ManagedCommands.parseArgs(getText(ctx.msg).text ?? "", cmd)
           if (args.isErr()) {
             await ctx.reply(
@@ -185,6 +286,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
             return
           }
 
+          // Fianlly execute the handler
           await cmd.handler({
             context: ctx,
             conversation: conv,
@@ -193,11 +295,12 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
           })
         },
         {
-          id: cmd.trigger,
+          id: cmd.trigger, // the conversation ID is set to the command trigger
         }
       )
     )
     this.composer.command(cmd.trigger, async (ctx) => {
+      // silently delete the command call if the scope is invalid
       if (
         (cmd.scope === "private" && ctx.chat.type !== "private") ||
         (cmd.scope === "group" && ctx.chat.type !== "supergroup" && ctx.chat.type !== "group")
@@ -209,6 +312,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
         return
       }
 
+      // delete the command call if the user is not allowed to use it
       if (cmd.permissions) {
         const allowed = await this.permissionHandler({ command: cmd, context: ctx })
         if (!allowed) {
@@ -216,23 +320,39 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
             { command_permissions: cmd.permissions },
             `[ManagedCommands] command '/${cmd.trigger}' invoked by ${this.printUsername(ctx)} without permissions`
           )
+          // Inform the user of restricted access
           const reply = await ctx.reply("You are not allowed to execute this command")
           await ctx.deleteMessage()
-          setTimeout(() => reply.delete(), 3000)
+          setTimeout(() => void reply.delete(), 3000)
           return
         }
       }
 
+      // enter the conversation that handles the command execution
       await ctx.conversation.enter(cmd.trigger)
     })
     return this
   }
 
+  /**
+   * Creates a string that can be logged with the username and id of the user
+   * who invoked the command
+   * @param ctx The context of the command
+   * @returns a string that can be logged with username and id
+   */
   private printUsername(ctx: CommandContext<C>) {
     if (!ctx.from) return "<N/A>"
     return `@${ctx.from.username ?? "<unset>"} [${ctx.from.id}]`
   }
 
+  /**
+   * @deprecated For internal use in grammY, do not call this method directly.
+   * Pass the instance of ManagedCommands to the bot instead.
+   * @example
+   * const commands = new ManagedCommands();
+   * bot.use(commands);
+   * @returns The middleware function to be used in the bot
+   */
   middleware: () => MiddlewareFn<C> = () => {
     return this.composer.middleware()
   }
