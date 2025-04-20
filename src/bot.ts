@@ -7,6 +7,8 @@ import { Bot } from "grammy"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import { hydrate } from "@grammyjs/hydrate"
 import { commands } from "./commands"
+import { messageStorage } from "./middlewares/message-storage"
+import { messageLink } from "./middlewares/message-link"
 
 if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN environment variable is required!")
@@ -27,6 +29,9 @@ bot.on("message", async (ctx, next) => {
 
   await next()
 })
+
+bot.on("message", messageLink({ channelIds: [-1002669533277] })) // now is configured a test group
+bot.on("message", messageStorage)
 
 bot.start({ onStart: () => logger.info("Bot started!") })
 
