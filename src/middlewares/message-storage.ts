@@ -51,6 +51,6 @@ new Cron("0 */1 * * * *", async () => {
     )
   else if (!error) {
     logger.debug(`memoryStorage: ${tempStorage.length} messages written to the database`)
-    tempStorage = [] 
+    tempStorage = []
   }
 })
