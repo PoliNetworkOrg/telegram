@@ -21,8 +21,8 @@ importers:
         specifier: ^0.6.0
         version: 0.6.0
       '@trpc/client':
-        specifier: '11'
-        version: 11.0.2(@trpc/server@11.0.2(typescript@5.7.3))(typescript@5.7.3)
+        specifier: ^11.1.1
+        version: 11.1.1(@trpc/server@11.1.1(typescript@5.7.3))(typescript@5.7.3)
       croner:
         specifier: ^9.0.0
         version: 9.0.0
@@ -45,6 +45,9 @@ importers:
       '@eslint/js':
         specifier: ^9.20.0
         version: 9.20.0
+      '@trpc/server':
+        specifier: 11.1.1
+        version: 11.1.1(typescript@5.7.3)
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.1
@@ -494,14 +497,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@trpc/client@11.0.2':
-    resolution: {integrity: sha512-GlPEedbMTerkUfAJBsrwU6dg8N65lt3LBwrCoqR3MTZ64lRU/DQqyLjzpz5nRkEN0x4S2JmX0hASV9vc2KlSHA==}
+  '@trpc/client@11.1.1':
+    resolution: {integrity: sha512-Beiv56hlt+ARbijtUsCQOvKJw/FkfuVk4W9TzJl285iIJw8iCA3ZTwTG9GjIeSgeR7d2MyOeUbI26LV255n33A==}
     peerDependencies:
-      '@trpc/server': 11.0.2
+      '@trpc/server': 11.1.1
       typescript: '>=5.7.2'
 
-  '@trpc/server@11.0.2':
-    resolution: {integrity: sha512-PIcm8UWFyE0AnIYjxsyc1zfVa6X10m9Opm1SJ2ou9Vu8dlXO6rMtmafLUXJsMeQk/3ecxObFtEiZIX8TvB3eCg==}
+  '@trpc/server@11.1.1':
+    resolution: {integrity: sha512-ZjPN3ypBHvGMAlMgeZPrxlRcH/3dn4AK0s5Ph1z+E6uiAvIQVCj7ZoMlXeeBsIy4THGDAk953jHVW2kMnlbb4g==}
     peerDependencies:
       typescript: '>=5.7.2'
 
@@ -1892,12 +1895,12 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.37.0':
     optional: true
 
-  '@trpc/client@11.0.2(@trpc/server@11.0.2(typescript@5.7.3))(typescript@5.7.3)':
+  '@trpc/client@11.1.1(@trpc/server@11.1.1(typescript@5.7.3))(typescript@5.7.3)':
     dependencies:
-      '@trpc/server': 11.0.2(typescript@5.7.3)
+      '@trpc/server': 11.1.1(typescript@5.7.3)
       typescript: 5.7.3
 
-  '@trpc/server@11.0.2(typescript@5.7.3)':
+  '@trpc/server@11.1.1(typescript@5.7.3)':
     dependencies:
       typescript: 5.7.3
 
