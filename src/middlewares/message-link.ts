@@ -4,6 +4,7 @@ import { Context } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
 import { padChatId } from "@/utils/chat"
+import { messageStorage } from "@/bot"
 
 // --- Configuration ---
 const LINK_REGEX = /https?:\/\/t\.me\/c\/(-?\d+)\/(\d+)(?:\/(\d+))?/gi // Regex with global and case-insensitive flags
@@ -104,14 +105,8 @@ async function makeResponse(
       n`${b`Group:`} ${inviteLink && chat.title ? link(chat.title, inviteLink) : chat.title} [${code`${chat.id}`}]`
   )
 
-  const { message, error } = await api.tg.messages.get.query({ chatId, messageId })
+  const message = await messageStorage.get(chatId, messageId)
   if (message === null) {
-    if (error === "NOT_FOUND") logger.warn(`messageLink: Message ${messageId} not found in chat ${chatId}`)
-    if (error === "DECRYPT_ERROR")
-      logger.error(
-        `messageLink: there was an error in the backend while decrypting the message ${messageId} in chat ${chatId}`
-      )
-
     return {
       message: fmt(({ skip, i }) => [skip`${headerRes}`, skip`${chatRes}`, i`\nmessage details not available`], {
         sep: "\n",
