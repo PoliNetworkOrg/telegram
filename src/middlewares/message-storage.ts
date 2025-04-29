@@ -11,24 +11,25 @@ let tempStorage: Message[] = []
 export const messageStorage: MiddlewareFn<Context> = async (ctx, next) => {
   if (!ctx.from) {
     logger.debug("messageStorage skip: no ctx.from")
-    return await next()
+    return next()
   }
   if (!ctx.chatId || !ctx.chat) {
     logger.debug("messageStorage skip: no ctx.chatId")
-    return await next()
+    return next()
   }
   if (ctx.chat.type === "private") {
     logger.debug("messageStorage skip: chat type is private")
-    return await next()
+    return next()
   }
   if (!ctx.message) {
     logger.debug("messageStorage skip: no message")
-    return await next()
+    return next()
   }
+
   const text = ctx.message.text ?? ctx.message.caption
   if (!text) {
     logger.debug("messageStorage skip: no message text")
-    return await next()
+    return next()
   }
 
   tempStorage.push({
@@ -39,7 +40,7 @@ export const messageStorage: MiddlewareFn<Context> = async (ctx, next) => {
     timestamp: new Date(ctx.message.date * 1000),
   })
 
-  await next()
+  next()
 }
 
 new Cron("0 */1 * * * *", async () => {
