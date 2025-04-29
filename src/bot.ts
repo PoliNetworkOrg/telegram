@@ -7,7 +7,7 @@ import { Bot } from "grammy"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import { hydrate } from "@grammyjs/hydrate"
 import { commands } from "./commands"
-import { messageStorage } from "./middlewares/message-storage"
+import { MessageStorage } from "./middlewares/message-storage"
 import { messageLink } from "./middlewares/message-link"
 
 if (!process.env.BOT_TOKEN) {
@@ -15,6 +15,7 @@ if (!process.env.BOT_TOKEN) {
 }
 
 await apiTestQuery()
+export const messageStorage = new MessageStorage()
 
 const bot = new Bot<Context>(process.env.BOT_TOKEN)
 bot.use(hydrate())
@@ -31,14 +32,20 @@ bot.on("message", async (ctx, next) => {
 })
 
 bot.on("message", messageLink({ channelIds: [-1002669533277] })) // now is configured a test group
-bot.on("message", messageStorage)
+bot.on("message", messageStorage.middleware)
 
 bot.start({ onStart: () => logger.info("Bot started!") })
 
+let terminateStarted = false // this ensure that it's called only once. otherwise strange behaviours
 async function terminate(signal: NodeJS.Signals) {
+  if (terminateStarted) return
+
+  terminateStarted = true
   logger.warn(`Received ${signal}, shutting down...`)
-  await redis.quit() // close event logged in redis file
-  await bot.stop()
+  const p1 = messageStorage.sync()
+  const p2 = redis.quit()
+  const p3 = bot.stop()
+  await Promise.all([p1, p2, p3])
   logger.info("Bot stopped!")
   process.exit(0)
 }
