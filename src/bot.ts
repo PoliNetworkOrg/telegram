@@ -10,6 +10,9 @@ import { commands } from "./commands"
 import { MessageStorage } from "./middlewares/message-storage"
 import { messageLink } from "./middlewares/message-link"
 import { env } from "./env"
+import { botJoin } from "./middlewares/bot-join"
+
+const TEST_CHAT_ID = -1002669533277
 
 await apiTestQuery()
 export const messageStorage = new MessageStorage()
@@ -28,8 +31,9 @@ bot.on("message", async (ctx, next) => {
   await next()
 })
 
-bot.on("message", messageLink({ channelIds: [-1002669533277] })) // now is configured a test group
+bot.on("message", messageLink({ channelIds: [TEST_CHAT_ID] })) // now is configured a test group
 bot.on("message", messageStorage.middleware)
+bot.on("my_chat_member", botJoin({ logChatId: TEST_CHAT_ID }))
 
 void bot.start({
   onStart: () => {
