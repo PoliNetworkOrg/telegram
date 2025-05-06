@@ -1,11 +1,12 @@
 import { createClient, SocketClosedUnexpectedlyError } from "redis"
 import { logger } from "@/logger"
+import { env } from "@/env"
 
 let openSuccess = false
 const client = createClient({
   socket: {
-    host: process.env.REDIS_HOST,
-    port: parseInt(process.env.REDIS_PORT!),
+    host: env.REDIS_HOST,
+    port: env.REDIS_PORT,
     reconnectStrategy: (retries) => {
       const n = retries + 1
       logger.debug(`[REDIS] reconnect retry #${n}`)
@@ -19,17 +20,21 @@ const client = createClient({
       return false
     },
   },
-  username: process.env.REDIS_USERNAME,
-  password: process.env.REDIS_PASSWORD,
+  username: env.REDIS_USERNAME,
+  password: env.REDIS_PASSWORD,
 })
 
-client.on("error", (err) => {
-  if (err.code === "ECONNREFUSED") return
+client.on("error", (err: object) => {
+  if ("code" in err && err.code === "ECONNREFUSED") return
   else if (err instanceof SocketClosedUnexpectedlyError) logger.error("[REDIS] connection lost")
   else logger.error({ err }, "[REDIS] client error")
 })
-client.on("ready", () => logger.info("[REDIS] client connected"))
-client.on("end", () => logger.info("[REDIS] client disconnected"))
+client.on("ready", () => {
+  logger.info("[REDIS] client connected")
+})
+client.on("end", () => {
+  logger.info("[REDIS] client disconnected")
+})
 
 export async function ready(): Promise<boolean> {
   if (client.isOpen) return true
@@ -48,7 +53,9 @@ export async function ready(): Promise<boolean> {
 type WithRedisCallback<T> = (props: { client: typeof client }) => Promise<T>
 export function withRedis<T>(callback: WithRedisCallback<T>): Promise<T | null> {
   if (client.isReady) return callback({ client })
-  return new Promise((res) => res(null))
+  return new Promise((res) => {
+    res(null)
+  })
 }
 
 export const redis = client

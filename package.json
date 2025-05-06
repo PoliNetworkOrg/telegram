@@ -42,13 +42,15 @@
     "@grammyjs/hydrate": "^1.4.1",
     "@grammyjs/parse-mode": "^1.11.1",
     "@polinetwork/backend": "^0.6.1",
+    "@t3-oss/env-core": "^0.13.4",
     "@trpc/client": "^11.1.1",
     "croner": "^9.0.0",
     "grammy": "^1.35.1",
     "neverthrow": "^8.2.0",
     "pino": "^9.6.0",
     "redis": "^4.7.0",
-    "superjson": "^2.2.2"
+    "superjson": "^2.2.2",
+    "zod": "^3.24.4"
   },
   "packageManager": "pnpm@10.6.5+sha512.cdf928fca20832cd59ec53826492b7dc25dc524d4370b6b4adbf65803d32efaa6c1c88147c0ae4e8d579a6c9eec715757b50d4fa35eea179d868eada4ed043af",
   "engines": {

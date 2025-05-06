@@ -36,7 +36,7 @@ export function messageLink({ channelIds }: Config) {
     for (const match of matches) {
       // Ensure we have capture groups
       if (!match[1] || !match[2]) {
-        logger.warn(`Regex matched but missing capture groups: ${match}`)
+        logger.warn(`Regex matched but missing capture groups: ${match.join(" - ")}`)
         continue
       }
 
@@ -63,7 +63,7 @@ export function messageLink({ channelIds }: Config) {
       await ctx.deleteMessage()
     }
 
-    next()
+    return next()
   }
 }
 

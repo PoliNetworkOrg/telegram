@@ -9,15 +9,12 @@ import { hydrate } from "@grammyjs/hydrate"
 import { commands } from "./commands"
 import { MessageStorage } from "./middlewares/message-storage"
 import { messageLink } from "./middlewares/message-link"
-
-if (!process.env.BOT_TOKEN) {
-  throw new Error("BOT_TOKEN environment variable is required!")
-}
+import { env } from "./env"
 
 await apiTestQuery()
 export const messageStorage = new MessageStorage()
 
-const bot = new Bot<Context>(process.env.BOT_TOKEN)
+const bot = new Bot<Context>(env.BOT_TOKEN)
 bot.use(hydrate())
 bot.use(hydrateReply)
 
@@ -26,7 +23,7 @@ bot.use(commands)
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
-  if (username) setTelegramId(username, id)
+  if (username) void setTelegramId(username, id)
 
   await next()
 })
@@ -34,7 +31,11 @@ bot.on("message", async (ctx, next) => {
 bot.on("message", messageLink({ channelIds: [-1002669533277] })) // now is configured a test group
 bot.on("message", messageStorage.middleware)
 
-bot.start({ onStart: () => logger.info("Bot started!") })
+void bot.start({
+  onStart: () => {
+    logger.info("Bot started!")
+  },
+})
 
 let terminateStarted = false // this ensure that it's called only once. otherwise strange behaviours
 async function terminate(signal: NodeJS.Signals) {
@@ -49,5 +50,5 @@ async function terminate(signal: NodeJS.Signals) {
   logger.info("Bot stopped!")
   process.exit(0)
 }
-process.on("SIGINT", terminate)
-process.on("SIGTERM", terminate)
+process.on("SIGINT", () => void terminate("SIGINT"))
+process.on("SIGTERM", () => void terminate("SIGTERM"))

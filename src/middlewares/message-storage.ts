@@ -11,7 +11,7 @@ export class MessageStorage {
   private memoryStorage: Message[]
   constructor() {
     this.memoryStorage = []
-    new Cron("0 */1 * * * *", this.sync)
+    new Cron("0 */1 * * * *", () => this.sync())
   }
 
   async get(chatId: number, messageId: number): Promise<Message | null> {
@@ -34,7 +34,7 @@ export class MessageStorage {
   }
 
   async sync(): Promise<void> {
-    if (!this.memoryStorage || this.memoryStorage.length === 0) return
+    if (this.memoryStorage.length === 0) return
     const { error } = await api.tg.messages.add.mutate({ messages: this.memoryStorage })
     if (error) {
       logger.error(
@@ -74,6 +74,6 @@ export class MessageStorage {
       timestamp: new Date(ctx.message.date * 1000),
     })
 
-    next()
+    return next()
   }
 }

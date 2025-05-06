@@ -6,13 +6,20 @@ import neverthrow from "eslint-plugin-neverthrow"
 
 export default tseslint.config(
   pluginJs.configs.recommended,
-  tseslint.configs.recommended,
+  tseslint.configs.strictTypeChecked,
   eslintConfigPrettier,
   {
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
       globals: globals.node,
+      parserOptions: {
+        projectService: {
+          allowDefaultProject: ["eslint.config.mjs"],
+          defaultProject: "tsconfig.json",
+        },
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
   },
   {
@@ -33,6 +40,7 @@ export default tseslint.config(
           ignoreRestSiblings: true,
         },
       ],
+      "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
     },
   }
 )
