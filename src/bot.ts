@@ -26,7 +26,7 @@ bot.use(commands)
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
-  if (username) await setTelegramId(username, id)
+  if (username) void setTelegramId(username, id)
 
   await next()
 })
