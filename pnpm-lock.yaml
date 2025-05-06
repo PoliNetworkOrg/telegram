@@ -18,11 +18,14 @@ importers:
         specifier: ^1.11.1
         version: 1.11.1(grammy@1.35.1)
       '@polinetwork/backend':
-        specifier: ^0.5.4
-        version: 0.5.4
+        specifier: ^0.6.1
+        version: 0.6.1
       '@trpc/client':
-        specifier: '11'
-        version: 11.0.2(@trpc/server@11.0.2(typescript@5.7.3))(typescript@5.7.3)
+        specifier: ^11.1.1
+        version: 11.1.1(@trpc/server@11.1.1(typescript@5.7.3))(typescript@5.7.3)
+      croner:
+        specifier: ^9.0.0
+        version: 9.0.0
       grammy:
         specifier: ^1.35.1
         version: 1.35.1
@@ -35,10 +38,16 @@ importers:
       redis:
         specifier: ^4.7.0
         version: 4.7.0
+      superjson:
+        specifier: ^2.2.2
+        version: 2.2.2
     devDependencies:
       '@eslint/js':
         specifier: ^9.20.0
         version: 9.20.0
+      '@trpc/server':
+        specifier: 11.1.1
+        version: 11.1.1(typescript@5.7.3)
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.1
@@ -355,8 +364,8 @@ packages:
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
 
-  '@polinetwork/backend@0.5.4':
-    resolution: {integrity: sha512-ky+ffmtIv8Gx8ksSmFgCzPlUQvlEhOQFHlaD63jdhGXyqRH0iaV4QShat0lQc26WPvCFRfCPicDDEUPJwm0l/g==}
+  '@polinetwork/backend@0.6.1':
+    resolution: {integrity: sha512-/OhhYyfOpdGFPGq6HvlkYnmGTS3tWxqKUOnRUOko2JEq4VE789L6QSwI1edehKpq2HPbdVzrv0zE+PfF5lzFhQ==}
     engines: {node: '>=22.14.0', npm: '>=10.9.2'}
 
   '@redis/bloom@1.2.0':
@@ -488,14 +497,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@trpc/client@11.0.2':
-    resolution: {integrity: sha512-GlPEedbMTerkUfAJBsrwU6dg8N65lt3LBwrCoqR3MTZ64lRU/DQqyLjzpz5nRkEN0x4S2JmX0hASV9vc2KlSHA==}
+  '@trpc/client@11.1.1':
+    resolution: {integrity: sha512-Beiv56hlt+ARbijtUsCQOvKJw/FkfuVk4W9TzJl285iIJw8iCA3ZTwTG9GjIeSgeR7d2MyOeUbI26LV255n33A==}
     peerDependencies:
-      '@trpc/server': 11.0.2
+      '@trpc/server': 11.1.1
       typescript: '>=5.7.2'
 
-  '@trpc/server@11.0.2':
-    resolution: {integrity: sha512-PIcm8UWFyE0AnIYjxsyc1zfVa6X10m9Opm1SJ2ou9Vu8dlXO6rMtmafLUXJsMeQk/3ecxObFtEiZIX8TvB3eCg==}
+  '@trpc/server@11.1.1':
+    resolution: {integrity: sha512-ZjPN3ypBHvGMAlMgeZPrxlRcH/3dn4AK0s5Ph1z+E6uiAvIQVCj7ZoMlXeeBsIy4THGDAk953jHVW2kMnlbb4g==}
     peerDependencies:
       typescript: '>=5.7.2'
 
@@ -724,8 +733,16 @@ packages:
     resolution: {integrity: sha512-5IKcdX0nnYavi6G7TtOhwkYzyjfJlatbjMjuLSfE2kYT5pMDOilZ4OvMhi637CcDICTmz3wARPoyhqyX1Y+XvA==}
     engines: {node: ^14.18.0 || >=16.10.0}
 
+  copy-anything@3.0.5:
+    resolution: {integrity: sha512-yCEafptTtb4bk7GLEQoM8KVJpxAfdBJYaXyzQEgQQQgYrZiDp8SJmGKlYza6CYjEDNstAdNdKA3UuoULlEbS6w==}
+    engines: {node: '>=12.13'}
+
   create-require@1.1.1:
     resolution: {integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==}
+
+  croner@9.0.0:
+    resolution: {integrity: sha512-onMB0OkDjkXunhdW9htFjEhqrD54+M94i6ackoUkjHKbRnXdyEyKRelp4nJ1kAz32+s27jP1FsebpJCVl0BsvA==}
+    engines: {node: '>=18.0'}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -984,6 +1001,10 @@ packages:
   is-number@7.0.0:
     resolution: {integrity: sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==}
     engines: {node: '>=0.12.0'}
+
+  is-what@4.1.16:
+    resolution: {integrity: sha512-ZhMwEosbFJkA0YhFnNDgTM4ZxDRsS6HqTo7qsZM08fehyRYIYa0yHu5R6mgo1n/8MgaPBXiPimPD77baVFYg+A==}
+    engines: {node: '>=12.13'}
 
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
@@ -1328,6 +1349,10 @@ packages:
     resolution: {integrity: sha512-8EbVDiu9iN/nESwxeSxDKe0dunta1GOlHufmSSXxMD2z2/tMZpDMpvXQGsc+ajGo8y2uYUmixaSRUc/QPoQ0GA==}
     engines: {node: '>=16 || 14 >=14.17'}
     hasBin: true
+
+  superjson@2.2.2:
+    resolution: {integrity: sha512-5JRxVqC8I8NuOUjzBbvVJAKNM8qoVuH0O77h4WInc/qC2q5IreqKxYwgkga3PfA22OayK2ikceb/B26dztPl+Q==}
+    engines: {node: '>=16'}
 
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
@@ -1782,7 +1807,7 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@polinetwork/backend@0.5.4': {}
+  '@polinetwork/backend@0.6.1': {}
 
   '@redis/bloom@1.2.0(@redis/client@1.6.0)':
     dependencies:
@@ -1870,12 +1895,12 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.37.0':
     optional: true
 
-  '@trpc/client@11.0.2(@trpc/server@11.0.2(typescript@5.7.3))(typescript@5.7.3)':
+  '@trpc/client@11.1.1(@trpc/server@11.1.1(typescript@5.7.3))(typescript@5.7.3)':
     dependencies:
-      '@trpc/server': 11.0.2(typescript@5.7.3)
+      '@trpc/server': 11.1.1(typescript@5.7.3)
       typescript: 5.7.3
 
-  '@trpc/server@11.0.2(typescript@5.7.3)':
+  '@trpc/server@11.1.1(typescript@5.7.3)':
     dependencies:
       typescript: 5.7.3
 
@@ -2122,7 +2147,13 @@ snapshots:
 
   consola@3.4.2: {}
 
+  copy-anything@3.0.5:
+    dependencies:
+      is-what: 4.1.16
+
   create-require@1.1.1: {}
+
+  croner@9.0.0: {}
 
   cross-spawn@7.0.6:
     dependencies:
@@ -2396,6 +2427,8 @@ snapshots:
       is-extglob: 2.1.1
 
   is-number@7.0.0: {}
+
+  is-what@4.1.16: {}
 
   isexe@2.0.0: {}
 
@@ -2721,6 +2754,10 @@ snapshots:
       mz: 2.7.0
       pirates: 4.0.7
       ts-interface-checker: 0.1.13
+
+  superjson@2.2.2:
+    dependencies:
+      copy-anything: 3.0.5
 
   supports-color@7.2.0:
     dependencies:

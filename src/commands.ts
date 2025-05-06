@@ -223,7 +223,7 @@ export const commands = new ManagedCommands<Role>({
         telegramId: context.from.id,
         telegramUsername: context.from.username,
       })
-      if ("error" in res) {
+      if (res.error) {
         logger.error(res.error)
         await context.reply(fmt(() => `Invalid code or your username does not match.`))
         return
