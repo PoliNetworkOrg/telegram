@@ -1,5 +1,5 @@
-import { createEnv } from "@t3-oss/env-core";
-import { z } from "zod";
+import { createEnv } from "@t3-oss/env-core"
+import { z } from "zod"
 
 // coerce is needed for non-string values, because k8s supports only string env
 export const env = createEnv({
@@ -29,4 +29,4 @@ export const env = createEnv({
    * explicitly specify this option as true.
    */
   emptyStringAsUndefined: true,
-});
+})
