@@ -1,11 +1,12 @@
 import { createClient, SocketClosedUnexpectedlyError } from "redis"
 import { logger } from "@/logger"
+import { env } from "@/env"
 
 let openSuccess = false
 const client = createClient({
   socket: {
-    host: process.env.REDIS_HOST,
-    port: parseInt(process.env.REDIS_PORT ?? "6379"),
+    host: env.REDIS_HOST,
+    port: env.REDIS_PORT,
     reconnectStrategy: (retries) => {
       const n = retries + 1
       logger.debug(`[REDIS] reconnect retry #${n}`)
@@ -19,8 +20,8 @@ const client = createClient({
       return false
     },
   },
-  username: process.env.REDIS_USERNAME,
-  password: process.env.REDIS_PASSWORD,
+  username: env.REDIS_USERNAME,
+  password: env.REDIS_PASSWORD,
 })
 
 client.on("error", (err: object) => {

@@ -9,15 +9,12 @@ import { hydrate } from "@grammyjs/hydrate"
 import { commands } from "./commands"
 import { MessageStorage } from "./middlewares/message-storage"
 import { messageLink } from "./middlewares/message-link"
-
-if (!process.env.BOT_TOKEN) {
-  throw new Error("BOT_TOKEN environment variable is required!")
-}
+import { env } from "./env"
 
 await apiTestQuery()
 export const messageStorage = new MessageStorage()
 
-const bot = new Bot<Context>(process.env.BOT_TOKEN)
+const bot = new Bot<Context>(env.BOT_TOKEN)
 bot.use(hydrate())
 bot.use(hydrateReply)
 
