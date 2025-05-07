@@ -28,7 +28,7 @@ _commandsBase
           .regex(durationRegex)
           .transform((a) => ({ parsed: parseInt(a.slice(0, -1)) * Durations[a.slice(-1) as Duration], raw: a })),
         optional: false,
-        description: "How long to mutate the user",
+        description: "How long to mutate the user. Format: <number><unit> where unit can be s,m,h,d,w",
       },
       { key: "reason", optional: true, description: "Optional reason to mutate the user" },
     ],
