@@ -262,11 +262,11 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
           const repliedTo = ManagedCommands.parseReplyTo(ctx.msg, cmd)
           if (repliedTo.isErr()) {
             await ctx.reply(
-              fmt(({ b }) => [
+              fmt(({ b, skip }) => [
                 `Error:`,
                 b`${repliedTo.error}`,
                 `\n\nUsage:`,
-                `\n${ManagedCommands.formatCommandUsage(cmd)}`,
+                skip`\n${ManagedCommands.formatCommandUsage(cmd)}`,
               ])
             )
             return

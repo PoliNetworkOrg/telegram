@@ -1,7 +1,7 @@
 import { withRedis } from "@/redis"
 
 export async function getTelegramId(username: string): Promise<number | null> {
-  const res = await withRedis(({ client }) => client.get(`username:${username}:id`))
+  const res = await withRedis(({ client }) => client.get(`username:${username.replaceAll("@", "")}:id`))
   if (!res) return null
 
   return parseInt(res)

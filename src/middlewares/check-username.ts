@@ -2,26 +2,11 @@ import { Filter, MiddlewareFn } from "grammy"
 import { Context } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import { logger } from "@/logger"
+import { RestrictPermissions } from "@/utils/chat"
 
 export const checkUsername: MiddlewareFn<Filter<Context, "message">> = async (ctx, next) => {
   if (ctx.from.username === undefined) {
-    const res = await ctx
-      .restrictAuthor(
-        {
-          can_send_messages: false,
-          can_send_audios: false,
-          can_send_documents: false,
-          can_send_photos: false,
-          can_send_videos: false,
-          can_send_video_notes: false,
-          can_send_voice_notes: false,
-          can_send_polls: false,
-          can_send_other_messages: false,
-          can_add_web_page_previews: false,
-        },
-        { until_date: Date.now() + 300_000 }
-      )
-      .catch(() => false)
+    const res = await ctx.restrictAuthor(RestrictPermissions.mute, { until_date: Date.now() + 300_000 }).catch(() => false)
 
     if (!res) logger.warn(`checkUsername: cannot restrict user ${ctx.from.id}`)
 
