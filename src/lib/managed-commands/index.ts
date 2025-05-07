@@ -14,13 +14,13 @@ import {
 } from "./command"
 import { ChatMember, Message } from "grammy/types"
 import { err, ok, Result } from "neverthrow"
-import { getText } from "@/utils/messages"
 import { ConversationData, conversations, ConversationStorage, createConversation } from "@grammyjs/conversations"
 import { Context, Conversation, ConversationContext } from "./context"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import { fmt } from "@/utils/format"
 import type { LogFn } from "pino"
+import { wait } from "@/utils/wait"
 
 export type PermissionHandler<TRole extends string> = (arg: {
   context: CommandContext<Context>
@@ -119,7 +119,14 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     return ok((msg.reply_to_message ?? null) as RepliedTo<R>)
   }
 
-  private static parseSingleArg(value: string, argument: ArgumentOptions) {
+  /**
+   * Checks if a specific word is a valid argument for the given options, returns the correct parsed type of the argument.
+   * @param value The single word (or words if last) to be parsed as an argument
+   * @param argument The options object describing the argument
+   * @returns a Result containing either the string or the parsed value from zod or undefined if not required and not
+   * provided, or an error if either missing and required or the zod parsing fails in case of a typed argument
+   */
+  private static parseSingleArg(value: string | undefined, argument: ArgumentOptions) {
     const { key, optional } = argument
     if (!value) {
       if (optional) {
@@ -139,18 +146,18 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
 
   /**
    * Parses the arguments from the command message
-   * @param msg The message object to parse
+   * @param msgText The message string to parse
    * @param cmd The command object to check for arguments requirement
    * @returns A Result containing the parsed arguments as an {@link ArgumentMap} or an error message
    */
   private static parseArgs(
-    msg: string,
+    msgText: string,
     cmd: Command<CommandArgs, CommandReplyTo, CommandScope>
   ): Result<ArgumentMap, string> {
     const args: ArgumentMap = {}
     if (!cmd.args || cmd.args.length === 0) return ok(args)
     const l = cmd.args.length
-    const words = msg.split(" ").slice(1)
+    const words = msgText.split(" ").slice(1)
 
     for (const [i, argument] of cmd.args.entries()) {
       const value = i === l - 1 ? words.slice(i).join(" ") : words[i]
@@ -160,6 +167,27 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     }
 
     return ok(args)
+  }
+
+  /**
+   * Parses all required values for the command to be invoked
+   * @param msg The message object to parse
+   * @param cmd The command opbect to check for arguments and `reply_to_message` requirements
+   * @returns A Result containing the parsed arguments and `reply_to_message`, see {@link Command}
+   */
+  private static parseCommand<R extends CommandReplyTo>(
+    msg: Message.TextMessage,
+    cmd: Command<CommandArgs, R, CommandScope>
+  ): Result<{ args: ArgumentMap; repliedTo: RepliedTo<R> }, string[]> {
+    const args = this.parseArgs(msg.text, cmd)
+    const repliedTo = this.parseReplyTo(msg, cmd)
+    if (args.isOk() && repliedTo.isOk()) {
+      return ok({ args: args.value, repliedTo: repliedTo.value })
+    }
+    const errors: string[] = []
+    if (args.isErr()) errors.push(args.error)
+    if (repliedTo.isErr()) errors.push(repliedTo.error)
+    return err(errors)
   }
 
   /**
@@ -279,42 +307,34 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     this.composer.use(
       createConversation(
         async (conv: Conversation, ctx: ConversationContext) => {
-          if (!ctx.has(":text")) return // how would this even happen? lets be sure that it's always a text message
+          if (!ctx.has(":text") || !ctx.message) return // how would this even happen? lets be sure that it's always a text message
 
-          // check for the repliedTo requirement
-          const repliedTo = ManagedCommands.parseReplyTo(ctx.msg, cmd)
-          if (repliedTo.isErr()) {
-            await ctx.reply(
+          // check for the requirements in the command invocation
+          const requirements = ManagedCommands.parseCommand(ctx.message, cmd)
+          if (requirements.isErr()) {
+            const msg = await ctx.reply(
               fmt(({ b, skip }) => [
                 `Error:`,
-                b`${repliedTo.error}`,
+                b`${requirements.error.join("\n")}`,
                 `\n\nUsage:`,
                 skip`\n${ManagedCommands.formatCommandUsage(cmd)}`,
               ])
             )
+            if (ctx.chat.type !== "private") {
+              await wait(5000)
+              await msg.delete()
+            }
             return
           }
 
-          // Parse arguments and construct the argument map
-          const args = ManagedCommands.parseArgs(getText(ctx.msg).text ?? "", cmd)
-          if (args.isErr()) {
-            await ctx.reply(
-              fmt(({ b, skip }) => [
-                `Error:`,
-                b`${args.error}`,
-                `\n\nUsage:`,
-                skip`\n${ManagedCommands.formatCommandUsage(cmd)}`,
-              ])
-            )
-            return
-          }
+          const { args, repliedTo } = requirements.value
 
           // Fianlly execute the handler
           await cmd.handler({
             context: ctx,
             conversation: conv,
-            args: args.value,
-            repliedTo: repliedTo.value,
+            args,
+            repliedTo,
           })
         },
         {
