@@ -6,7 +6,9 @@ import { RestrictPermissions } from "@/utils/chat"
 
 export const checkUsername: MiddlewareFn<Filter<Context, "message">> = async (ctx, next) => {
   if (ctx.from.username === undefined) {
-    const res = await ctx.restrictAuthor(RestrictPermissions.mute, { until_date: Date.now() + 300_000 }).catch(() => false)
+    const res = await ctx
+      .restrictAuthor(RestrictPermissions.mute, { until_date: Date.now() + 300_000 })
+      .catch(() => false)
 
     if (!res) logger.warn(`checkUsername: cannot restrict user ${ctx.from.id}`)
 
