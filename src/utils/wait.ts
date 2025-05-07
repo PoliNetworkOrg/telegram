@@ -5,10 +5,10 @@
  * To avoid this error, you can use this method to wait for some delay and then execute the method
  * WARN: using high delays can increment the command handler complete time
  */
-export function wait(time: number): Promise<void> {
+export function wait(time_ms: number): Promise<void> {
   return new Promise((res) => {
     setTimeout(() => {
       res()
-    }, time)
+    }, time_ms)
   })
 }
