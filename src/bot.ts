@@ -11,6 +11,7 @@ import { MessageStorage } from "./middlewares/message-storage"
 import { messageLink } from "./middlewares/message-link"
 import { env } from "./env"
 import { botJoin } from "./middlewares/bot-join"
+import { checkUsername } from "./middlewares/check-username"
 
 const TEST_CHAT_ID = -1002669533277
 
@@ -34,6 +35,7 @@ bot.on("message", async (ctx, next) => {
 bot.on("message", messageLink({ channelIds: [TEST_CHAT_ID] })) // now is configured a test group
 bot.on("message", messageStorage.middleware)
 bot.on("my_chat_member", botJoin({ logChatId: TEST_CHAT_ID }))
+bot.on("message", checkUsername)
 
 void bot.start({
   onStart: () => {
