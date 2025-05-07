@@ -1,17 +1,28 @@
 import type { Message } from "grammy/types"
 import type { Conversation, ConversationContext } from "./context"
+import { z, ZodTypeDef } from "zod"
 
-interface RequiredArgumentOptions {
+interface BaseArgumentOptions {
   key: string
   description?: string
   optional?: boolean
 }
-interface OptionalArgumentOptions extends RequiredArgumentOptions {
+
+interface TypedArgumentOptions<Out = unknown> extends BaseArgumentOptions {
+  type: z.ZodType<Out, ZodTypeDef, string>
+}
+
+type RequiredArgumentOptions = BaseArgumentOptions | TypedArgumentOptions
+type OptionalArgumentOptions = RequiredArgumentOptions & {
   optional: true
 }
 
-type ArgumentOptions = RequiredArgumentOptions | OptionalArgumentOptions
-type ArgumentType<T extends ArgumentOptions> = T extends OptionalArgumentOptions ? string | undefined : string
+export type ArgumentOptions = RequiredArgumentOptions | OptionalArgumentOptions
+export type ArgumentType<Out, T extends ArgumentOptions> = T extends OptionalArgumentOptions ? Out | undefined : Out
+
+export function isTypedArgumentOptions(opts: ArgumentOptions): opts is TypedArgumentOptions {
+  return "type" in opts
+}
 
 export type CommandArgs = ReadonlyArray<ArgumentOptions>
 export type RepliedTo<R extends CommandReplyTo> = R extends "required"
@@ -20,7 +31,10 @@ export type RepliedTo<R extends CommandReplyTo> = R extends "required"
     ? Message | null
     : undefined
 export type ArgumentMap<A extends CommandArgs = CommandArgs> = {
-  [Entry in A[number] as Entry["key"]]: ArgumentType<Entry>
+  [Entry in A[number] as Entry["key"]]: ArgumentType<
+    Entry extends TypedArgumentOptions ? z.output<Entry["type"]> : string,
+    Entry
+  >
 }
 export type CommandReplyTo = "required" | "optional" | undefined
 

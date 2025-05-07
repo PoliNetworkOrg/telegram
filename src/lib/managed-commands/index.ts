@@ -2,7 +2,16 @@ export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
 export type { Context } from "./context"
 
 import { CommandContext, Composer, MemorySessionStorage, MiddlewareFn, MiddlewareObj } from "grammy"
-import { ArgumentMap, Command, CommandArgs, CommandReplyTo, CommandScope, RepliedTo } from "./command"
+import {
+  ArgumentMap,
+  ArgumentOptions,
+  Command,
+  CommandArgs,
+  CommandReplyTo,
+  CommandScope,
+  isTypedArgumentOptions,
+  RepliedTo,
+} from "./command"
 import { ChatMember, Message } from "grammy/types"
 import { err, ok, Result } from "neverthrow"
 import { getText } from "@/utils/messages"
@@ -110,6 +119,24 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     return ok((msg.reply_to_message ?? null) as RepliedTo<R>)
   }
 
+  private static parseSingleArg(value: string, argument: ArgumentOptions) {
+    const { key, optional } = argument
+    if (!value) {
+      if (optional) {
+        return ok(undefined)
+      } else {
+        return err(`Missing argument: ${key}`)
+      }
+    } else {
+      if (isTypedArgumentOptions(argument)) {
+        const data = argument.type.safeParse(value)
+        if (!data.success) return err(data.error.toString())
+        else return ok(data.data)
+      }
+      return ok(value)
+    }
+  }
+
   /**
    * Parses the arguments from the command message
    * @param msg The message object to parse
@@ -122,18 +149,14 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
   ): Result<ArgumentMap, string> {
     const args: ArgumentMap = {}
     if (!cmd.args || cmd.args.length === 0) return ok(args)
-
+    const l = cmd.args.length
     const words = msg.split(" ").slice(1)
-    for (const [i, { key, optional }] of cmd.args.entries()) {
-      if (!words[i]) {
-        if (optional) {
-          args[key] = undefined
-        } else {
-          return err(`Missing argument: ${key}`)
-        }
-      } else {
-        args[key] = i === cmd.args.length - 1 ? words.slice(i).join(" ") : words[i]
-      }
+
+    for (const [i, argument] of cmd.args.entries()) {
+      const value = i === l - 1 ? words.slice(i).join(" ") : words[i]
+      const res = ManagedCommands.parseSingleArg(value, argument)
+      if (res.isErr()) return res
+      args[argument.key] = res.value
     }
 
     return ok(args)

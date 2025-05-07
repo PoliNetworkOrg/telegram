@@ -3,6 +3,7 @@ import { _commandsBase } from "./_base"
 import { RestrictPermissions } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
+import { z } from "zod"
 
 const DURATIONS = ["s", "m", "h", "d", "w"] as const
 const Durations: Record<Duration, number> = {
@@ -19,7 +20,15 @@ _commandsBase
   .createCommand({
     trigger: "mute",
     args: [
-      { key: "duration", optional: false, description: "How long to mutate the user" },
+      {
+        key: "duration",
+        type: z
+          .string()
+          .regex(durationRegex)
+          .transform((a) => parseInt(a.slice(0, -1)) * Durations[a.slice(-1) as Duration]),
+        optional: false,
+        description: "How long to mutate the user",
+      },
       { key: "reason", optional: true, description: "Optional reason to mutate the user" },
     ],
     description: "Mute a user from a group (deletes the message you reply to)",
@@ -36,9 +45,7 @@ _commandsBase
         return
       }
 
-      if (!durationRegex.test(args.duration)) return
-      const duration = parseInt(args.duration.slice(0, -1)) * Durations[args.duration.slice(-1) as Duration]
-      const until_date = Math.floor(Date.now() / 1000) + duration
+      const until_date = Math.floor(Date.now() / 1000) + args.duration
       const untilDateString = new Date(until_date * 1000).toLocaleString("it")
 
       const logMsg = fmt(
