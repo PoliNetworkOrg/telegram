@@ -5,6 +5,7 @@ import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { z } from "zod"
 import { asyncDelay } from "@/utils/timer"
+import { wait } from "@/utils/wait"
 
 const DURATIONS = ["s", "m", "h", "d", "w"] as const
 const Durations: Record<Duration, number> = {
@@ -44,19 +45,22 @@ _commandsBase
       if (!repliedTo.from) {
         logger.error("mute: no repliedTo.from field (the msg was sent in a channel)")
         const msg = await context.reply(fmt(({ b }) => b`There was an error, try again`))
-        await asyncDelay(() => msg.delete(), 5000)
+        await wait(5000)
+        await msg.delete()
         return
       }
 
       if (repliedTo.from.id === context.from?.id) {
         const msg = await context.reply(fmt(({ b }) => b`@${context.from?.username} you cannot mute youself (smh)`))
-        await asyncDelay(() => msg.delete(), 5000)
+        await wait(5000)
+        await msg.delete()
         return
       }
 
       if (repliedTo.from.id === context.me.id) {
         const msg = await context.reply(fmt(({ b }) => b`@${context.from?.username} you cannot mute the bot!`))
-        await asyncDelay(() => msg.delete(), 5000)
+        await wait(5000)
+        await msg.delete()
         return
       }
 
@@ -65,7 +69,8 @@ _commandsBase
         const msg = await context.reply(
           fmt(({ b }) => b`@${context.from?.username} the user @${repliedTo.from?.username} cannot be muted`)
         )
-        await asyncDelay(() => msg.delete(), 5000)
+        await wait(5000)
+        await msg.delete()
         return
       }
 
