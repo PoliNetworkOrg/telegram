@@ -2,8 +2,8 @@
   - [ ] kick
   - [ ] ban
   - [ ] unban
-  - [ ] mute
-  - [ ] unmute
+  - [x] mute
+  - [x] unmute
 - [ ] advanced moderation
   - [ ] ban_all
   - [ ] unban_all
