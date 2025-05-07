@@ -4,7 +4,6 @@ import { RestrictPermissions } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { z } from "zod"
-import { asyncDelay } from "@/utils/timer"
 import { wait } from "@/utils/wait"
 
 const DURATIONS = ["s", "m", "h", "d", "w"] as const
