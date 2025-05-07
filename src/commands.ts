@@ -99,7 +99,7 @@ export const commands = new ManagedCommands<Role>({
     handler: async ({ context, args }) => {
       let userId: number | null = parseInt(args.userId)
       if (isNaN(userId)) {
-        userId = await getTelegramId(args.userId)
+        userId = await getTelegramId(args.userId.replaceAll("@", ""))
       }
       if (userId === null) {
         await context.reply("Not a valid userId or username not in our cache")
