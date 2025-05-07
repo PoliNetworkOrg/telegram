@@ -4,7 +4,7 @@ import { fmt } from "@/utils/format"
 import { logger } from "@/logger"
 
 export const checkUsername: MiddlewareFn<Filter<Context, "message">> = async (ctx, next) => {
-  if (ctx.from.username !== undefined) {
+  if (ctx.from.username === undefined) {
     const res = await ctx
       .restrictAuthor(
         {
