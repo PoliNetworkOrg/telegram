@@ -63,9 +63,8 @@ export async function unban({ ctx, targetId, from }: UnbanProps): Promise<Result
 
   await ctx.unbanChatMember(target.user.id)
   return ok(
-    fmt(
-      ({ b, n }) => [b`✅ Unbanned!`, n`${b`Target:`} ${fmtUser(target.user)}`, n`${b`Admin:`} ${fmtUser(from)}`],
-      { sep: "\n" }
-    )
+    fmt(({ b, n }) => [b`✅ Unbanned!`, n`${b`Target:`} ${fmtUser(target.user)}`, n`${b`Admin:`} ${fmtUser(from)}`], {
+      sep: "\n",
+    })
   )
 }
