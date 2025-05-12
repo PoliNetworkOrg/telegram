@@ -129,7 +129,7 @@ export function fmt(cb: (formatters: Formatters) => string | (string | undefined
   }
   return (
     res
-      .filter(i => i !== undefined)
+      .filter((i) => i !== undefined)
       .map((s) => (!s.startsWith(BYPASS_ESCAPE) ? escapeMarkdownV2(s) : s))
       .join(sep)
       .replaceAll(BYPASS_ESCAPE, "") + end

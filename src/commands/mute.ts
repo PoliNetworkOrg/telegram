@@ -54,9 +54,7 @@ _commandsBase
   })
   .createCommand({
     trigger: "mute",
-    args: [
-      { key: "reason", optional: true, description: "Optional reason to mutate the user" },
-    ],
+    args: [{ key: "reason", optional: true, description: "Optional reason to mutate the user" }],
     description: "Permanently mute a user from a group",
     scope: "group",
     reply: "required",

@@ -48,7 +48,6 @@ export async function mute({ ctx, from, target, reason, duration }: MuteProps): 
   )
 }
 
-
 interface UnmuteProps {
   ctx: Context | ConversationContext
   from: User
@@ -60,8 +59,7 @@ export async function unmute({ ctx, targetId, from }: UnmuteProps): Promise<Resu
   if (targetId === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot unmute the bot!`))
 
   const target = await ctx.getChatMember(targetId).catch(() => null)
-  if (!target)
-    return err(fmt(({ b }) => b`@${from.username} this user is not in this chat`))
+  if (!target) return err(fmt(({ b }) => b`@${from.username} this user is not in this chat`))
 
   await ctx.restrictChatMember(target.user.id, RestrictPermissions.unmute)
   return ok(
