@@ -3,9 +3,8 @@ import type { Context, ConversationContext } from "@/lib/managed-commands/contex
 import type { User } from "grammy/types"
 import { z } from "zod"
 import { duration } from "@/utils/duration"
-import { fmt } from "@/utils/format"
+import { fmt, fmtUser } from "@/utils/format"
 import { RestrictPermissions } from "@/utils/chat"
-import { logger } from "@/logger"
 
 interface MuteProps {
   ctx: Context | ConversationContext
@@ -21,7 +20,7 @@ export async function mute({ ctx, from, target, reason, duration }: MuteProps): 
 
   const chatMember = await ctx.getChatMember(target.id).catch(() => null)
   if (chatMember?.status === "administrator" || chatMember?.status === "creator")
-    return err(fmt(({ b }) => b`@${from.username} the user @${target.username} [${target.id}] cannot be muted`))
+    return err(fmt(({ b }) => b`@${from.username} the user ${fmtUser(target)} cannot be muted`))
 
   const until_date = duration ? Math.floor(Date.now() / 1000) + duration.parsed : undefined
   const untilDateString = until_date
@@ -37,10 +36,10 @@ export async function mute({ ctx, from, target, reason, duration }: MuteProps): 
   await ctx.restrictChatMember(target.id, RestrictPermissions.mute, { until_date })
   return ok(
     fmt(
-      ({ code, b, n }) => [
+      ({ b, n }) => [
         b`🤫 Muted!`,
-        n`${b`Target:`} @${target.username} [${code`${target.id}`}]`,
-        n`${b`Admin:`} @${from.username} [${code`${from.id}`}]`,
+        n`${b`Target:`} ${fmtUser(target)}`,
+        n`${b`Admin:`} ${fmtUser(from)}`,
         duration ? n`${b`Duration:`} ${duration.raw} (until ${untilDateString})` : undefined,
         reason ? n`${b`Reason:`} ${reason}` : undefined,
       ],
@@ -67,13 +66,8 @@ export async function unmute({ ctx, targetId, from }: UnmuteProps): Promise<Resu
 
   await ctx.restrictChatMember(target.user.id, RestrictPermissions.unmute)
   return ok(
-    fmt(
-      ({ code, b, n }) => [
-        b`🎤 Unmuted!`,
-        n`${b`Target:`} @${target.user.username} [${code`${target.user.id}`}]`,
-        n`${b`Admin:`} @${from.username} [${code`${from.id}`}]`,
-      ],
-      { sep: "\n" }
-    )
+    fmt(({ b, n }) => [b`🎤 Unmuted!`, n`${b`Target:`} ${fmtUser(target.user)}`, n`${b`Admin:`} ${fmtUser(from)}`], {
+      sep: "\n",
+    })
   )
 }

@@ -1,4 +1,4 @@
-import { fmt } from "@/utils/format"
+import { fmt, fmtUser } from "@/utils/format"
 import { err, ok, type Result } from "neverthrow"
 import type { User } from "grammy/types"
 import type { Context, ConversationContext } from "@/lib/managed-commands/context"
@@ -35,10 +35,10 @@ export async function ban({ ctx, target, from, reason, duration }: BanProps): Pr
   await ctx.banChatMember(target.id, { until_date })
   return ok(
     fmt(
-      ({ code, b, n }) => [
+      ({ b, n }) => [
         duration ? b`🚫 Temp Banned!` : b`🚫 Perma Banned!`,
-        n`${b`Target:`} @${target.username} [${code`${target.id}`}]`,
-        n`${b`Admin:`} @${from.username} [${code`${from.id}`}]`,
+        n`${b`Target:`} ${fmtUser(target)}`,
+        n`${b`Admin:`} ${fmtUser(from)}`,
         duration ? n`${b`Duration:`} ${duration.raw} (until ${untilDateString})` : undefined,
         reason ? n`${b`Reason:`} ${reason}` : undefined,
       ],
@@ -64,11 +64,7 @@ export async function unban({ ctx, targetId, from }: UnbanProps): Promise<Result
   await ctx.unbanChatMember(target.user.id)
   return ok(
     fmt(
-      ({ code, b, n }) => [
-        b`✅ Unbanned!`,
-        n`${b`Target:`} @${target.user.username} [${code`${target.user.id}`}]`,
-        n`${b`Admin:`} @${from.username} [${code`${from.id}`}]`,
-      ],
+      ({ b, n }) => [b`✅ Unbanned!`, n`${b`Target:`} ${fmtUser(target.user)}`, n`${b`Admin:`} ${fmtUser(from)}`],
       { sep: "\n" }
     )
   )

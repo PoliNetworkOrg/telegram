@@ -1,3 +1,5 @@
+import { User } from "grammy/types"
+
 /**
  * Internal marker string used to prefix formatted segments.
  * This prevents the main `format` function from re-escaping
@@ -134,4 +136,9 @@ export function fmt(cb: (formatters: Formatters) => string | (string | undefined
       .join(sep)
       .replaceAll(BYPASS_ESCAPE, "") + end
   )
+}
+
+export function fmtUser(user: User): string {
+  const fullname = user.last_name ? `${user.first_name} ${user.last_name}` : user.first_name
+  return formatters.n`${formatters.link(fullname, `tg://user?id=${user.id}`)} [${formatters.code`${user.id}`}]`
 }
