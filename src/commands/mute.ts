@@ -3,19 +3,8 @@ import { _commandsBase } from "./_base"
 import { RestrictPermissions } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
-import { z } from "zod"
 import { wait } from "@/utils/wait"
-
-const DURATIONS = ["s", "m", "h", "d", "w"] as const
-const Durations: Record<Duration, number> = {
-  s: 1,
-  m: 60,
-  h: 3600,
-  d: 86400,
-  w: 604800,
-}
-type Duration = (typeof DURATIONS)[number]
-const durationRegex = new RegExp(`(\\d+)[${DURATIONS.join("")}]`)
+import { duration } from "@/utils/duration"
 
 _commandsBase
   .createCommand({
@@ -23,12 +12,9 @@ _commandsBase
     args: [
       {
         key: "duration",
-        type: z
-          .string()
-          .regex(durationRegex)
-          .transform((a) => ({ parsed: parseInt(a.slice(0, -1)) * Durations[a.slice(-1) as Duration], raw: a })),
+        type: duration.zod,
         optional: false,
-        description: "How long to mutate the user. Format: <number><unit> where unit can be s,m,h,d,w",
+        description: "How long to mutate the user. " + duration.formatDesc,
       },
       { key: "reason", optional: true, description: "Optional reason to mutate the user" },
     ],
