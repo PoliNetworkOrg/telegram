@@ -2,7 +2,7 @@ import { fmt } from "@/utils/format"
 import { err, ok, type Result } from "neverthrow"
 import type { User } from "grammy/types"
 import type { Context, ConversationContext } from "@/lib/managed-commands/context"
-import { duration } from "@/utils/zod"
+import { duration } from "@/utils/duration"
 import { z } from "zod"
 
 interface BanProps {

@@ -2,7 +2,7 @@ import { ok, err, type Result } from "neverthrow"
 import type { Context, ConversationContext } from "@/lib/managed-commands/context"
 import type { User } from "grammy/types"
 import { z } from "zod"
-import { duration } from "@/utils/zod"
+import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { RestrictPermissions } from "@/utils/chat"
 
