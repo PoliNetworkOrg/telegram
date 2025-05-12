@@ -1,14 +1,14 @@
 import { logger } from "@/logger"
 import { _commandsBase } from "./_base"
-import { RestrictPermissions } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { wait } from "@/utils/wait"
 import { duration } from "@/utils/duration"
+import { mute, unmute } from "@/lib/moderation"
 
 _commandsBase
   .createCommand({
-    trigger: "mute",
+    trigger: "tmute",
     args: [
       {
         key: "duration",
@@ -18,7 +18,7 @@ _commandsBase
       },
       { key: "reason", optional: true, description: "Optional reason to mutate the user" },
     ],
-    description: "Mute a user from a group (deletes the message you reply to)",
+    description: "Temporary mute a user from a group",
     scope: "group",
     reply: "required",
     permissions: {
@@ -28,63 +28,66 @@ _commandsBase
     handler: async ({ args, context, repliedTo }) => {
       await context.deleteMessage()
       if (!repliedTo.from) {
-        logger.error("mute: no repliedTo.from field (the msg was sent in a channel)")
-        const msg = await context.reply(fmt(({ b }) => b`There was an error, try again`))
-        await wait(5000)
-        await msg.delete()
+        logger.error("tmute: no repliedTo.from field (the msg was sent in a channel)")
         return
       }
 
-      if (repliedTo.from.id === context.from?.id) {
-        const msg = await context.reply(fmt(({ b }) => b`@${context.from?.username} you cannot mute youself (smh)`))
-        await wait(5000)
-        await msg.delete()
-        return
-      }
-
-      if (repliedTo.from.id === context.me.id) {
-        const msg = await context.reply(fmt(({ b }) => b`@${context.from?.username} you cannot mute the bot!`))
-        await wait(5000)
-        await msg.delete()
-        return
-      }
-
-      const chatMember = await context.getChatMember(repliedTo.from.id).catch(() => null)
-      if (chatMember?.status === "administrator" || chatMember?.status === "creator") {
-        const msg = await context.reply(
-          fmt(({ b }) => b`@${context.from?.username} the user @${repliedTo.from?.username} cannot be muted`)
-        )
-        await wait(5000)
-        await msg.delete()
-        return
-      }
-
-      const until_date = Math.floor(Date.now() / 1000) + args.duration.parsed
-      const untilDateString = new Date(until_date * 1000).toLocaleString("it", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
+      const res = await mute({
+        ctx: context,
+        target: repliedTo.from,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        from: context.from!,
+        duration: args.duration,
+        reason: args.reason,
       })
 
-      const logMsg = fmt(
-        ({ code, b, n }) => [
-          b`🤫 Muted!`,
-          n`${b`Target:`} @${repliedTo.from?.username} [${code`${repliedTo.from?.id}`}]`,
-          n`${b`Admin:`} @${context.from?.username} [${code`${context.from?.id}`}]`,
-          n`${b`Duration:`} ${args.duration.raw} (until ${untilDateString})`,
-          args.reason ? n`${b`Reason:`} ${args.reason}` : "",
-        ],
-        { sep: "\n" }
-      )
+      if (res.isErr()) {
+        const msg = await context.reply(res.error)
+        await wait(5000)
+        await msg.delete()
+        return
+      }
 
-      // await context.deleteMessages([repliedTo.message_id])
-      await context.restrictChatMember(repliedTo.from.id, RestrictPermissions.mute, { until_date })
-      await context.reply(logMsg)
-      logger.debug(
-        `mute: user ${repliedTo.from.username} [${repliedTo.from.id}] has been muted for ${args.duration.raw} (until ${untilDateString}) in chat ${repliedTo.chat.title} [${repliedTo.chat.id}] by ${context.from?.username} [${context.from?.id}]`
-      )
+      await context.reply(res.value)
+      await context.deleteMessages([repliedTo.message_id])
+    },
+  })
+  .createCommand({
+    trigger: "mute",
+    args: [
+      { key: "reason", optional: true, description: "Optional reason to mutate the user" },
+    ],
+    description: "Permanently mute a user from a group",
+    scope: "group",
+    reply: "required",
+    permissions: {
+      excludedRoles: ["creator"],
+      allowedGroupAdmins: true,
+    },
+    handler: async ({ args, context, repliedTo }) => {
+      await context.deleteMessage()
+      if (!repliedTo.from) {
+        logger.error("tmute: no repliedTo.from field (the msg was sent in a channel)")
+        return
+      }
+
+      const res = await mute({
+        ctx: context,
+        target: repliedTo.from,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        from: context.from!,
+        reason: args.reason,
+      })
+
+      if (res.isErr()) {
+        const msg = await context.reply(res.error)
+        await wait(5000)
+        await msg.delete()
+        return
+      }
+
+      await context.reply(res.value)
+      await context.deleteMessages([repliedTo.message_id])
     },
   })
   .createCommand({
@@ -101,28 +104,21 @@ _commandsBase
       const userId = args.username.startsWith("@") ? await getTelegramId(args.username) : parseInt(args.username)
       if (!userId) {
         logger.debug(`unmute: no userId for username ${args.username}`)
+        const msg = await context.reply(fmt(({ b }) => b`@${context.from?.username} user not found`))
+        await wait(5000)
+        await msg.delete()
         return
       }
 
-      const chatMember = await context.getChatMember(userId).catch(() => null)
-      if (!chatMember) {
-        logger.debug(`unmute: no chatMember for userId ${userId}`)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const res = await unmute({ ctx: context, from: context.from!, targetId: userId })
+      if (res.isErr()) {
+        const msg = await context.reply(res.error)
+        await wait(5000)
+        await msg.delete()
         return
       }
 
-      const logMsg = fmt(
-        ({ code, b, n }) => [
-          b`🎤 Unmuted!`,
-          n`${b`Target:`} @${chatMember.user.username} [${code`${chatMember.user.id}`}]`,
-          n`${b`Admin:`} @${context.from?.username} [${code`${context.from?.id}`}]`,
-        ],
-        { sep: "\n" }
-      )
-
-      await context.restrictChatMember(chatMember.user.id, RestrictPermissions.unmute)
-      await context.reply(logMsg)
-      logger.debug(
-        `unmute: user ${chatMember.user.username} [${chatMember.user.id}] has been unmuted in chat ${context.chat.title} [${context.chat.id}]`
-      )
+      await context.reply(res.value)
     },
   })
