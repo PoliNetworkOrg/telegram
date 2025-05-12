@@ -5,6 +5,7 @@ import { z } from "zod"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { RestrictPermissions } from "@/utils/chat"
+import { logger } from "@/logger"
 
 interface MuteProps {
   ctx: Context | ConversationContext
@@ -60,6 +61,9 @@ export async function unmute({ ctx, targetId, from }: UnmuteProps): Promise<Resu
 
   const target = await ctx.getChatMember(targetId).catch(() => null)
   if (!target) return err(fmt(({ b }) => b`@${from.username} this user is not in this chat`))
+
+  if (target.status !== "restricted" || target.can_send_messages)
+    return err(fmt(({ b }) => b`@${from.username} this user is not muted`))
 
   await ctx.restrictChatMember(target.user.id, RestrictPermissions.unmute)
   return ok(
