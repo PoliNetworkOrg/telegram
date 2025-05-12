@@ -49,13 +49,14 @@ export async function ready(): Promise<boolean> {
     return false
   }
 }
+void ready()
 
-type WithRedisCallback<T> = (props: { client: typeof client }) => Promise<T>
-export function withRedis<T>(callback: WithRedisCallback<T>): Promise<T | null> {
-  if (client.isReady) return callback({ client })
-  return new Promise((res) => {
-    res(null)
-  })
-}
+// type WithRedisCallback<T> = (props: { client: typeof client }) => Promise<T>
+// export function withRedis<T>(callback: WithRedisCallback<T>): Promise<T | null> {
+//   if (client.isReady) return callback({ client })
+//   return new Promise((res) => {
+//     res(null)
+//   })
+// }
 
 export const redis = client
