@@ -1,19 +1,21 @@
-import { Context } from "@/lib/managed-commands"
-import { logger } from "./logger"
-import { setTelegramId } from "./utils/telegram-id"
-import { redis } from "./redis"
-import { apiTestQuery } from "./backend"
-import { Bot } from "grammy"
-import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
+import type { Context } from "@/lib/managed-commands"
+
+import { autoRetry } from "@grammyjs/auto-retry"
 import { hydrate } from "@grammyjs/hydrate"
+import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
+import { run, sequentialize } from "@grammyjs/runner"
+import { Bot } from "grammy"
+
+import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
-import { MessageStorage } from "./middlewares/message-storage"
-import { messageLink } from "./middlewares/message-link"
 import { env } from "./env"
+import { logger } from "./logger"
 import { botJoin } from "./middlewares/bot-join"
 import { checkUsername } from "./middlewares/check-username"
-import { autoRetry } from "@grammyjs/auto-retry"
-import { run, sequentialize } from "@grammyjs/runner"
+import { messageLink } from "./middlewares/message-link"
+import { MessageStorage } from "./middlewares/message-storage"
+import { redis } from "./redis"
+import { setTelegramId } from "./utils/telegram-id"
 
 const TEST_CHAT_ID = -1002669533277
 

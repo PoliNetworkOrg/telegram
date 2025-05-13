@@ -1,6 +1,7 @@
-import { getText } from "@/utils/messages"
-import { _commandsBase } from "./_base"
 import { logger } from "@/logger"
+import { getText } from "@/utils/messages"
+
+import { _commandsBase } from "./_base"
 
 _commandsBase.createCommand({
   trigger: "del",

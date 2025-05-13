@@ -1,7 +1,8 @@
-import { fmt } from "@/utils/format"
-import { _commandsBase } from "./_base"
 import { api } from "@/backend"
 import { logger } from "@/logger"
+import { fmt } from "@/utils/format"
+
+import { _commandsBase } from "./_base"
 
 _commandsBase.createCommand({
   trigger: "link",

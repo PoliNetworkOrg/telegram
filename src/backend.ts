@@ -1,8 +1,11 @@
-import { TRPC_PATH, type AppRouter } from "@polinetwork/backend"
-import { createTRPCClient, httpBatchLink, TRPCClient, TRPCClientError } from "@trpc/client"
-import { logger } from "./logger"
-import SuperJSON from "superjson"
+import type { TRPCClient } from "@trpc/client"
+
+import { type AppRouter, TRPC_PATH } from "@polinetwork/backend"
+import { TRPCClientError, createTRPCClient, httpBatchLink } from "@trpc/client"
+import { SuperJSON } from "superjson"
+
 import { env } from "./env"
+import { logger } from "./logger"
 
 const url = "http://" + env.BACKEND_URL + TRPC_PATH
 export const api = createTRPCClient<AppRouter>({ links: [httpBatchLink({ url, transformer: SuperJSON })] })

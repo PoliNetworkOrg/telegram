@@ -1,8 +1,9 @@
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
-import { api, type Role } from "@/backend"
-import { isAllowedInGroups, ManagedCommands } from "@/lib/managed-commands"
-import { RedisAdapter } from "@/redis/storage-adapter"
+
+import { type Role, api } from "@/backend"
+import { ManagedCommands, isAllowedInGroups } from "@/lib/managed-commands"
 import { logger } from "@/logger"
+import { RedisAdapter } from "@/redis/storage-adapter"
 
 const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("conv")
 

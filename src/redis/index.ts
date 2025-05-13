@@ -1,6 +1,7 @@
-import { createClient, SocketClosedUnexpectedlyError } from "redis"
-import { logger } from "@/logger"
+import { SocketClosedUnexpectedlyError, createClient } from "redis"
+
 import { env } from "@/env"
+import { logger } from "@/logger"
 
 let openSuccess = false
 const client = createClient({
