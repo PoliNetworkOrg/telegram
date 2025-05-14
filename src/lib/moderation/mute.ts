@@ -5,6 +5,7 @@ import type { z } from "zod"
 
 import { type Result, err, ok } from "neverthrow"
 
+import { api } from "@/backend"
 import { RestrictPermissions } from "@/utils/chat"
 import { fmt, fmtUser } from "@/utils/format"
 
@@ -17,6 +18,7 @@ interface MuteProps {
 }
 
 export async function mute({ ctx, from, target, reason, duration }: MuteProps): Promise<Result<string, string>> {
+  if (!ctx.chatId) return err(fmt(({ b }) => b`@${from.username} there was an error`))
   if (target.id === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot mute youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot mute the bot!`))
 
@@ -24,25 +26,22 @@ export async function mute({ ctx, from, target, reason, duration }: MuteProps): 
   if (chatMember?.status === "administrator" || chatMember?.status === "creator")
     return err(fmt(({ b }) => b`@${from.username} the user ${fmtUser(target)} cannot be muted`))
 
-  const until_date = duration ? Math.floor(Date.now() / 1000) + duration.parsed : undefined
-  const untilDateString = until_date
-    ? new Date(until_date * 1000).toLocaleString("it", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : null
-
-  await ctx.restrictChatMember(target.id, RestrictPermissions.mute, { until_date })
+  await ctx.restrictChatMember(target.id, RestrictPermissions.mute, { until_date: duration?.timestamp_s })
+  void api.tg.auditLog.create.mutate({
+    targetId: target.id,
+    adminId: from.id,
+    groupId: ctx.chatId,
+    until: duration?.date ?? null,
+    reason,
+    type: "mute",
+  })
   return ok(
     fmt(
       ({ b, n }) => [
         b`🤫 Muted!`,
         n`${b`Target:`} ${fmtUser(target)}`,
         n`${b`Admin:`} ${fmtUser(from)}`,
-        duration ? n`${b`Duration:`} ${duration.raw} (until ${untilDateString})` : undefined,
+        duration ? n`${b`Duration:`} ${duration.raw} (until ${duration.dateStr})` : undefined,
         reason ? n`${b`Reason:`} ${reason}` : undefined,
       ],
       { sep: "\n" }

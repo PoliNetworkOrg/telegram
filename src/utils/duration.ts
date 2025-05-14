@@ -1,4 +1,7 @@
 import { z } from "zod"
+
+import { fmtDate } from "./format"
+
 const DURATIONS = ["m", "h", "d", "w"] as const
 type Duration = (typeof DURATIONS)[number]
 const durationRegex = new RegExp(`(\\d+)[${DURATIONS.join("")}]`)
@@ -14,9 +17,14 @@ const zDuration = z
   .regex(durationRegex)
   .transform((a) => {
     const parsed = parseInt(a.slice(0, -1)) * Durations[a.slice(-1) as Duration]
-    return { parsed, raw: a }
+
+    const date = new Date(Date.now() + parsed * 1000)
+    const timestamp_s = Math.floor(date.getTime() / 1000)
+    const dateStr = fmtDate(date)
+
+    return { secondsFromNow: parsed, raw: a, date, timestamp_s, dateStr }
   })
-  .refine((a) => a.parsed < Durations.d * 366, "The maximum duration is 365 days")
+  .refine((a) => a.secondsFromNow < Durations.d * 366, "The maximum duration is 365 days")
 
 export const duration = {
   zod: zDuration,

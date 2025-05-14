@@ -5,6 +5,7 @@ import type { z } from "zod"
 
 import { type Result, err, ok } from "neverthrow"
 
+import { api } from "@/backend"
 import { fmt, fmtUser } from "@/utils/format"
 
 interface BanProps {
@@ -16,6 +17,7 @@ interface BanProps {
 }
 
 export async function ban({ ctx, target, from, reason, duration }: BanProps): Promise<Result<string, string>> {
+  if (!ctx.chatId) return err(fmt(({ b }) => b`@${from.username} there was an error`))
   if (target.id === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot ban youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot ban the bot!`))
 
@@ -23,25 +25,22 @@ export async function ban({ ctx, target, from, reason, duration }: BanProps): Pr
   if (chatMember?.status === "administrator" || chatMember?.status === "creator")
     return err(fmt(({ b }) => b`@${from.username} the user @${target.username} cannot be banned (admin)`))
 
-  const until_date = duration ? Math.floor(Date.now() / 1000) + duration.parsed : undefined
-  const untilDateString = until_date
-    ? new Date(until_date * 1000).toLocaleString("it", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : null
-
-  await ctx.banChatMember(target.id, { until_date })
+  await ctx.banChatMember(target.id, { until_date: duration?.timestamp_s })
+  void api.tg.auditLog.create.mutate({
+    targetId: target.id,
+    adminId: from.id,
+    groupId: ctx.chatId,
+    until: null,
+    reason,
+    type: "ban",
+  })
   return ok(
     fmt(
       ({ b, n }) => [
         duration ? b`🚫 Temp Banned!` : b`🚫 Perma Banned!`,
         n`${b`Target:`} ${fmtUser(target)}`,
         n`${b`Admin:`} ${fmtUser(from)}`,
-        duration ? n`${b`Duration:`} ${duration.raw} (until ${untilDateString})` : undefined,
+        duration ? n`${b`Duration:`} ${duration.raw} (until ${duration.dateStr})` : undefined,
         reason ? n`${b`Reason:`} ${reason}` : undefined,
       ],
       { sep: "\n" }

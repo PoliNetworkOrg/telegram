@@ -3,6 +3,7 @@ import type { User } from "grammy/types"
 
 import { type Result, err, ok } from "neverthrow"
 
+import { api } from "@/backend"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 
@@ -14,6 +15,7 @@ interface KickProps {
 }
 
 export async function kick({ ctx, target, from, reason }: KickProps): Promise<Result<string, string>> {
+  if (!ctx.chatId) return err(fmt(({ b }) => b`@${from.username} there was an error`))
   if (target.id === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot kick youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot kick the bot!`))
 
@@ -23,6 +25,14 @@ export async function kick({ ctx, target, from, reason }: KickProps): Promise<Re
 
   const until_date = Math.floor(Date.now() / 1000) + duration.values.m
   await ctx.banChatMember(target.id, { until_date })
+  void api.tg.auditLog.create.mutate({
+    targetId: target.id,
+    adminId: from.id,
+    groupId: ctx.chatId,
+    until: null,
+    reason,
+    type: "kick",
+  })
   return ok(
     fmt(
       ({ b, n }) => [
