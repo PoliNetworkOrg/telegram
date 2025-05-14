@@ -142,3 +142,13 @@ export function fmtUser(user: User): string {
   const fullname = user.last_name ? `${user.first_name} ${user.last_name}` : user.first_name
   return formatters.n`${formatters.link(fullname, `tg://user?id=${user.id}`)} [${formatters.code`${user.id}`}]`
 }
+
+export function fmtDate(date: Date): string {
+  return date.toLocaleString("it", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
