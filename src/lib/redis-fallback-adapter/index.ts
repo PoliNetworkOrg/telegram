@@ -1,9 +1,12 @@
-import { StorageAdapter } from "grammy"
-import { LogFn } from "pino"
-import { createClient, RedisClientOptions, RedisClientType, RedisFunctions, RedisModules, RedisScripts } from "redis"
-import sjs from "secure-json-parse"
+import type { StorageAdapter } from "grammy"
+import type { LogFn } from "pino"
+import type { RedisClientOptions, RedisClientType, RedisFunctions, RedisModules, RedisScripts } from "redis"
+import type { ZodType } from "zod"
+
 import { EventEmitter } from "events"
-import { ZodType } from "zod"
+
+import { createClient } from "redis"
+import sjs from "secure-json-parse"
 
 interface Logger {
   info: LogFn
