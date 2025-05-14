@@ -1,7 +1,9 @@
-import { Context } from "@/lib/managed-commands"
-import { MiddlewareFn } from "grammy"
-import { api } from "@/backend"
+import type { Context } from "@/lib/managed-commands"
+import type { MiddlewareFn } from "grammy"
+
 import { Cron } from "croner"
+
+import { api } from "@/backend"
 import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
 

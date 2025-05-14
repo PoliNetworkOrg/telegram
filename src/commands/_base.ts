@@ -1,6 +1,7 @@
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
-import { api, type Role } from "@/backend"
-import { isAllowedInGroups, ManagedCommands } from "@/lib/managed-commands"
+
+import { type Role, api } from "@/backend"
+import { ManagedCommands, isAllowedInGroups } from "@/lib/managed-commands"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { redis } from "@/redis"

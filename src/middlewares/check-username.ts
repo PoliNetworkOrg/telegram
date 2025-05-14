@@ -1,8 +1,9 @@
-import { Filter, MiddlewareFn } from "grammy"
-import { Context } from "@/lib/managed-commands"
-import { fmt } from "@/utils/format"
+import type { Context } from "@/lib/managed-commands"
+import type { Filter, MiddlewareFn } from "grammy"
+
 import { logger } from "@/logger"
 import { RestrictPermissions } from "@/utils/chat"
+import { fmt } from "@/utils/format"
 
 export const checkUsername: MiddlewareFn<Filter<Context, "message">> = async (ctx, next) => {
   if (ctx.from.username === undefined) {

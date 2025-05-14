@@ -1,10 +1,12 @@
+import { z } from "zod"
+
 import { logger } from "@/logger"
-import { _commandsBase } from "./_base"
 import { RestrictPermissions } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
-import { z } from "zod"
 import { wait } from "@/utils/wait"
+
+import { _commandsBase } from "./_base"
 
 const DURATIONS = ["s", "m", "h", "d", "w"] as const
 const Durations: Record<Duration, number> = {
