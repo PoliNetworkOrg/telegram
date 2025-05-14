@@ -1,6 +1,7 @@
 // import "./test"
 import "./mute"
 import "./ban"
+import "./kick"
 import "./del"
 import "./role"
 import "./userid"
