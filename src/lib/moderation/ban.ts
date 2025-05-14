@@ -1,9 +1,11 @@
-import { fmt, fmtUser } from "@/utils/format"
-import { err, ok, type Result } from "neverthrow"
-import type { User } from "grammy/types"
 import type { Context, ConversationContext } from "@/lib/managed-commands/context"
-import { duration } from "@/utils/duration"
-import { z } from "zod"
+import type { duration } from "@/utils/duration"
+import type { User } from "grammy/types"
+import type { z } from "zod"
+
+import { type Result, err, ok } from "neverthrow"
+
+import { fmt, fmtUser } from "@/utils/format"
 
 interface BanProps {
   ctx: Context | ConversationContext

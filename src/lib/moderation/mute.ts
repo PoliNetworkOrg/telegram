@@ -1,10 +1,12 @@
-import { ok, err, type Result } from "neverthrow"
 import type { Context, ConversationContext } from "@/lib/managed-commands/context"
+import type { duration } from "@/utils/duration"
 import type { User } from "grammy/types"
-import { z } from "zod"
-import { duration } from "@/utils/duration"
-import { fmt, fmtUser } from "@/utils/format"
+import type { z } from "zod"
+
+import { type Result, err, ok } from "neverthrow"
+
 import { RestrictPermissions } from "@/utils/chat"
+import { fmt, fmtUser } from "@/utils/format"
 
 interface MuteProps {
   ctx: Context | ConversationContext

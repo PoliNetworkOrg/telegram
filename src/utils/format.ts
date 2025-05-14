@@ -1,4 +1,4 @@
-import { User } from "grammy/types"
+import type { User } from "grammy/types"
 
 /**
  * Internal marker string used to prefix formatted segments.
