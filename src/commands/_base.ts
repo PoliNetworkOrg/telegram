@@ -8,7 +8,7 @@ import { redis } from "@/redis"
 
 const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
   redis,
-  prefix: "convo",
+  prefix: "conv",
   logger,
 })
 

@@ -1,9 +1,11 @@
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
+import { logger } from "@/logger"
 import { redis } from "@/redis"
 
 const usernameRedis = new RedisFallbackAdapter<number>({
   redis,
   prefix: "username",
+  logger,
 })
 
 export async function getTelegramId(username: string): Promise<number | null> {
