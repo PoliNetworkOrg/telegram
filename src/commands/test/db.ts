@@ -1,6 +1,7 @@
 import { api } from "@/backend"
-import { _commandsBase } from "../_base"
 import { fmt } from "@/utils/format"
+
+import { _commandsBase } from "../_base"
 
 _commandsBase.createCommand({
   trigger: "test_db",

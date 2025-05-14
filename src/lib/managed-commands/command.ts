@@ -1,6 +1,6 @@
-import type { Message } from "grammy/types"
 import type { Conversation, ConversationContext } from "./context"
-import { z, ZodTypeDef } from "zod"
+import type { Message } from "grammy/types"
+import type { ZodTypeDef, z } from "zod"
 
 interface BaseArgumentOptions {
   key: string

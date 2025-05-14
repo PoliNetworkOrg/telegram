@@ -1,6 +1,7 @@
+import type { StorageAdapter } from "grammy"
+
 import { logger } from "@/logger"
 import { ready, withRedis } from "@/redis"
-import type { StorageAdapter } from "grammy"
 
 export class RedisAdapter<T> implements StorageAdapter<T> {
   constructor(private prefix: string) {

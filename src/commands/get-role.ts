@@ -1,7 +1,8 @@
-import { getTelegramId } from "@/utils/telegram-id"
-import { _commandsBase } from "./_base"
 import { api } from "@/backend"
 import { fmt } from "@/utils/format"
+import { getTelegramId } from "@/utils/telegram-id"
+
+import { _commandsBase } from "./_base"
 
 _commandsBase.createCommand({
   trigger: "getrole",

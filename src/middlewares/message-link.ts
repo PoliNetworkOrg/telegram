@@ -1,10 +1,13 @@
+import type { Context } from "@/lib/managed-commands"
+import type { NextFunction } from "grammy"
+
+import { InlineKeyboard } from "grammy"
+
 import { api } from "@/backend"
-import { InlineKeyboard, NextFunction } from "grammy"
-import { Context } from "@/lib/managed-commands"
-import { logger } from "@/logger"
-import { fmt } from "@/utils/format"
-import { padChatId } from "@/utils/chat"
 import { messageStorage } from "@/bot"
+import { logger } from "@/logger"
+import { padChatId } from "@/utils/chat"
+import { fmt } from "@/utils/format"
 
 // --- Configuration ---
 const LINK_REGEX = /https?:\/\/t\.me\/c\/(-?\d+)\/(\d+)(?:\/(\d+))?/gi // Regex with global and case-insensitive flags
