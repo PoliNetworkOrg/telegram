@@ -2,13 +2,18 @@ import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 
 import { type Role, api } from "@/backend"
 import { ManagedCommands, isAllowedInGroups } from "@/lib/managed-commands"
+import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
-import { RedisAdapter } from "@/redis/storage-adapter"
+import { redis } from "@/redis"
 
-const convStorageAdapter = new RedisAdapter<VersionedState<ConversationData>>("conv")
+const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
+  redis,
+  prefix: "conv",
+  logger,
+})
 
 export const _commandsBase = new ManagedCommands<Role>({
-  adapter: (await convStorageAdapter.ready()) ? convStorageAdapter : undefined,
+  adapter,
   logger,
   permissionHandler: async ({ command, context: ctx }) => {
     if (!command.permissions) return true

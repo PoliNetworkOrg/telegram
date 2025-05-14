@@ -1,11 +1,19 @@
-import { withRedis } from "@/redis"
+import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
+import { logger } from "@/logger"
+import { redis } from "@/redis"
+
+const usernameRedis = new RedisFallbackAdapter<number>({
+  redis,
+  prefix: "username",
+  logger,
+})
 
 export async function getTelegramId(username: string): Promise<number | null> {
-  const res = await withRedis(({ client }) => client.get(`username:${username.replaceAll("@", "")}:id`))
-  if (!res) return null
-
-  return parseInt(res)
+  const key = `${username.replaceAll("@", "")}:id`
+  return (await usernameRedis.read(key)) ?? null
 }
 
-export const setTelegramId = (username: string, id: number) =>
-  withRedis(({ client }) => client.set(`username:${username}:id`, id))
+export async function setTelegramId(username: string, id: number) {
+  const key = `${username}:id`
+  await usernameRedis.write(key, id)
+}

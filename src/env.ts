@@ -6,7 +6,7 @@ export const env = createEnv({
   server: {
     BOT_TOKEN: z.string(),
     BACKEND_URL: z.string(),
-    REDIS_HOST: z.string().min(1),
+    REDIS_HOST: z.string().min(1).optional(),
     REDIS_PORT: z.coerce.number().min(1).max(65535).default(6379),
     REDIS_USERNAME: z.string().min(1).optional(),
     REDIS_PASSWORD: z.string().min(1).optional(),
