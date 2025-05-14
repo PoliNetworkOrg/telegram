@@ -1,7 +1,7 @@
 - [ ] simple moderation
   - [ ] kick
-  - [ ] ban
-  - [ ] unban
+  - [x] ban
+  - [x] unban
   - [x] mute
   - [x] unmute
 - [ ] advanced moderation

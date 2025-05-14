@@ -1,3 +1,5 @@
+import type { User } from "grammy/types"
+
 /**
  * Internal marker string used to prefix formatted segments.
  * This prevents the main `format` function from re-escaping
@@ -118,7 +120,7 @@ type FormatOptions = {
  * ], { sep: "\n", end: "\n--- End of Report ---" });
  * // Produces a multi-line message with bold, italic, code, and link formatting.
  */
-export function fmt(cb: (formatters: Formatters) => string | string[], opts: FormatOptions = {}): string {
+export function fmt(cb: (formatters: Formatters) => string | (string | undefined)[], opts: FormatOptions = {}): string {
   const res = typeof cb === "function" ? cb(formatters) : cb
   const end = opts.end ?? ""
   const sep = opts.sep ?? " "
@@ -129,8 +131,14 @@ export function fmt(cb: (formatters: Formatters) => string | string[], opts: For
   }
   return (
     res
+      .filter((i) => i !== undefined)
       .map((s) => (!s.startsWith(BYPASS_ESCAPE) ? escapeMarkdownV2(s) : s))
       .join(sep)
       .replaceAll(BYPASS_ESCAPE, "") + end
   )
+}
+
+export function fmtUser(user: User): string {
+  const fullname = user.last_name ? `${user.first_name} ${user.last_name}` : user.first_name
+  return formatters.n`${formatters.link(fullname, `tg://user?id=${user.id}`)} [${formatters.code`${user.id}`}]`
 }
