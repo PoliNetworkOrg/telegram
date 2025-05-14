@@ -1,9 +1,14 @@
-- [ ] simple moderation
-  - [ ] kick
+- [x] simple moderation
+  - [x] kick
   - [x] ban
   - [x] unban
   - [x] mute
   - [x] unmute
+- [ ] group management
+  - [x] allow only specific roles to add bot to group
+  - [ ] link updating nel db? permanenti?
+  - [ ] search
+  - [ ] do not 429 on link checking (undocumented by Telegram?)
 - [ ] advanced moderation
   - [ ] ban_all
   - [ ] unban_all
@@ -13,11 +18,6 @@
   - [ ] exception to send our whatsapp links?
   - [ ] do not delete Direttivo's allowed messages
   - [x] check if user has username
-- [ ] group management
-  - [x] allow only specific roles to add bot to group
-  - [ ] link updating nel db? permanenti?
-  - [ ] search
-  - [ ] do not 429 on link checking (undocumented by Telegram?)
 - [ ] role management
   - [ ] setrole: set role for some username (only Direttivo, maybe HR)
   - [x] getrole: get user role
