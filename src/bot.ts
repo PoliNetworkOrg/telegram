@@ -76,7 +76,7 @@ bot.catch(async (err) => {
 
   const e = err as { ctx: { api?: unknown } }
   delete e.ctx.api // LEAKS API TOKEN IN LOGS!!
-  logger.error(err)
+  logger.error(e)
   await bot.api.sendMessage(TEST_CHAT_ID, msg).catch(() => {
     logger.error("Couldn't send the middleware stack error through the bot")
   })
