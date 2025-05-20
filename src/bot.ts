@@ -101,9 +101,7 @@ process.on("SIGINT", () => void terminate("SIGINT"))
 process.on("SIGTERM", () => void terminate("SIGTERM"))
 
 process.on("unhandledRejection", (reason: Error, promise) => {
-  logger.fatal("UNHANDLED PROMISE REJECTION")
-  logger.fatal(reason)
-  logger.fatal(promise)
+  logger.fatal({ reason, promise }, "UNHANDLED PROMISE REJECTION")
   void bot.api
     .sendMessage(
       TEST_CHAT_ID,
