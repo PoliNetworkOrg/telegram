@@ -1,3 +1,4 @@
+### features
 - [x] simple moderation
   - [x] kick
   - [x] ban
@@ -6,12 +7,14 @@
   - [x] unmute
 - [ ] group management
   - [x] allow only specific roles to add bot to group
-  - [ ] link updating nel db? permanenti?
+  - [x] copy groups from prod table, fix invite links
+  - [ ] create group in backend when the bot joins a new group
+  - [ ] create (or update) group in backend when the bot becomes admin of a group
   - [ ] search
-  - [ ] do not 429 on link checking (undocumented by Telegram?)
 - [ ] advanced moderation
   - [ ] ban_all
   - [ ] unban_all
+  - [x] audit log
 - [ ] automatic moderation
   - [ ] spam check
   - [ ] check spam across different groups (mute + del)
@@ -23,11 +26,12 @@
   - [x] getrole: get user role
 - [ ] automatic messages in some specific groups (like piano di studi)
 - [ ] manage channel for associations
+- [x] cron setup (non mandatory)
+- [x] crash handling
+
+### unimportant features
 - [ ] log channel (maybe redirecting all Pino's messages there)
 - [ ] bot aule ???????????????
-- [x] cron setup (non mandatory)
-- [ ] crash handling
-
 - [ ] manage actions from admin dashboard (trpc's WebSocket impl)
 - [ ] set exceptions on what the bot can do in some specific group
 
