@@ -1,5 +1,6 @@
 // import "./test"
 import "./mute"
+import "./audit"
 import "./ban"
 import "./kick"
 import "./del"
