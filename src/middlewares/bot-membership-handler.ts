@@ -37,7 +37,7 @@ const joinEvent: Record<ChatType, StatusType[]> = {
 }
 
 type MemberContext<C extends Context> = Filter<C, "my_chat_member">
-export class BotChatEvent<C extends Context> implements MiddlewareObj<C> {
+export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C> {
   private composer = new Composer<C>()
 
   constructor(private logChannelId: number) {

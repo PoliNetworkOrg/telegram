@@ -10,7 +10,7 @@ import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
 import { logger } from "./logger"
-import { BotChatEvent } from "./middlewares/bot-chat-event"
+import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
 import { MessageStorage } from "./middlewares/message-storage"
@@ -36,7 +36,7 @@ bot.use(
 )
 
 bot.use(commands)
-bot.use(new BotChatEvent(TEST_CHAT_ID))
+bot.use(new BotMembershipHandler(TEST_CHAT_ID))
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
