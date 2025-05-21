@@ -18,7 +18,7 @@ import { redis } from "./redis"
 import { fmt } from "./utils/format"
 import { setTelegramId } from "./utils/telegram-id"
 
-export const TEST_CHAT_ID = -1002669533277
+const TEST_CHAT_ID = -1002669533277
 
 await apiTestQuery()
 export const messageStorage = new MessageStorage()
