@@ -10,14 +10,13 @@ import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
 import { logger } from "./logger"
-import { botJoin } from "./middlewares/bot-join"
+import { BotChatEvent } from "./middlewares/bot-chat-event"
 import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
 import { MessageStorage } from "./middlewares/message-storage"
 import { redis } from "./redis"
 import { fmt } from "./utils/format"
 import { setTelegramId } from "./utils/telegram-id"
-import { BotChatEvent } from "./middlewares/bot-chat-event"
 
 export const TEST_CHAT_ID = -1002669533277
 
