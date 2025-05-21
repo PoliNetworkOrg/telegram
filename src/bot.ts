@@ -17,8 +17,9 @@ import { MessageStorage } from "./middlewares/message-storage"
 import { redis } from "./redis"
 import { fmt } from "./utils/format"
 import { setTelegramId } from "./utils/telegram-id"
+import { BotChatEvent } from "./middlewares/bot-chat-event"
 
-const TEST_CHAT_ID = -1002669533277
+export const TEST_CHAT_ID = -1002669533277
 
 await apiTestQuery()
 export const messageStorage = new MessageStorage()
@@ -34,7 +35,9 @@ bot.use(
     return [ctx.chat?.id, ctx.from?.id].filter((e) => e !== undefined).map((e) => e.toString())
   })
 )
+
 bot.use(commands)
+bot.use(new BotChatEvent(TEST_CHAT_ID))
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
@@ -45,7 +48,6 @@ bot.on("message", async (ctx, next) => {
 
 bot.on("message", messageLink({ channelIds: [TEST_CHAT_ID] })) // now is configured a test group
 bot.on("message", messageStorage.middleware)
-bot.on("my_chat_member", botJoin({ logChatId: TEST_CHAT_ID }))
 bot.on("message", checkUsername)
 
 bot.catch(async (err) => {
