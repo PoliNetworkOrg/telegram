@@ -1,4 +1,5 @@
 ### features
+
 - [x] simple moderation
   - [x] kick
   - [x] ban
@@ -30,6 +31,7 @@
 - [x] crash handling
 
 ### unimportant features
+
 - [ ] log channel (maybe redirecting all Pino's messages there)
 - [ ] bot aule ???????????????
 - [ ] manage actions from admin dashboard (trpc's WebSocket impl)
