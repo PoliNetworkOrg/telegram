@@ -10,7 +10,7 @@ import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
 import { logger } from "./logger"
-import { botJoin } from "./middlewares/bot-join"
+import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
 import { MessageStorage } from "./middlewares/message-storage"
@@ -34,7 +34,9 @@ bot.use(
     return [ctx.chat?.id, ctx.from?.id].filter((e) => e !== undefined).map((e) => e.toString())
   })
 )
+
 bot.use(commands)
+bot.use(new BotMembershipHandler(TEST_CHAT_ID))
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
@@ -45,7 +47,6 @@ bot.on("message", async (ctx, next) => {
 
 bot.on("message", messageLink({ channelIds: [TEST_CHAT_ID] })) // now is configured a test group
 bot.on("message", messageStorage.middleware)
-bot.on("my_chat_member", botJoin({ logChatId: TEST_CHAT_ID }))
 bot.on("message", checkUsername)
 
 bot.catch(async (err) => {
