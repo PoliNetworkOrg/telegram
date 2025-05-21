@@ -1,17 +1,12 @@
 import type { Context } from "@/lib/managed-commands"
-import type { AppRouter } from "@polinetwork/backend"
-import type { TRPCClient } from "@trpc/client"
-import type { Chat, ChatFullInfo } from "grammy/types"
-import type { Result } from "neverthrow"
 
 import { Composer, type Filter, InlineKeyboard, type MiddlewareFn, type MiddlewareObj } from "grammy"
-import { err, ok } from "neverthrow"
 
 import { api } from "@/backend"
+import { GroupManagement } from "@/lib/group-management"
 import { logger } from "@/logger"
 import { fmt, fmtUser } from "@/utils/format"
 
-type GroupDB = Parameters<TRPCClient<AppRouter>["tg"]["groups"]["create"]["mutate"]>[0][0]
 type ChatType = "group" | "supergroup" | "private" | "channel"
 type StatusType = "member" | "administrator" | "creator" | "restricted" | "left" | "kicked"
 
@@ -54,83 +49,17 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
 
       if (newStatus === "administrator") {
         // promoted to admin event
-        //CANNOT create group "${chat.title}" [${chat.id}] in DB --
-        const chat = await ctx.getChat()
-        const createRes = await this.createGroup(chat)
-        await createRes.match(
-          async (g) => {
-            await ctx.api.sendMessage(
-              this.logChannelId,
-              fmt(
-                ({ n, b, code }) => [
-                  b`✳️ Group created`,
-                  n`${b`Title:`} ${g.title}`,
-                  n`${b`Id:`} ${code`${g.telegramId}`}`,
-                  n`${b`Added by:`} ${fmtUser(ctx.myChatMember.from)}`,
-                ],
-                {
-                  sep: "\n",
-                }
-              ),
-              {
-                reply_markup: new InlineKeyboard().url("Join Group", g.link),
-              }
-            )
-            logger.info({ chat }, `[BCE] Created a new group`)
-          },
-          async (e) => {
-            const ik = new InlineKeyboard()
-            if (chat.invite_link) ik.url("Join Group", chat.invite_link)
-            await ctx.api.sendMessage(
-              this.logChannelId,
-              fmt(
-                ({ n, b, i, code }) => [
-                  b`⚠️ Cannot create group`,
-                  chat.title ? n`${b`Title:`} ${chat.title}` : undefined,
-                  n`${b`Id`}: ${code`${chat.id}`}`,
-                  n`${b`Reason`}: ${e}`,
-                  i`Check logs for more details`,
-                ],
-                { sep: "\n" }
-              ),
-              {
-                reply_markup: chat.invite_link ? new InlineKeyboard().url("Join Group", chat.invite_link) : undefined,
-              }
-            )
-            logger.error({ chat }, `[BCE] Cannot create group into DB. Reason: ${e}`)
-          }
-        )
+        await this.createGroup(ctx)
       }
 
       if (newStatus === "left" || newStatus === "kicked") {
         // left event
-        //
-        const deleteRes = await this.deleteGroup(chat)
-        await deleteRes.match(
-          async () => {
-            await ctx.api.sendMessage(
-              this.logChannelId,
-              fmt(
-                ({ n, b, code }) => [
-                  b`💥 Group deleted`,
-                  n`${b`Title:`} ${chat.title}`,
-                  n`${b`Id:`} ${code`${chat.id}`}`,
-                ],
-                {
-                  sep: "\n",
-                }
-              )
-            )
-            logger.info({ chat }, `[BCE] Deleted a group`)
-          },
-          (e) => {
-            logger.error({ chat }, `[BCE] Cannot delete group from DB. Reason: ${e}`)
-          }
-        )
+        await this.deleteGroup(ctx)
       }
 
       if (newStatus === "restricted") {
-        //
+        // it isn't an admin anymore
+        await this.deleteGroup(ctx)
       }
 
       await next()
@@ -181,23 +110,73 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
     return allowed
   }
 
-  private async deleteGroup(chat: Chat): Promise<Result<void, string>> {
-    const deleted = await api.tg.groups.delete.mutate({ telegramId: chat.id })
-    if (!deleted) return err("it probably wasn't there")
-    return ok()
+  private async deleteGroup(ctx: MemberContext<C>): Promise<void> {
+    const chat = ctx.myChatMember.chat
+    const res = await GroupManagement.delete(chat)
+    await res.match(
+      async () => {
+        await ctx.api.sendMessage(
+          this.logChannelId,
+          fmt(
+            ({ n, b, code }) => [b`💥 Group deleted`, n`${b`Title:`} ${chat.title}`, n`${b`Id:`} ${code`${chat.id}`}`],
+            {
+              sep: "\n",
+            }
+          )
+        )
+        logger.info({ chat }, `[BCE] Deleted a group`)
+      },
+      (e) => {
+        logger.error({ chat }, `[BCE] Cannot delete group from DB. Reason: ${e}`)
+      }
+    )
   }
 
-  private async createGroup(chat: ChatFullInfo): Promise<Result<GroupDB, string>> {
-    if (!chat.invite_link) {
-      return err(`no invite_link, maybe the user does not have permission to "Invite users via link"`)
-    }
-
-    const newGroup: GroupDB = { telegramId: chat.id, title: chat.title, link: chat.invite_link }
-    const res = await api.tg.groups.create.mutate([newGroup])
-    if (!res.length || res[0] !== chat.id) {
-      return err(`unknown`)
-    }
-
-    return ok(newGroup)
+  private async createGroup(ctx: MemberContext<C>): Promise<void> {
+    const chat = await ctx.getChat()
+    const res = await GroupManagement.create(chat)
+    await res.match(
+      async (g) => {
+        await ctx.api.sendMessage(
+          this.logChannelId,
+          fmt(
+            ({ n, b, code }) => [
+              b`✳️ Group created`,
+              n`${b`Title:`} ${g.title}`,
+              n`${b`Id:`} ${code`${g.telegramId}`}`,
+              n`${b`Added by:`} ${fmtUser(ctx.myChatMember.from)}`,
+            ],
+            {
+              sep: "\n",
+            }
+          ),
+          {
+            reply_markup: new InlineKeyboard().url("Join Group", g.link),
+          }
+        )
+        logger.info({ chat }, `[BCE] Created a new group`)
+      },
+      async (e) => {
+        const ik = new InlineKeyboard()
+        if (chat.invite_link) ik.url("Join Group", chat.invite_link)
+        await ctx.api.sendMessage(
+          this.logChannelId,
+          fmt(
+            ({ n, b, i, code }) => [
+              b`⚠️ Cannot create group`,
+              chat.title ? n`${b`Title:`} ${chat.title}` : undefined,
+              n`${b`Id`}: ${code`${chat.id}`}`,
+              n`${b`Reason`}: ${e}`,
+              i`Check logs for more details`,
+            ],
+            { sep: "\n" }
+          ),
+          {
+            reply_markup: chat.invite_link ? new InlineKeyboard().url("Join Group", chat.invite_link) : undefined,
+          }
+        )
+        logger.error({ chat }, `[BCE] Cannot create group into DB. Reason: ${e}`)
+      }
+    )
   }
 }
