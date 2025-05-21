@@ -41,24 +41,17 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
       const newStatus = ctx.myChatMember.new_chat_member.status
       if (chat.type === "private") return next()
 
-      if (joinEvent[chat.type].includes(newStatus)) {
+      if (this.isJoin(ctx)) {
         // joined event
-        const ok = await this.checkAdderPermission(ctx)
-        if (!ok) return next()
+        await this.checkAdderPermission(ctx)
+        return next()
       }
 
       if (newStatus === "administrator") {
         // promoted to admin event
         await this.createGroup(ctx)
-      }
-
-      if (newStatus === "left" || newStatus === "kicked") {
-        // left event
-        await this.deleteGroup(ctx)
-      }
-
-      if (newStatus === "restricted") {
-        // it isn't an admin anymore
+      } else {
+        // not an admin anymore (left, restricted or downgraded)
         await this.deleteGroup(ctx)
       }
 
@@ -68,6 +61,13 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
 
   middleware(): MiddlewareFn<C> {
     return this.composer.middleware()
+  }
+
+  private isJoin(ctx: MemberContext<C>): boolean {
+    const oldStatusCheck = ["left", "kicked"].includes(ctx.myChatMember.old_chat_member.status)
+    const newStatusCheck = joinEvent[ctx.myChatMember.chat.type].includes(ctx.myChatMember.new_chat_member.status)
+
+    return oldStatusCheck && newStatusCheck
   }
 
   private async checkAdderPermission(ctx: MemberContext<C>): Promise<boolean> {
