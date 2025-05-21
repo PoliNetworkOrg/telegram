@@ -9,8 +9,8 @@
 - [ ] group management
   - [x] allow only specific roles to add bot to group
   - [x] copy groups from prod table, fix invite links
-  - [ ] create group in backend when the bot joins a new group
-  - [ ] create (or update) group in backend when the bot becomes admin of a group
+  - [x] create (or update) group in backend when the bot becomes admin of a group
+  - [x] delete group from backend when the bot leaves a group
   - [ ] search
 - [ ] advanced moderation
   - [ ] ban_all
