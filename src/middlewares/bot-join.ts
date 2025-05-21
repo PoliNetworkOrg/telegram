@@ -7,15 +7,37 @@ import { fmt } from "@/utils/format"
 type Config = {
   logChatId: number
 }
+type ChatType = "group" | "supergroup" | "private" | "channel"
+type StatusType = "member" | "administrator" | "creator" | "restricted" | "left" | "kicked"
+
+// if added as member, tg fires:
+// group -> "member"
+// supergroup -> "member"
+// channel -> cannot happen
+//
+// if added as admin, tg fires:
+// group -> "member" AND "administrator"
+// supergroup -> "administrator"
+// channel -> "administrator"
+//
+// therefore on group we only listen for "member", on channel for "administrator", on supergroup for both
+// in private we never listen to this event 
+//
+//
+const joinEvent: Record<ChatType, StatusType[]> = {
+  group: ["member"],
+  supergroup: ["member", "administrator"],
+  channel: ["administrator"],
+  private: [],
+}
 
 export function botJoin({ logChatId }: Config): MiddlewareFn<Filter<Context, "my_chat_member">> {
   return async (ctx, next) => {
-    const groupJoin =
-      ["group", "supergroup"].includes(ctx.myChatMember.chat.type) &&
-      ctx.myChatMember.new_chat_member.status === "member"
-    const channelJoin =
-      ctx.myChatMember.chat.type === "channel" && ctx.myChatMember.new_chat_member.status === "administrator"
-    if (groupJoin || channelJoin) {
+    const chat = ctx.myChatMember.chat.type
+    const status = ctx.myChatMember.new_chat_member.status
+
+    // execute only if it's a join event
+    if (joinEvent[chat].includes(status)) {
       const { allowed } = await api.tg.permissions.canAddBot.query({ userId: ctx.myChatMember.from.id })
       if (!allowed) {
         const left = await ctx.leaveChat().catch(() => false)
@@ -33,6 +55,7 @@ export function botJoin({ logChatId }: Config): MiddlewareFn<Filter<Context, "my
         )
       }
     }
+
     await next()
   }
 }
