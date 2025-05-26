@@ -1,3 +1,4 @@
+import { tgLogger } from "@/bot"
 import { logger } from "@/logger"
 import { getText } from "@/utils/messages"
 
@@ -20,6 +21,7 @@ _commandsBase.createCommand({
       messageType: type,
       sender: repliedTo.from?.username,
     })
+    if (repliedTo.from) await tgLogger.autoModeration({ action: "DELETE", target: repliedTo.from, message: repliedTo })
     await context.deleteMessages([repliedTo.message_id])
     await context.deleteMessage()
   },

@@ -9,6 +9,7 @@ import { Bot, GrammyError, HttpError } from "grammy"
 import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
+import { TgLogger } from "./lib/tg-logger"
 import { logger } from "./logger"
 import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
@@ -35,6 +36,14 @@ bot.use(
   })
 )
 
+export const tgLogger = new TgLogger<Context>(bot, -1002685849173, {
+  banAll: 13,
+  exceptions: 3,
+  autoModeration: 7,
+  adminActions: 5,
+  actionRequired: 10,
+})
+
 bot.use(commands)
 bot.use(new BotMembershipHandler(TEST_CHAT_ID))
 
@@ -48,6 +57,7 @@ bot.on("message", async (ctx, next) => {
 bot.on("message", messageLink({ channelIds: [TEST_CHAT_ID] })) // now is configured a test group
 bot.on("message", messageStorage.middleware)
 bot.on("message", checkUsername)
+// bot.on("message", async (ctx, next) => { console.log(ctx.message); return await next() })
 
 bot.catch(async (err) => {
   const { error } = err
