@@ -1,4 +1,4 @@
-import type { User } from "grammy/types"
+import type { Chat, User } from "grammy/types"
 
 /**
  * Internal marker string used to prefix formatted segments.
@@ -141,6 +141,10 @@ export function fmt(cb: (formatters: Formatters) => string | (string | undefined
 export function fmtUser(user: User): string {
   const fullname = user.last_name ? `${user.first_name} ${user.last_name}` : user.first_name
   return formatters.n`${formatters.link(fullname, `tg://user?id=${user.id}`)} [${formatters.code`${user.id}`}]`
+}
+
+export function fmtChat(chat: Chat, inviteLink?: string): string {
+  return formatters.n`${formatters.b`Group:`} ${inviteLink && chat.title ? formatters.link(chat.title, inviteLink) : chat.title} [${formatters.code`${chat.id}`}]`
 }
 
 export function fmtDate(date: Date): string {
