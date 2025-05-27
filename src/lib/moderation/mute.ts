@@ -1,7 +1,7 @@
 import type { Context, ConversationContext } from "@/lib/managed-commands/context"
 import type { duration } from "@/utils/duration"
 import type { User } from "grammy/types"
-import type { z } from "zod"
+import type { z } from "zod/v4"
 
 import { type Result, err, ok } from "neverthrow"
 

@@ -1,7 +1,7 @@
 import type { duration } from "@/utils/duration"
 import type { GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"
-import type { z } from "zod"
+import type { z } from "zod/v4"
 
 type Duration = z.output<typeof duration.zod>
 

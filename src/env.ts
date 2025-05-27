@@ -1,5 +1,5 @@
 import { createEnv } from "@t3-oss/env-core"
-import { z } from "zod"
+import { z } from "zod/v4"
 
 // coerce is needed for non-string values, because k8s supports only string env
 export const env = createEnv({

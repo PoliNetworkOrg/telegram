@@ -143,7 +143,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     } else {
       if (isTypedArgumentOptions(argument)) {
         const data = argument.type.safeParse(value)
-        if (!data.success) return err(data.error.toString())
+        if (!data.success) return err(data.error.message)
         else return ok(data.data)
       }
       return ok(value)

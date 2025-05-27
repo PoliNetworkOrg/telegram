@@ -1,6 +1,6 @@
 import type { Conversation, ConversationContext } from "./context"
 import type { Message } from "grammy/types"
-import type { ZodTypeDef, z } from "zod"
+import type { z } from "zod/v4"
 
 interface BaseArgumentOptions {
   key: string
@@ -9,7 +9,7 @@ interface BaseArgumentOptions {
 }
 
 interface TypedArgumentOptions<Out = unknown> extends BaseArgumentOptions {
-  type: z.ZodType<Out, ZodTypeDef, string>
+  type: z.ZodType<Out, string>
 }
 
 type RequiredArgumentOptions = BaseArgumentOptions | TypedArgumentOptions
