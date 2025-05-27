@@ -1,5 +1,5 @@
 import type { duration } from "@/utils/duration"
-import type { BotError, Context } from "grammy"
+import type { BotError, Context, GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"
 import type { z } from "zod"
 
@@ -18,10 +18,18 @@ export type BanAllLog = {
     }
 )
 
-export type ExceptionLog<C extends Context> =
+export type ExceptionLog =
   | {
       type: "BOT_ERROR"
-      error: BotError<C>
+      error: GrammyError
+    }
+  | {
+      type: "HTTP_ERROR"
+      error: HttpError
+    }
+  | {
+      type: "GENERIC"
+      error: Error
     }
   | { type: "UNHANDLED_PROMISE"; error: Error; promise: Promise<unknown> }
 
@@ -63,5 +71,9 @@ export type AdminAction = {
     }
   | {
       type: "UNBAN" | "UNMUTE"
+    }
+  | {
+      type: "DELETE"
+      message: Message
     }
 )

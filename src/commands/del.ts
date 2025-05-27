@@ -21,8 +21,8 @@ _commandsBase.createCommand({
       messageType: type,
       sender: repliedTo.from?.username,
     })
-    if (repliedTo.from) await tgLogger.autoModeration({ action: "DELETE", target: repliedTo.from, message: repliedTo })
     await context.deleteMessages([repliedTo.message_id])
     await context.deleteMessage()
+    if (repliedTo.from && context.from) await tgLogger.adminAction({ type: "DELETE", target: repliedTo.from, from: context.from, message: repliedTo, chat: repliedTo.chat })
   },
 })

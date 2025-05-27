@@ -61,36 +61,11 @@ bot.on("message", checkUsername)
 
 bot.catch(async (err) => {
   const { error } = err
-  const msg = fmt(
-    ({ b, code, n, i, codeblock, u, link }) => {
-      const lines = [n`⚠️ An error occured inside the middleware stack`, b`${u`${err.message}`}\n`]
-      if (error instanceof GrammyError) {
-        lines.push(
-          n`${u`${b`grammY Error`} while calling method`}: ${link(
-            error.method,
-            `https://core.telegram.org/bots/api#${error.method.toLowerCase()}`
-          )} (${code`${error.error_code}`})`
-        )
-        lines.push(n`Description: ${i`${error.description}`}`)
-        lines.push(n`Payload:`, codeblock`${JSON.stringify(error.payload, null, 2)}`)
-      } else if (error instanceof HttpError) {
-        lines.push(n`${u`HTTP Error`}: ${code`${error.name}`}`)
-      } else if (error instanceof Error) {
-        lines.push(n`Unknown Error: ${code`${error.name}`}`)
-      } else {
-        lines.push(n`Something besides an ${code`Error`} has been thrown, check the logs for more info`)
-      }
-      return lines
-    },
-    { sep: "\n" }
-  )
+  await tgLogger.exception({ error }, "bot.catch() -- middleware stack")
 
   const e = err as { ctx: { api?: unknown } }
   delete e.ctx.api // LEAKS API TOKEN IN LOGS!!
   logger.error(e)
-  await bot.api.sendMessage(TEST_CHAT_ID, msg).catch(() => {
-    logger.error("Couldn't send the middleware stack error through the bot")
-  })
 })
 
 const runner = run(bot)

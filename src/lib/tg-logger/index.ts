@@ -1,8 +1,10 @@
 import type { Context } from "../managed-commands"
 import type * as Types from "./types"
+import type { Message } from "grammy/types"
 
-import { type Bot, GrammyError, HttpError } from "grammy"
+import { type Bot, GrammyError } from "grammy"
 
+import { logger } from "@/logger"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
 
 type Topics = {
@@ -21,7 +23,39 @@ export class TgLogger<C extends Context> {
   ) {}
 
   private async log(topicId: number, fmtString: string): Promise<void> {
-    await this.bot.api.sendMessage(this.groupId, fmtString, { message_thread_id: topicId })
+    await this.bot.api
+      .sendMessage(this.groupId, fmtString, {
+        message_thread_id: topicId,
+        disable_notification: true,
+      })
+      .catch((e: unknown) => {
+        logger.fatal({ error: e }, `Couldn't log in the telegram group (groupId ${this.groupId} topicId ${topicId}) through the bot`)
+      })
+  }
+
+  private async forward(topicId: number, message: Message): Promise<void> {
+    await this.bot.api
+      .forwardMessage(this.groupId, message.chat.id, message.message_id, {
+        message_thread_id: topicId,
+        disable_notification: true,
+      })
+      .catch(async (e: unknown) => {
+        if (e instanceof GrammyError) {
+          if (e.description === "Bad Request: message to forward not found") {
+            await this.log(
+              topicId,
+              fmt(({ b, i }) => [b`Could not forward the message`, i`It probably was deleted before forwarding`], {
+                sep: "\n",
+              })
+            )
+          } else {
+            await this.exception({ type: "BOT_ERROR", error: e }, "TgLogger.forward")
+            logger.error({ e }, "[TgLogger:forward] There was an error while trying to forward a message")
+          }
+        } else if (e instanceof Error) {
+          await this.exception({ type: "GENERIC", error: e }, "TgLogger.forward")
+        }
+      })
   }
 
   public async banAll(props: Types.BanAllLog): Promise<void> {
@@ -121,6 +155,20 @@ export class TgLogger<C extends Context> {
   public async adminAction(props: Types.AdminAction): Promise<void> {
     let msg: string
     switch (props.type) {
+      case "DELETE":
+        msg = fmt(
+          ({ b, n }) => [
+            b`🗑 Delete`,
+            n`${b`Sender:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${fmtChat(props.message.chat)}`,
+            n`${b`Admin:`} ${fmtUser(props.from)}`,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        break
+
       case "TEMP_BAN":
         msg = fmt(
           ({ b, n }) => [
@@ -228,48 +276,80 @@ export class TgLogger<C extends Context> {
     }
 
     await this.log(this.topics.adminActions, msg)
+    if (props.type === "DELETE") await this.forward(this.topics.adminActions, props.message)
   }
 
-  public async exception(props: Types.ExceptionLog<C>): Promise<void> {
-    let msg: string
-    if (props.type === "UNHANDLED_PROMISE") {
-      msg = fmt(
-        ({ b, u, n, i, codeblock }) => [
-          b`${u`🛑 UNHANDLED PROMISE REJECTION`}`,
-          n`${props.error.name}`,
-          i`${props.error.message}`,
-          codeblock`${props.error.stack ?? `no stack trace available`}`,
-        ],
-        {
-          sep: "\n",
-        }
-      )
-    } else {
-      msg = fmt(
-        ({ b, code, n, i, codeblock, u, link }) => {
-          const lines = [n`⚠️ An error occured inside the middleware stack`, b`${u`${props.error.message}`}\n`]
-          const error = props.error.error
-          if (error instanceof GrammyError) {
-            lines.push(
-              n`${u`${b`grammY Error`} while calling method`}: ${link(
-                error.method,
-                `https://core.telegram.org/bots/api#${error.method.toLowerCase()}`
-              )} (${code`${error.error_code}`})`
-            )
-            lines.push(n`Description: ${i`${error.description}`}`)
-            lines.push(n`Payload:`, codeblock`${JSON.stringify(error.payload, null, 2)}`)
-          } else if (error instanceof HttpError) {
-            lines.push(n`${u`HTTP Error`}: ${code`${error.name}`}`)
-          } else if (error instanceof Error) {
-            lines.push(n`Unknown Error: ${code`${error.name}`}`)
-          } else {
-            lines.push(n`Something besides an ${code`Error`} has been thrown, check the logs for more info`)
+  public async exception(props: Types.ExceptionLog, context?: string): Promise<void> {
+    const contextFmt = context ? fmt(({ n, b }) => n`\n${b`Context:`} ${context}`) : undefined
+    let msg: string = ""
+    switch (props.type) {
+      case "BOT_ERROR":
+        msg = fmt(
+          ({ b, link, n, i, code, codeblock, skip }) => [
+            b`🚨 grammY Error`,
+            n`${b`Called Method:`} ${code`${props.error.method}`} ${link(
+              "API docs",
+              `https://core.telegram.org/bots/api#${props.error.method.toLowerCase()}`
+            )}`,
+
+            i`${props.error.error_code}: ${props.error.description}`,
+            b`Payload:`,
+            codeblock`${JSON.stringify(props.error.payload, null, 2)}`,
+            b`Stack:`,
+            codeblock`${JSON.stringify(props.error.stack ?? "stack trace not available", null, 2)}`,
+            skip`${contextFmt}`,
+          ],
+          {
+            sep: "\n",
           }
-          return lines
-        },
-        { sep: "\n" }
-      )
+        )
+        break
+
+      case "HTTP_ERROR":
+        msg = fmt(
+          ({ n, b, i, codeblock }) => [
+            b`🚨 grammY HTTP Error`,
+            n`${props.error.name}`,
+            i`${props.error.message}`,
+            b`Stack:`,
+            codeblock`${JSON.stringify(props.error.stack ?? "stack trace not available", null, 2)}`,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        break
+
+      case "UNHANDLED_PROMISE":
+        msg = fmt(
+          ({ b, u, n, i, codeblock, skip }) => [
+            b`${u`🛑 UNHANDLED PROMISE REJECTION`}`,
+            n`${props.error.name}`,
+            i`${props.error.message}`,
+            codeblock`${props.error.stack ?? `no stack trace available`}`,
+            skip`${contextFmt}`,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        break
+      case "GENERIC":
+        msg = fmt(
+          ({ b, n, i, codeblock, skip }) => [
+            b`‼️ Generic Error`,
+            n`${props.error.name}`,
+            i`${props.error.message}`,
+            codeblock`${props.error.stack ?? `no stack trace available`}`,
+            skip`${contextFmt}`,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        break
     }
+
     await this.log(this.topics.exceptions, msg)
   }
 }
