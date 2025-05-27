@@ -4,7 +4,7 @@ import { autoRetry } from "@grammyjs/auto-retry"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import { run, sequentialize } from "@grammyjs/runner"
-import { Bot } from "grammy"
+import { Bot, GrammyError, HttpError } from "grammy"
 
 import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
@@ -62,7 +62,15 @@ bot.on("message", checkUsername)
 
 bot.catch(async (err) => {
   const { error } = err
-  await tgLogger.exception({ error }, "bot.catch() -- middleware stack")
+  if (error instanceof GrammyError) {
+    await tgLogger.exception({ type: "BOT_ERROR", error }, "bot.catch() -- middleware stack")
+  } else if (error instanceof HttpError) {
+    await tgLogger.exception({ type: "HTTP_ERROR", error }, "bot.catch() -- middleware stack")
+  } else if (error instanceof Error) {
+    await tgLogger.exception({ type: "GENERIC", error }, "bot.catch() -- middleware stack")
+  } else {
+    await tgLogger.exception({ type: "UNKNOWN", error }, "bot.catch() -- middleware stack")
+  }
 
   const e = err as { ctx: { api?: unknown } }
   delete e.ctx.api // LEAKS API TOKEN IN LOGS!!

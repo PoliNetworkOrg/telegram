@@ -19,6 +19,7 @@ export type BanAllLog = {
 )
 
 export type ExceptionLog =
+  | { type: "UNHANDLED_PROMISE"; error: Error; promise: Promise<unknown> }
   | {
       type: "BOT_ERROR"
       error: GrammyError
@@ -31,7 +32,10 @@ export type ExceptionLog =
       type: "GENERIC"
       error: Error
     }
-  | { type: "UNHANDLED_PROMISE"; error: Error; promise: Promise<unknown> }
+  | {
+      type: "UNKNOWN"
+      error: unknown
+    }
 
 export type AutoModeration = {
   target: User

@@ -381,7 +381,7 @@ export class TgLogger<C extends Context> {
             b`${u`🛑 UNHANDLED PROMISE REJECTION`}`,
             n`${props.error.name}`,
             i`${props.error.message}`,
-            codeblock`${props.error.stack ?? `no stack trace available`}`,
+            codeblock`${JSON.stringify(props.error.stack ?? "stack trace not available", null, 2)}`,
             skip`${contextFmt}`,
           ],
           {
@@ -395,7 +395,20 @@ export class TgLogger<C extends Context> {
             b`‼️ Generic Error`,
             n`${props.error.name}`,
             i`${props.error.message}`,
-            codeblock`${props.error.stack ?? `no stack trace available`}`,
+            codeblock`${JSON.stringify(props.error.stack ?? "stack trace not available", null, 2)}`,
+            skip`${contextFmt}`,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        break
+
+      case "UNKNOWN":
+        msg = fmt(
+          ({ b, codeblock, skip }) => [
+            b`‼️ Unknown Error`,
+            codeblock`${JSON.stringify(props.error, null, 2)}`,
             skip`${contextFmt}`,
           ],
           {
