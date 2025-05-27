@@ -27,9 +27,13 @@ export class TgLogger<C extends Context> {
       .sendMessage(this.groupId, fmtString, {
         message_thread_id: topicId,
         disable_notification: true,
+        link_preview_options: { is_disabled: true },
       })
       .catch((e: unknown) => {
-        logger.fatal({ error: e }, `Couldn't log in the telegram group (groupId ${this.groupId} topicId ${topicId}) through the bot`)
+        logger.fatal(
+          { error: e },
+          `Couldn't log in the telegram group (groupId ${this.groupId} topicId ${topicId}) through the bot`
+        )
       })
   }
 
@@ -58,7 +62,7 @@ export class TgLogger<C extends Context> {
       })
   }
 
-  public async banAll(props: Types.BanAllLog): Promise<void> {
+  public async banAll(props: Types.BanAllLog): Promise<string> {
     let msg: string
     if (props.type === "BAN") {
       msg = fmt(
@@ -84,9 +88,10 @@ export class TgLogger<C extends Context> {
     }
 
     await this.log(this.topics.banAll, msg)
+    return msg
   }
 
-  public async autoModeration(props: Types.AutoModeration): Promise<void> {
+  public async autoModeration(props: Types.AutoModeration): Promise<string> {
     let msg: string
     switch (props.action) {
       case "DELETE":
@@ -150,9 +155,10 @@ export class TgLogger<C extends Context> {
       message_thread_id: this.topics.autoModeration,
       disable_notification: true,
     })
+    return msg
   }
 
-  public async adminAction(props: Types.AdminAction): Promise<void> {
+  public async adminAction(props: Types.AdminAction): Promise<string> {
     let msg: string
     switch (props.type) {
       case "DELETE":
@@ -169,29 +175,14 @@ export class TgLogger<C extends Context> {
         )
         break
 
-      case "TEMP_BAN":
-        msg = fmt(
-          ({ b, n }) => [
-            b`🚫 Temp Ban`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.chat)}`,
-            n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`,
-            n`${b`Admin:`} ${fmtUser(props.from)}`,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
-        break
-
       case "BAN":
         msg = fmt(
           ({ b, n }) => [
-            b`🚫 PERMA Ban`,
+            b`🚫 ${props.duration ? "Temp" : "PERMA"} Ban`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
             n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Admin:`} ${fmtUser(props.from)}`,
+            props.duration ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})` : undefined,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -214,29 +205,14 @@ export class TgLogger<C extends Context> {
         )
         break
 
-      case "TEMP_MUTE":
-        msg = fmt(
-          ({ b, n }) => [
-            b`🤫 Temp Mute`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.chat)}`,
-            n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`,
-            n`${b`Admin:`} ${fmtUser(props.from)}`,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
-        break
-
       case "MUTE":
         msg = fmt(
           ({ b, n }) => [
-            b`🤫 PERMA Mute`,
+            b`🤫 ${props.duration ? "Temp" : "PERMA"} Mute`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
             n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Admin:`} ${fmtUser(props.from)}`,
+            props.duration ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})` : undefined,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -277,9 +253,10 @@ export class TgLogger<C extends Context> {
 
     await this.log(this.topics.adminActions, msg)
     if (props.type === "DELETE") await this.forward(this.topics.adminActions, props.message)
+    return msg
   }
 
-  public async exception(props: Types.ExceptionLog, context?: string): Promise<void> {
+  public async exception(props: Types.ExceptionLog, context?: string): Promise<string> {
     const contextFmt = context ? fmt(({ n, b }) => n`\n${b`Context:`} ${context}`) : undefined
     let msg: string = ""
     switch (props.type) {
@@ -351,5 +328,6 @@ export class TgLogger<C extends Context> {
     }
 
     await this.log(this.topics.exceptions, msg)
+    return msg
   }
 }

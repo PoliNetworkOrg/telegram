@@ -61,12 +61,12 @@ export type AdminAction = {
   chat: Chat
 } & (
   | {
-      type: "KICK" | "BAN" | "MUTE"
+      type: "BAN" | "MUTE"
+      duration?: Duration
       reason?: string
     }
   | {
-      type: "TEMP_BAN" | "TEMP_MUTE"
-      duration: Duration
+      type: "KICK"
       reason?: string
     }
   | {

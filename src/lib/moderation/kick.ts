@@ -4,8 +4,9 @@ import type { User } from "grammy/types"
 import { type Result, err, ok } from "neverthrow"
 
 import { api } from "@/backend"
+import { tgLogger } from "@/bot"
 import { duration } from "@/utils/duration"
-import { fmt, fmtUser } from "@/utils/format"
+import { fmt } from "@/utils/format"
 
 interface KickProps {
   ctx: Context | ConversationContext
@@ -15,7 +16,7 @@ interface KickProps {
 }
 
 export async function kick({ ctx, target, from, reason }: KickProps): Promise<Result<string, string>> {
-  if (!ctx.chatId) return err(fmt(({ b }) => b`@${from.username} there was an error`))
+  if (!ctx.chatId || !ctx.chat) return err(fmt(({ b }) => b`@${from.username} there was an error`))
   if (target.id === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot kick youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot kick the bot!`))
 
@@ -33,15 +34,5 @@ export async function kick({ ctx, target, from, reason }: KickProps): Promise<Re
     reason,
     type: "kick",
   })
-  return ok(
-    fmt(
-      ({ b, n }) => [
-        b`👢 Kicked!`,
-        n`${b`Target:`} ${fmtUser(target)}`,
-        n`${b`Admin:`} ${fmtUser(from)}`,
-        reason ? n`${b`Reason:`} ${reason}` : undefined,
-      ],
-      { sep: "\n" }
-    )
-  )
+  return ok(await tgLogger.adminAction({ type: "KICK", from, target, reason, chat: ctx.chat }))
 }

@@ -6,7 +6,8 @@ import type { z } from "zod"
 import { type Result, err, ok } from "neverthrow"
 
 import { api } from "@/backend"
-import { fmt, fmtUser } from "@/utils/format"
+import { tgLogger } from "@/bot"
+import { fmt } from "@/utils/format"
 
 interface BanProps {
   ctx: Context | ConversationContext
@@ -17,7 +18,7 @@ interface BanProps {
 }
 
 export async function ban({ ctx, target, from, reason, duration }: BanProps): Promise<Result<string, string>> {
-  if (!ctx.chatId) return err(fmt(({ b }) => b`@${from.username} there was an error`))
+  if (!ctx.chatId || !ctx.chat) return err(fmt(({ b }) => b`@${from.username} there was an error`))
   if (target.id === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot ban youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot ban the bot!`))
 
@@ -34,18 +35,7 @@ export async function ban({ ctx, target, from, reason, duration }: BanProps): Pr
     reason,
     type: "ban",
   })
-  return ok(
-    fmt(
-      ({ b, n }) => [
-        duration ? b`🚫 Temp Banned!` : b`🚫 Perma Banned!`,
-        n`${b`Target:`} ${fmtUser(target)}`,
-        n`${b`Admin:`} ${fmtUser(from)}`,
-        duration ? n`${b`Duration:`} ${duration.raw} (until ${duration.dateStr})` : undefined,
-        reason ? n`${b`Reason:`} ${reason}` : undefined,
-      ],
-      { sep: "\n" }
-    )
-  )
+  return ok(await tgLogger.adminAction({ type: "BAN", from, target, duration, reason, chat: ctx.chat }))
 }
 
 interface UnbanProps {
@@ -55,6 +45,7 @@ interface UnbanProps {
 }
 
 export async function unban({ ctx, targetId, from }: UnbanProps): Promise<Result<string, string>> {
+  if (!ctx.chatId || !ctx.chat) return err(fmt(({ b }) => b`@${from.username} there was an error`))
   if (targetId === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot unban youself (smh)`))
   if (targetId === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot unban the bot!`))
 
@@ -63,9 +54,5 @@ export async function unban({ ctx, targetId, from }: UnbanProps): Promise<Result
     return err(fmt(({ b }) => b`@${from.username} this user is not banned in this chat`))
 
   await ctx.unbanChatMember(target.user.id)
-  return ok(
-    fmt(({ b, n }) => [b`✅ Unbanned!`, n`${b`Target:`} ${fmtUser(target.user)}`, n`${b`Admin:`} ${fmtUser(from)}`], {
-      sep: "\n",
-    })
-  )
+  return ok(await tgLogger.adminAction({ type: "UNBAN", from, target: target.user, chat: ctx.chat }))
 }

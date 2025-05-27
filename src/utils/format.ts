@@ -144,7 +144,7 @@ export function fmtUser(user: User): string {
 }
 
 export function fmtChat(chat: Chat, inviteLink?: string): string {
-  return formatters.n`${formatters.b`Group:`} ${inviteLink && chat.title ? formatters.link(chat.title, inviteLink) : chat.title} [${formatters.code`${chat.id}`}]`
+  return formatters.n`${inviteLink && chat.title ? formatters.link(chat.title, inviteLink) : chat.title} [${formatters.code`${chat.id}`}]`
 }
 
 export function fmtDate(date: Date): string {
