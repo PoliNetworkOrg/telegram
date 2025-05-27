@@ -1,6 +1,6 @@
 import type { duration } from "@/utils/duration"
 import type { BotError, Context } from "grammy"
-import type { Message, User } from "grammy/types"
+import type { Chat, Message, User } from "grammy/types"
 import type { z } from "zod"
 
 type Duration = z.output<typeof duration.zod>
@@ -50,6 +50,7 @@ export type AutoModeration = {
 export type AdminAction = {
   from: User
   target: User
+  chat: Chat
 } & (
   | {
       type: "KICK" | "BAN" | "MUTE"

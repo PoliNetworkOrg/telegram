@@ -3,7 +3,7 @@ import type * as Types from "./types"
 
 import { type Bot, GrammyError, HttpError } from "grammy"
 
-import { fmt, fmtUser } from "@/utils/format"
+import { fmt, fmtChat, fmtUser } from "@/utils/format"
 
 type Topics = {
   actionRequired: number
@@ -59,7 +59,8 @@ export class TgLogger<C extends Context> {
         msg = fmt(
           ({ b, n }) => [
             b`🗑 Delete`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`Sender:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${fmtChat(props.message.chat)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -72,7 +73,8 @@ export class TgLogger<C extends Context> {
         msg = fmt(
           ({ b, n }) => [
             b`🗑 Delete + 🤫 Mute`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`Sender:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${fmtChat(props.message.chat)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -85,7 +87,8 @@ export class TgLogger<C extends Context> {
         msg = fmt(
           ({ b, n }) => [
             b`🗑 Delete + 👢 Kick`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`Sender:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${fmtChat(props.message.chat)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -98,7 +101,8 @@ export class TgLogger<C extends Context> {
         msg = fmt(
           ({ b, n }) => [
             b`🗑 Delete + 🚫 Ban`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`Sender:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${fmtChat(props.message.chat)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -107,9 +111,9 @@ export class TgLogger<C extends Context> {
         )
         break
     }
-    await this.log(this.topics.banAll, msg)
+    await this.log(this.topics.autoModeration, msg)
     await this.bot.api.forwardMessage(this.groupId, props.message.chat.id, props.message.message_id, {
-      message_thread_id: this.topics.banAll,
+      message_thread_id: this.topics.autoModeration,
       disable_notification: true,
     })
   }
@@ -122,8 +126,9 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🚫 Temp Ban`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Admin:`} ${fmtUser(props.from)}`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`,
+            n`${b`Admin:`} ${fmtUser(props.from)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -137,6 +142,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🚫 PERMA Ban`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Admin:`} ${fmtUser(props.from)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
@@ -151,6 +157,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`✅ Unban`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Admin:`} ${fmtUser(props.from)}`,
           ],
           {
@@ -164,8 +171,9 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🤫 Temp Mute`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Admin:`} ${fmtUser(props.from)}`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`,
+            n`${b`Admin:`} ${fmtUser(props.from)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -179,6 +187,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🤫 PERMA Mute`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Admin:`} ${fmtUser(props.from)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
@@ -193,6 +202,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🎤 Unmute`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Admin:`} ${fmtUser(props.from)}`,
           ],
           {
@@ -206,6 +216,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`👢 Kick`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Admin:`} ${fmtUser(props.from)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
@@ -216,7 +227,7 @@ export class TgLogger<C extends Context> {
         break
     }
 
-    await this.log(this.topics.banAll, msg)
+    await this.log(this.topics.adminActions, msg)
   }
 
   public async exception(props: Types.ExceptionLog<C>): Promise<void> {
