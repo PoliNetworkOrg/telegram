@@ -144,6 +144,7 @@ export function fmtUser(user: User): string {
 }
 
 export function fmtChat(chat: Chat, inviteLink?: string): string {
+  if (!chat.title && !inviteLink) return formatters.n`${formatters.i`[no-name]`} [${formatters.code`${chat.id}`}]`
   return formatters.n`${inviteLink && chat.title ? formatters.link(chat.title, inviteLink) : chat.title} [${formatters.code`${chat.id}`}]`
 }
 

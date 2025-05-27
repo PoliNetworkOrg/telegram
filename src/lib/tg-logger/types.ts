@@ -1,5 +1,5 @@
 import type { duration } from "@/utils/duration"
-import type { BotError, Context, GrammyError, HttpError } from "grammy"
+import type { GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"
 import type { z } from "zod"
 
@@ -75,5 +75,27 @@ export type AdminAction = {
   | {
       type: "DELETE"
       message: Message
+    }
+)
+
+export type GroupManagement = {
+  chat: Chat
+} & (
+  | {
+      type: "LEAVE" | "LEAVE_FAIL"
+      addedBy: User
+    }
+  | {
+      type: "DELETE"
+    }
+  | {
+      type: "CREATE"
+      addedBy: User
+      inviteLink: string
+    }
+  | {
+      type: "CREATE_FAIL"
+      reason: string
+      inviteLink?: string
     }
 )

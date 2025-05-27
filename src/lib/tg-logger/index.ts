@@ -2,7 +2,7 @@ import type { Context } from "../managed-commands"
 import type * as Types from "./types"
 import type { Message } from "grammy/types"
 
-import { type Bot, GrammyError } from "grammy"
+import { type Bot, GrammyError, InlineKeyboard } from "grammy"
 
 import { logger } from "@/logger"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
@@ -13,6 +13,7 @@ type Topics = {
   autoModeration: number
   adminActions: number
   exceptions: number
+  groupManagement: number
 }
 
 export class TgLogger<C extends Context> {
@@ -22,12 +23,17 @@ export class TgLogger<C extends Context> {
     private topics: Topics
   ) {}
 
-  private async log(topicId: number, fmtString: string): Promise<void> {
+  private async log(
+    topicId: number,
+    fmtString: string,
+    opts?: Parameters<typeof this.bot.api.sendMessage>[2]
+  ): Promise<void> {
     await this.bot.api
       .sendMessage(this.groupId, fmtString, {
         message_thread_id: topicId,
         disable_notification: true,
         link_preview_options: { is_disabled: true },
+        ...opts,
       })
       .catch((e: unknown) => {
         logger.fatal(
@@ -253,6 +259,78 @@ export class TgLogger<C extends Context> {
 
     await this.log(this.topics.adminActions, msg)
     if (props.type === "DELETE") await this.forward(this.topics.adminActions, props.message)
+    return msg
+  }
+
+  public async groupManagement(props: Types.GroupManagement): Promise<string> {
+    let msg: string
+    let reply_markup: InlineKeyboard | undefined
+    switch (props.type) {
+      case "DELETE":
+        msg = fmt(({ b, n }) => [b`💥 Delete`, n`${b`Group:`} ${fmtChat(props.chat)}`], {
+          sep: "\n",
+        })
+        break
+
+      case "LEAVE":
+        msg = fmt(
+          ({ b, n, i }) => [
+            b`💨 Left`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
+            n`${b`Added by:`} ${fmtUser(props.addedBy)}`,
+            n`${i`This user does not have enough permissions to add the bot`}`,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        break
+
+      case "LEAVE_FAIL":
+        msg = fmt(
+          ({ b, n, i }) => [
+            b`‼️ Cannot Left`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
+            n`${b`Added by:`} ${fmtUser(props.addedBy)}`,
+            n`${i`This user does not have enough permissions to add the bot`}`,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        break
+
+      case "CREATE":
+        msg = fmt(
+          ({ b, n }) => [
+            b`✳️ Create`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
+            n`${b`Added by:`} ${fmtUser(props.addedBy)}`,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        reply_markup = new InlineKeyboard().url("Join Group", props.inviteLink)
+        break
+
+      case "CREATE_FAIL":
+        msg = fmt(
+          ({ b, n, i }) => [
+            b`⚠️ Cannot Create`,
+            n`${b`Group:`} ${fmtChat(props.chat)}`,
+            n`${b`Reason`}: ${props.reason}`,
+            i`Check logs for more details`,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        if (props.inviteLink) reply_markup = new InlineKeyboard().url("Join Group", props.inviteLink)
+        break
+    }
+
+    await this.log(this.topics.groupManagement, msg, { reply_markup })
     return msg
   }
 

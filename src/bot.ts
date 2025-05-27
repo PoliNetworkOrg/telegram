@@ -4,7 +4,7 @@ import { autoRetry } from "@grammyjs/auto-retry"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import { run, sequentialize } from "@grammyjs/runner"
-import { Bot, GrammyError, HttpError } from "grammy"
+import { Bot } from "grammy"
 
 import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
@@ -42,10 +42,11 @@ export const tgLogger = new TgLogger<Context>(bot, -1002685849173, {
   autoModeration: 7,
   adminActions: 5,
   actionRequired: 10,
+  groupManagement: 33,
 })
 
 bot.use(commands)
-bot.use(new BotMembershipHandler(TEST_CHAT_ID))
+bot.use(new BotMembershipHandler())
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from

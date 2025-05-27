@@ -3,9 +3,9 @@ import type { Context } from "@/lib/managed-commands"
 import { Composer, type Filter, InlineKeyboard, type MiddlewareFn, type MiddlewareObj } from "grammy"
 
 import { api } from "@/backend"
+import { tgLogger } from "@/bot"
 import { GroupManagement } from "@/lib/group-management"
 import { logger } from "@/logger"
-import { fmt, fmtUser } from "@/utils/format"
 
 type ChatType = "group" | "supergroup" | "private" | "channel"
 type StatusType = "member" | "administrator" | "creator" | "restricted" | "left" | "kicked"
@@ -35,7 +35,7 @@ type MemberContext<C extends Context> = Filter<C, "my_chat_member">
 export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C> {
   private composer = new Composer<C>()
 
-  constructor(private logChannelId: number) {
+  constructor() {
     this.composer.on("my_chat_member", async (ctx, next) => {
       const chat = ctx.myChatMember.chat
       const newStatus = ctx.myChatMember.new_chat_member.status
@@ -75,32 +75,14 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
     if (!allowed) {
       const left = await ctx.leaveChat().catch(() => false)
       if (left) {
-        await ctx.api.sendMessage(
-          this.logChannelId,
-          fmt(
-            ({ b, code, n }) => [
-              b`💨 Left unauthorized group`,
-              n`${b`Title:`} ${ctx.myChatMember.chat.title ?? ""}`,
-              n`${b`Id:`} ${code`${ctx.myChatMember.chat.id}`}`,
-              n`${b`Added by:`} ${fmtUser(ctx.myChatMember.from)}`,
-            ],
-            { sep: "\n" }
-          )
-        )
+        await tgLogger.groupManagement({ type: "LEAVE", chat: ctx.myChatMember.chat, addedBy: ctx.myChatMember.from })
         logger.info({ chat: ctx.myChatMember.chat, from: ctx.myChatMember.from }, `[BCE] Left unauthorized group`)
       } else {
-        await ctx.api.sendMessage(
-          this.logChannelId,
-          fmt(
-            ({ b, code, n }) => [
-              b`‼️ Cannot left unauthorized group`,
-              n`${b`Title:`} ${ctx.myChatMember.chat.title ?? ""}`,
-              n`${b`Id:`} ${code`${ctx.myChatMember.chat.id}`}`,
-              n`${b`Added by:`} ${fmtUser(ctx.myChatMember.from)}`,
-            ],
-            { sep: "\n" }
-          )
-        )
+        await tgLogger.groupManagement({
+          type: "LEAVE_FAIL",
+          chat: ctx.myChatMember.chat,
+          addedBy: ctx.myChatMember.from,
+        })
         logger.error(
           { chat: ctx.myChatMember.chat, from: ctx.myChatMember.from },
           `[BCE] Cannot left unauthorized group`
@@ -115,15 +97,7 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
     const res = await GroupManagement.delete(chat)
     await res.match(
       async () => {
-        await ctx.api.sendMessage(
-          this.logChannelId,
-          fmt(
-            ({ n, b, code }) => [b`💥 Group deleted`, n`${b`Title:`} ${chat.title}`, n`${b`Id:`} ${code`${chat.id}`}`],
-            {
-              sep: "\n",
-            }
-          )
-        )
+        await tgLogger.groupManagement({ type: "DELETE", chat })
         logger.info({ chat }, `[BCE] Deleted a group`)
       },
       (e) => {
@@ -137,44 +111,13 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
     const res = await GroupManagement.create(chat)
     await res.match(
       async (g) => {
-        await ctx.api.sendMessage(
-          this.logChannelId,
-          fmt(
-            ({ n, b, code }) => [
-              b`✳️ Group created`,
-              n`${b`Title:`} ${g.title}`,
-              n`${b`Id:`} ${code`${g.telegramId}`}`,
-              n`${b`Added by:`} ${fmtUser(ctx.myChatMember.from)}`,
-            ],
-            {
-              sep: "\n",
-            }
-          ),
-          {
-            reply_markup: new InlineKeyboard().url("Join Group", g.link),
-          }
-        )
+        await tgLogger.groupManagement({ type: "CREATE", chat, inviteLink: g.link, addedBy: ctx.from })
         logger.info({ chat }, `[BCE] Created a new group`)
       },
       async (e) => {
         const ik = new InlineKeyboard()
         if (chat.invite_link) ik.url("Join Group", chat.invite_link)
-        await ctx.api.sendMessage(
-          this.logChannelId,
-          fmt(
-            ({ n, b, i, code }) => [
-              b`⚠️ Cannot create group`,
-              chat.title ? n`${b`Title:`} ${chat.title}` : undefined,
-              n`${b`Id`}: ${code`${chat.id}`}`,
-              n`${b`Reason`}: ${e}`,
-              i`Check logs for more details`,
-            ],
-            { sep: "\n" }
-          ),
-          {
-            reply_markup: chat.invite_link ? new InlineKeyboard().url("Join Group", chat.invite_link) : undefined,
-          }
-        )
+        await tgLogger.groupManagement({ type: "CREATE_FAIL", chat, inviteLink: chat.invite_link, reason: e })
         logger.error({ chat }, `[BCE] Cannot create group into DB. Reason: ${e}`)
       }
     )
