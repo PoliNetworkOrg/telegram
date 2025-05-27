@@ -362,12 +362,13 @@ export class TgLogger<C extends Context> {
 
       case "HTTP_ERROR":
         msg = fmt(
-          ({ n, b, i, codeblock }) => [
+          ({ n, b, i, skip, codeblock }) => [
             b`🚨 grammY HTTP Error`,
             n`${props.error.name}`,
             i`${props.error.message}`,
             b`Stack:`,
             codeblock`${JSON.stringify(props.error.stack ?? "stack trace not available", null, 2)}`,
+            skip`${contextFmt}`,
           ],
           {
             sep: "\n",
