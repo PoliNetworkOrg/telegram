@@ -16,7 +16,6 @@ import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
 import { MessageStorage } from "./middlewares/message-storage"
 import { redis } from "./redis"
-import { fmt } from "./utils/format"
 import { setTelegramId } from "./utils/telegram-id"
 
 const TEST_CHAT_ID = -1002669533277
@@ -97,22 +96,5 @@ process.on("SIGTERM", () => void terminate("SIGTERM"))
 
 process.on("unhandledRejection", (reason: Error, promise) => {
   logger.fatal({ reason, promise }, "UNHANDLED PROMISE REJECTION")
-  void bot.api
-    .sendMessage(
-      TEST_CHAT_ID,
-      fmt(
-        ({ b, u, n, i, codeblock }) => [
-          b`${u`🛑 UNHANDLED PROMISE REJECTION`}`,
-          n`${reason.name}`,
-          i`${reason.message}`,
-          codeblock`${reason.stack ?? `no stack trace available`}`,
-        ],
-        {
-          sep: "\n",
-        }
-      )
-    )
-    .catch(() => {
-      logger.fatal("Couldn't send the 'unhandled rejection' error message through the bot, how ironic ")
-    })
+  void tgLogger.exception({ type: "UNHANDLED_PROMISE", error: reason, promise })
 })
