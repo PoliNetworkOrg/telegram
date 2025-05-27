@@ -141,7 +141,7 @@ async function makeResponse(
   )
 
   return {
-    message: fmt(({ skip }) => [skip`${headerRes}`, skip`${chatRes}`, skip`${authorRes}`, skip`${msgRes}`], {
+    message: fmt(({ skip }) => [skip`${headerRes}`, fmtChat(chat), skip`${authorRes}`, skip`${msgRes}`], {
       sep: "\n",
     }),
     inviteLink,
