@@ -6,6 +6,7 @@ import type { z } from "zod"
 import { type Result, err, ok } from "neverthrow"
 
 import { api } from "@/backend"
+import { tgLogger } from "@/bot"
 import { RestrictPermissions } from "@/utils/chat"
 import { fmt, fmtUser } from "@/utils/format"
 
@@ -18,7 +19,7 @@ interface MuteProps {
 }
 
 export async function mute({ ctx, from, target, reason, duration }: MuteProps): Promise<Result<string, string>> {
-  if (!ctx.chatId) return err(fmt(({ b }) => b`@${from.username} there was an error`))
+  if (!ctx.chatId || !ctx.chat) return err(fmt(({ b }) => b`@${from.username} there was an error`))
   if (target.id === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot mute youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot mute the bot!`))
 
@@ -35,18 +36,7 @@ export async function mute({ ctx, from, target, reason, duration }: MuteProps): 
     reason,
     type: "mute",
   })
-  return ok(
-    fmt(
-      ({ b, n }) => [
-        b`🤫 Muted!`,
-        n`${b`Target:`} ${fmtUser(target)}`,
-        n`${b`Admin:`} ${fmtUser(from)}`,
-        duration ? n`${b`Duration:`} ${duration.raw} (until ${duration.dateStr})` : undefined,
-        reason ? n`${b`Reason:`} ${reason}` : undefined,
-      ],
-      { sep: "\n" }
-    )
-  )
+  return ok(await tgLogger.adminAction({ type: "MUTE", from, target, duration, reason, chat: ctx.chat }))
 }
 
 interface UnmuteProps {
@@ -56,6 +46,7 @@ interface UnmuteProps {
 }
 
 export async function unmute({ ctx, targetId, from }: UnmuteProps): Promise<Result<string, string>> {
+  if (!ctx.chatId || !ctx.chat) return err(fmt(({ b }) => b`@${from.username} there was an error`))
   if (targetId === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot unmute youself (smh)`))
   if (targetId === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot unmute the bot!`))
 
@@ -66,9 +57,5 @@ export async function unmute({ ctx, targetId, from }: UnmuteProps): Promise<Resu
     return err(fmt(({ b }) => b`@${from.username} this user is not muted`))
 
   await ctx.restrictChatMember(target.user.id, RestrictPermissions.unmute)
-  return ok(
-    fmt(({ b, n }) => [b`🎤 Unmuted!`, n`${b`Target:`} ${fmtUser(target.user)}`, n`${b`Admin:`} ${fmtUser(from)}`], {
-      sep: "\n",
-    })
-  )
+  return ok(await tgLogger.adminAction({ type: "UNMUTE", from, target: target.user, chat: ctx.chat }))
 }

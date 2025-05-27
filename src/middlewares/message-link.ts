@@ -7,7 +7,7 @@ import { api } from "@/backend"
 import { messageStorage } from "@/bot"
 import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
-import { fmt } from "@/utils/format"
+import { fmt, fmtChat } from "@/utils/format"
 
 // --- Configuration ---
 const LINK_REGEX = /https?:\/\/t\.me\/c\/(-?\d+)\/(\d+)(?:\/(\d+))?/gi // Regex with global and case-insensitive flags
@@ -103,17 +103,16 @@ async function makeResponse(
   }
   const inviteLink =
     chat.invite_link ?? (await api.tg.groups.getById.query({ telegramId: chat.id }))[0].link ?? undefined
-  const chatRes = fmt(
-    ({ n, b, code, link }) =>
-      n`${b`Group:`} ${inviteLink && chat.title ? link(chat.title, inviteLink) : chat.title} [${code`${chat.id}`}]`
-  )
 
   const message = await messageStorage.get(chatId, messageId)
   if (message === null) {
     return {
-      message: fmt(({ skip, i }) => [skip`${headerRes}`, skip`${chatRes}`, i`\nmessage details not available`], {
-        sep: "\n",
-      }),
+      message: fmt(
+        ({ skip, i }) => [skip`${headerRes}`, fmtChat(chat, inviteLink), i`\nmessage details not available`],
+        {
+          sep: "\n",
+        }
+      ),
       inviteLink,
     }
   }
@@ -142,7 +141,7 @@ async function makeResponse(
   )
 
   return {
-    message: fmt(({ skip }) => [skip`${headerRes}`, skip`${chatRes}`, skip`${authorRes}`, skip`${msgRes}`], {
+    message: fmt(({ skip }) => [skip`${headerRes}`, fmtChat(chat), skip`${authorRes}`, skip`${msgRes}`], {
       sep: "\n",
     }),
     inviteLink,
