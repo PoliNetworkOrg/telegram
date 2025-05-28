@@ -1,7 +1,7 @@
 import type { StorageAdapter } from "grammy"
 import type { LogFn } from "pino"
 import type { RedisClientOptions, RedisClientType, RedisFunctions, RedisModules, RedisScripts } from "redis"
-import type { ZodType } from "zod"
+import type { ZodType } from "zod/v4"
 
 import { EventEmitter } from "events"
 
