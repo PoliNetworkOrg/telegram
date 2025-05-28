@@ -84,14 +84,14 @@ export class ModerationStack<C extends Context>
             ctx,
             author: ctx.me,
             target: ctx.from,
-            reason: "Automatic moderation detected harmful content" + reasons,
+            reason: `Automatic moderation detected harmful content\n${reasons}`,
             duration: duration.zod.parse("1d"), // 1 day
             message,
           })
 
           const msg = await ctx.reply(
-            fmt(({ i }) => [
-              `⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
+            fmt(({ i, b }) => [
+              b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
               i`If you think this is a mistake, please contact the group administrators.`,
             ])
           )
