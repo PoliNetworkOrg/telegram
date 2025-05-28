@@ -1,4 +1,4 @@
-import type { ContextWith } from "@/lib/managed-commands"
+import type { ContextWith } from "@/utils/types"
 import type { User } from "grammy/types"
 
 import { type Result, err, ok } from "neverthrow"

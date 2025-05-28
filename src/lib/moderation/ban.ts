@@ -1,5 +1,5 @@
-import type { ContextWith } from "@/lib/managed-commands"
 import type { duration } from "@/utils/duration"
+import type { ContextWith } from "@/utils/types"
 import type { User } from "grammy/types"
 import type { z } from "zod/v4"
 
