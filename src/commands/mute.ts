@@ -37,7 +37,7 @@ _commandsBase
         ctx: context,
         target: repliedTo.from,
         message: repliedTo,
-        from: context.from,
+        author: context.from,
         duration: args.duration,
         reason: args.reason,
       })
@@ -73,7 +73,7 @@ _commandsBase
         ctx: context,
         target: repliedTo.from,
         message: repliedTo,
-        from: context.from,
+        author: context.from,
         reason: args.reason,
       })
 

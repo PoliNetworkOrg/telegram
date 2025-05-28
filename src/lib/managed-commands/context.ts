@@ -17,6 +17,6 @@ export type ConversationContext<CT extends Chat["type"]> = ChatTypeContext<
   CommandContext<ParseModeFlavor<HydrateFlavor<TContext>>>,
   CT
 >
-export type ContextWith<P extends OptionalPropertyOf<Context>> = Exclude<Context, P> & {
+export type ContextWith<P extends OptionalPropertyOf<Context>> = Exclude<TContext, P> & {
   [K in P]: NonNullable<Context[P]>
 }
