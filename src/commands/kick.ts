@@ -24,7 +24,7 @@ _commandsBase.createCommand({
     const res = await kick({
       ctx: context,
       target: repliedTo.from,
-      from: context.from,
+      author: context.from,
       reason: args.reason,
     })
     if (res.isErr()) {

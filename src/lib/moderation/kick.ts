@@ -1,4 +1,4 @@
-import type { CommandScopedContext, Context } from "@/lib/managed-commands"
+import type { ContextWith } from "@/lib/managed-commands"
 import type { User } from "grammy/types"
 
 import { type Result, err, ok } from "neverthrow"
@@ -9,30 +9,29 @@ import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 
 interface KickProps {
-  ctx: Context | CommandScopedContext
-  from: User
+  ctx: ContextWith<"chat">
+  author: User
   target: User
   reason?: string
 }
 
-export async function kick({ ctx, target, from, reason }: KickProps): Promise<Result<string, string>> {
-  if (!ctx.chatId || !ctx.chat) return err(fmt(({ b }) => b`@${from.username} there was an error`))
-  if (target.id === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot kick youself (smh)`))
-  if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot kick the bot!`))
+export async function kick({ ctx, target, author, reason }: KickProps): Promise<Result<string, string>> {
+  if (target.id === author.id) return err(fmt(({ b }) => b`@${author.username} you cannot kick youself (smh)`))
+  if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${author.username} you cannot kick the bot!`))
 
   const chatMember = await ctx.getChatMember(target.id).catch(() => null)
   if (chatMember?.status === "administrator" || chatMember?.status === "creator")
-    return err(fmt(({ b }) => b`@${from.username} the user @${target.username} cannot be kicked (admin)`))
+    return err(fmt(({ b }) => b`@${author.username} the user @${target.username} cannot be kicked (admin)`))
 
   const until_date = Math.floor(Date.now() / 1000) + duration.values.m
   await ctx.banChatMember(target.id, { until_date })
   void api.tg.auditLog.create.mutate({
     targetId: target.id,
-    adminId: from.id,
-    groupId: ctx.chatId,
+    adminId: author.id,
+    groupId: ctx.chat.id,
     until: null,
     reason,
     type: "kick",
   })
-  return ok(await tgLogger.adminAction({ type: "KICK", from, target, reason, chat: ctx.chat }))
+  return ok(await tgLogger.adminAction({ type: "KICK", from: author, target, reason, chat: ctx.chat }))
 }

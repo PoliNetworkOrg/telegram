@@ -1,6 +1,5 @@
-import type { CommandScopedContext, Context } from "@/lib/managed-commands"
+import type { ContextWith } from "@/lib/managed-commands"
 import type { duration } from "@/utils/duration"
-import type { Filter } from "grammy"
 import type { Message, User } from "grammy/types"
 import type { z } from "zod/v4"
 
@@ -12,41 +11,46 @@ import { RestrictPermissions } from "@/utils/chat"
 import { fmt, fmtUser } from "@/utils/format"
 
 interface MuteProps {
-  ctx: Filter<Context, "message"> | Filter<Context, "edited_message"> | CommandScopedContext
+  /** The context within which the mute was dispatched, will be used to identify the chat mute */
+  ctx: ContextWith<"chat">
+  /** Message upon which mute is called, will be deleted */
   message: Message
-  from: User
+  /** The user that dispatched the mute command */
+  author: User
+  /** The user that is gonna be muted */
   target: User
   reason?: string
+  /** duration parsed with utility zod type {@link duration} */
   duration?: z.output<typeof duration.zod>
 }
 
 export async function mute({
   ctx,
-  from,
+  author,
   target,
   reason,
   duration,
   message,
 }: MuteProps): Promise<Result<string, string>> {
-  if (target.id === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot mute youself (smh)`))
-  if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot mute the bot!`))
+  if (target.id === author.id) return err(fmt(({ b }) => b`@${author.username} you cannot mute youself (smh)`))
+  if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${author.username} you cannot mute the bot!`))
 
   const chatMember = await ctx.getChatMember(target.id).catch(() => null)
   if (chatMember?.status === "administrator" || chatMember?.status === "creator")
-    return err(fmt(({ b }) => b`@${from.username} the user ${fmtUser(target)} cannot be muted`))
+    return err(fmt(({ b }) => b`@${author.username} the user ${fmtUser(target)} cannot be muted`))
 
   await ctx.restrictChatMember(target.id, RestrictPermissions.mute, { until_date: duration?.timestamp_s })
   void api.tg.auditLog.create.mutate({
     targetId: target.id,
-    adminId: from.id,
-    groupId: ctx.chatId,
+    adminId: author.id,
+    groupId: ctx.chat.id,
     until: duration?.date ?? null,
     reason,
     type: "mute",
   })
 
   const res =
-    from.id === ctx.me.id
+    author.id === ctx.me.id
       ? await tgLogger.autoModeration({
           action: "MUTE_DELETE",
           target,
@@ -54,29 +58,28 @@ export async function mute({
           reason,
           message,
         })
-      : await tgLogger.adminAction({ type: "MUTE", from, target, duration, reason, chat: ctx.chat })
+      : await tgLogger.adminAction({ type: "MUTE", from: author, target, duration, reason, chat: ctx.chat })
 
   await ctx.deleteMessages([message.message_id])
   return ok(res)
 }
 
 interface UnmuteProps {
-  ctx: Context | CommandScopedContext
-  from: User
+  ctx: ContextWith<"chat">
+  author: User
   targetId: number
 }
 
-export async function unmute({ ctx, targetId, from }: UnmuteProps): Promise<Result<string, string>> {
-  if (!ctx.chatId || !ctx.chat) return err(fmt(({ b }) => b`@${from.username} there was an error`))
-  if (targetId === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot unmute youself (smh)`))
-  if (targetId === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot unmute the bot!`))
+export async function unmute({ ctx, targetId, author }: UnmuteProps): Promise<Result<string, string>> {
+  if (targetId === author.id) return err(fmt(({ b }) => b`@${author.username} you cannot unmute youself (smh)`))
+  if (targetId === ctx.me.id) return err(fmt(({ b }) => b`@${author.username} you cannot unmute the bot!`))
 
   const target = await ctx.getChatMember(targetId).catch(() => null)
-  if (!target) return err(fmt(({ b }) => b`@${from.username} this user is not in this chat`))
+  if (!target) return err(fmt(({ b }) => b`@${author.username} this user is not in this chat`))
 
   if (target.status !== "restricted" || target.can_send_messages)
-    return err(fmt(({ b }) => b`@${from.username} this user is not muted`))
+    return err(fmt(({ b }) => b`@${author.username} this user is not muted`))
 
   await ctx.restrictChatMember(target.user.id, RestrictPermissions.unmute)
-  return ok(await tgLogger.adminAction({ type: "UNMUTE", from, target: target.user, chat: ctx.chat }))
+  return ok(await tgLogger.adminAction({ type: "UNMUTE", from: author, target: target.user, chat: ctx.chat }))
 }

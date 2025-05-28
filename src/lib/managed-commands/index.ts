@@ -1,4 +1,4 @@
-export type { Context } from "./context"
+export * from "./context"
 export type { CommandScopedContext } from "./command"
 export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
 
@@ -166,7 +166,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     const args: ArgumentMap = {}
     if (!cmd.args || cmd.args.length === 0) return ok(args)
     const l = cmd.args.length
-    const words = msgText.split(" ")
+    const words = msgText.split(" ").slice(1)
 
     for (const [i, argument] of cmd.args.entries()) {
       const value = i === l - 1 ? words.slice(i).join(" ") : words[i]

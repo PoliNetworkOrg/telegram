@@ -107,7 +107,7 @@ _commandsBase
         return
       }
 
-      const res = await unmute({ ctx: context, from: context.from, targetId: userId })
+      const res = await unmute({ ctx: context, author: context.from, targetId: userId })
       if (res.isErr()) {
         const msg = await context.reply(res.error)
         await wait(5000)
