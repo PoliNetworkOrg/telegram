@@ -1,4 +1,4 @@
-import type { Context, ConversationContext } from "@/lib/managed-commands/context"
+import type { CommandScopedContext, Context } from "@/lib/managed-commands"
 import type { User } from "grammy/types"
 
 import { type Result, err, ok } from "neverthrow"
@@ -9,7 +9,7 @@ import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 
 interface KickProps {
-  ctx: Context | ConversationContext
+  ctx: Context | CommandScopedContext
   from: User
   target: User
   reason?: string

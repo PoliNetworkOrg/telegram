@@ -1,6 +1,7 @@
-import type { Context, ConversationContext } from "@/lib/managed-commands/context"
+import type { CommandScopedContext, Context } from "@/lib/managed-commands"
 import type { duration } from "@/utils/duration"
-import type { User } from "grammy/types"
+import type { Filter } from "grammy"
+import type { Message, User } from "grammy/types"
 import type { z } from "zod"
 
 import { type Result, err, ok } from "neverthrow"
@@ -11,15 +12,22 @@ import { RestrictPermissions } from "@/utils/chat"
 import { fmt, fmtUser } from "@/utils/format"
 
 interface MuteProps {
-  ctx: Context | ConversationContext
+  ctx: Filter<Context, "message"> | Filter<Context, "edited_message"> | CommandScopedContext
+  message: Message
   from: User
   target: User
   reason?: string
   duration?: z.output<typeof duration.zod>
 }
 
-export async function mute({ ctx, from, target, reason, duration }: MuteProps): Promise<Result<string, string>> {
-  if (!ctx.chatId || !ctx.chat) return err(fmt(({ b }) => b`@${from.username} there was an error`))
+export async function mute({
+  ctx,
+  from,
+  target,
+  reason,
+  duration,
+  message,
+}: MuteProps): Promise<Result<string, string>> {
   if (target.id === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot mute youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot mute the bot!`))
 
@@ -36,11 +44,24 @@ export async function mute({ ctx, from, target, reason, duration }: MuteProps): 
     reason,
     type: "mute",
   })
-  return ok(await tgLogger.adminAction({ type: "MUTE", from, target, duration, reason, chat: ctx.chat }))
+
+  const res =
+    from.id === ctx.me.id
+      ? await tgLogger.autoModeration({
+          action: "MUTE_DELETE",
+          target,
+          duration,
+          reason,
+          message,
+        })
+      : await tgLogger.adminAction({ type: "MUTE", from, target, duration, reason, chat: ctx.chat })
+
+  await ctx.deleteMessages([message.message_id])
+  return ok(res)
 }
 
 interface UnmuteProps {
-  ctx: Context | ConversationContext
+  ctx: Context | CommandScopedContext
   from: User
   targetId: number
 }

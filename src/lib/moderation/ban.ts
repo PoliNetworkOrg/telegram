@@ -1,4 +1,4 @@
-import type { Context, ConversationContext } from "@/lib/managed-commands/context"
+import type { CommandScopedContext, Context } from "@/lib/managed-commands"
 import type { duration } from "@/utils/duration"
 import type { User } from "grammy/types"
 import type { z } from "zod"
@@ -10,7 +10,7 @@ import { tgLogger } from "@/bot"
 import { fmt } from "@/utils/format"
 
 interface BanProps {
-  ctx: Context | ConversationContext
+  ctx: Context | CommandScopedContext
   from: User
   target: User
   reason?: string
@@ -39,7 +39,7 @@ export async function ban({ ctx, target, from, reason, duration }: BanProps): Pr
 }
 
 interface UnbanProps {
-  ctx: Context | ConversationContext
+  ctx: Context | CommandScopedContext
   from: User
   targetId: number
 }

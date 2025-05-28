@@ -51,6 +51,7 @@
     "croner": "^9.0.0",
     "grammy": "^1.35.1",
     "neverthrow": "^8.2.0",
+    "openai": "^4.102.0",
     "pino": "^9.6.0",
     "redis": "^4.7.0",
     "secure-json-parse": "^4.0.0",
