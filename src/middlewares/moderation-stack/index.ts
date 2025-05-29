@@ -77,7 +77,9 @@ export class ModerationStack<C extends Context>
       defer(async (ctx) => {
         const message = ctx.message
         const flaggedCategories = await this.checkForHarmfulContent(ctx)
-        const reasons = flaggedCategories.map((cat) => ` - ${cat.category} (${cat.score.toFixed(2)})`).join("\n")
+        const reasons = flaggedCategories
+          .map((cat) => ` - ${cat.category} (${(cat.score * 100).toFixed(1)}%)`)
+          .join("\n")
 
         if (flaggedCategories.some((cat) => cat.aboveThreshold)) {
           await mute({
@@ -121,8 +123,7 @@ export class ModerationStack<C extends Context>
     void client.moderations
       .create({ input: candidates, model: "omni-moderation-latest" })
       .then((response) => {
-        const results = response.results
-        this.emit("results", results)
+        this.emit("results", response.results)
       })
       .catch((error: unknown) => {
         logger.error({ error }, "Error during moderation check")
@@ -131,12 +132,10 @@ export class ModerationStack<C extends Context>
 
   private async waitForResults(): Promise<ModerationResult[]> {
     return new Promise((resolve, reject) => {
-      const h = (results: ModerationResult[]) => {
+      this.once("results", (results) => {
         resolve(results)
-      }
-      this.once("results", h)
+      })
       setTimeout(() => {
-        this.off("results", h)
         reject(new Error("Moderation Check timed out"))
       }, 1000 * 30)
     })
