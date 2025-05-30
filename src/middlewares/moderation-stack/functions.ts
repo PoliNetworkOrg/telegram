@@ -1,6 +1,6 @@
 import type { Category, FlaggedCategory, ModerationResult } from "./types"
 
-import { BANNED_DOMAINS, DELETION_THRESHOLDS, POLINETWORK_DISCORD_GUILD_ID } from "./consts"
+import { BANNED_DOMAINS, DELETION_THRESHOLDS, POLINETWORK_DISCORD_GUILD_ID } from "./constants"
 
 /**
  * Takes each category, and for the flagged ones takes the score (highest among related results) and
