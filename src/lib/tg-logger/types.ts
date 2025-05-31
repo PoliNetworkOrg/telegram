@@ -51,11 +51,13 @@ export type AutoModeration = {
     }
   | {
       action: "KICK_DELETE"
-      reason?: string
     }
   | {
       action: "BAN_DELETE"
       duration?: Duration
+    }
+  | {
+      action: "SILENT"
     }
 )
 

@@ -15,6 +15,7 @@ import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
 import { MessageStorage } from "./middlewares/message-storage"
+import { ModerationStack } from "./middlewares/moderation-stack"
 import { redis } from "./redis"
 import { setTelegramId } from "./utils/telegram-id"
 
@@ -46,6 +47,7 @@ export const tgLogger = new TgLogger<Context>(bot, -1002685849173, {
 
 bot.use(commands)
 bot.use(new BotMembershipHandler())
+bot.use(new ModerationStack())
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from

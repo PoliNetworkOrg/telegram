@@ -1,4 +1,5 @@
-import type { Conversation, ConversationContext } from "./context"
+import type { Context, ConversationContext } from "./context"
+import type { Conversation } from "@grammyjs/conversations"
 import type { Message } from "grammy/types"
 import type { z } from "zod/v4"
 
@@ -53,6 +54,14 @@ type Permissions<TRole extends string, S extends CommandScope> = S extends "priv
   ? PrivatePermissions<TRole>
   : GroupPermissions<TRole>
 
+export type CommandScopedContext<S extends CommandScope = CommandScope> = S extends "private"
+  ? ConversationContext<"private">
+  : S extends "group"
+    ? ConversationContext<"group"> | ConversationContext<"supergroup">
+    : ConversationContext<"private"> | ConversationContext<"group"> | ConversationContext<"supergroup">
+
+export type CommandConversation<S extends CommandScope = CommandScope> = Conversation<Context, CommandScopedContext<S>>
+
 export interface Command<
   A extends CommandArgs,
   R extends CommandReplyTo,
@@ -99,13 +108,13 @@ export interface Command<
      *
      * See {@link https://grammy.dev/ref/core/context Context}
      */
-    context: ConversationContext
+    context: CommandScopedContext<S>
     /**
      * A conversation object to handle complex interactions.
      *
      * See {@link https://grammy.dev/plugins/conversations Conversation}
      */
-    conversation: Conversation
+    conversation: CommandConversation<S>
     /**
      * The arguments passed to the command, this is an object with the keys as the argument keys.
      *

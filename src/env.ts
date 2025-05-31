@@ -12,6 +12,7 @@ export const env = createEnv({
     REDIS_PASSWORD: z.string().min(1).optional(),
     NODE_ENV: z.enum(["development", "production"]).default("development"),
     LOG_LEVEL: z.string().default("DEBUG"),
+    OPENAI_API_KEY: z.string().optional(),
   },
 
   runtimeEnv: process.env,

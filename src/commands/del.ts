@@ -21,7 +21,7 @@ _commandsBase.createCommand({
       messageType: type,
       sender: repliedTo.from?.username,
     })
-    if (repliedTo.from && context.from)
+    if (repliedTo.from)
       await tgLogger.adminAction({
         type: "DELETE",
         target: repliedTo.from,

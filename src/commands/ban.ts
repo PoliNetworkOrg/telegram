@@ -28,8 +28,7 @@ _commandsBase
       const res = await ban({
         ctx: context,
         target: repliedTo.from,
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        from: context.from!,
+        author: context.from,
         reason: args.reason,
       })
       if (res.isErr()) {
@@ -71,8 +70,7 @@ _commandsBase
       const res = await ban({
         ctx: context,
         target: repliedTo.from,
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        from: context.from!,
+        author: context.from,
         duration: args.duration,
         reason: args.reason,
       })
@@ -101,14 +99,13 @@ _commandsBase
       const userId = args.username.startsWith("@") ? await getTelegramId(args.username) : parseInt(args.username)
       if (!userId) {
         logger.debug(`unban: no userId for username ${args.username}`)
-        const msg = await context.reply(fmt(({ b }) => b`@${context.from?.username} user not found`))
+        const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
         await wait(5000)
         await msg.delete()
         return
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const res = await unban({ ctx: context, from: context.from!, targetId: userId })
+      const res = await unban({ ctx: context, author: context.from, targetId: userId })
       if (res.isErr()) {
         const msg = await context.reply(res.error)
         await wait(5000)

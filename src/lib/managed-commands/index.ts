@@ -1,16 +1,19 @@
+export * from "./context"
+export type { CommandScopedContext } from "./command"
 export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
-export type { Context } from "./context"
 
 import type {
   ArgumentMap,
   ArgumentOptions,
   Command,
   CommandArgs,
+  CommandConversation,
   CommandReplyTo,
   CommandScope,
+  CommandScopedContext,
   RepliedTo,
 } from "./command"
-import type { Context, Conversation, ConversationContext } from "./context"
+import type { Context } from "./context"
 import type { ConversationData, ConversationStorage } from "@grammyjs/conversations"
 import type { CommandContext, MiddlewareFn, MiddlewareObj } from "grammy"
 import type { ChatMember, Message } from "grammy/types"
@@ -182,10 +185,12 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
    * @returns A Result containing the parsed arguments and `reply_to_message`, see {@link Command}
    */
   private static parseCommand<R extends CommandReplyTo>(
-    msg: Message.TextMessage,
+    msg: Message,
     cmd: Command<CommandArgs, R, CommandScope>
   ): Result<{ args: ArgumentMap; repliedTo: RepliedTo<R> }, string[]> {
-    const args = this.parseArgs(msg.text, cmd)
+    const text = msg.text ?? msg.caption
+    if (!text) return err(["Cannot parse arguments"])
+    const args = this.parseArgs(text, cmd)
     const repliedTo = this.parseReplyTo(msg, cmd)
     if (args.isOk() && repliedTo.isOk()) {
       return ok({ args: args.value, repliedTo: repliedTo.value })
@@ -270,10 +275,10 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     this.adapter = options?.adapter ?? new MemorySessionStorage()
 
     this.composer.use(
-      conversations<Context, ConversationContext>({
+      conversations<Context, CommandScopedContext>({
         storage: this.adapter,
         plugins: [
-          hydrate(),
+          hydrate<CommandScopedContext>(),
           hydrateReply,
           async (ctx, next) => {
             ctx.api.config.use(parseMode("MarkdownV2"))
@@ -312,9 +317,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     // create a conversation that handles the command execution
     this.composer.use(
       createConversation(
-        async (conv: Conversation, ctx: ConversationContext) => {
-          if (!ctx.has(":text") || !ctx.message) return // how would this even happen? lets be sure that it's always a text message
-
+        async (conv: CommandConversation<S>, ctx: CommandScopedContext<S>) => {
           // check for the requirements in the command invocation
           const requirements = ManagedCommands.parseCommand(ctx.message, cmd)
           if (requirements.isErr()) {

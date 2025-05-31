@@ -11,7 +11,6 @@ _commandsBase.createCommand({
   args: [{ key: "code", description: "The code to verify", optional: true }],
   handler: async ({ context, args, conversation }) => {
     let { code } = args
-    if (context.from === undefined) return
     if (context.from.username === undefined) {
       await context.reply(fmt(() => `You need to set a username to use this command`))
       return
