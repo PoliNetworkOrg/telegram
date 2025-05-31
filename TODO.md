@@ -17,7 +17,8 @@
   - [ ] unban_all
   - [x] audit log
 - [ ] automatic moderation
-  - [ ] spam check
+  - [x] check spam links
+  - [x] check harmful messages
   - [ ] check spam across different groups (mute + del)
   - [ ] exception to send our whatsapp links?
   - [ ] do not delete Direttivo's allowed messages
