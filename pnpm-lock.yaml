@@ -10,19 +10,22 @@ importers:
     dependencies:
       '@grammyjs/auto-retry':
         specifier: ^2.0.2
-        version: 2.0.2(grammy@1.35.1)
+        version: 2.0.2(grammy@1.37.0)
       '@grammyjs/conversations':
-        specifier: ^2.0.1
-        version: 2.0.1(grammy@1.35.1)
+        specifier: ^2.1.0
+        version: 2.1.0(grammy@1.37.0)
       '@grammyjs/hydrate':
         specifier: ^1.4.1
-        version: 1.4.1(grammy@1.35.1)
+        version: 1.4.1(grammy@1.37.0)
+      '@grammyjs/menu':
+        specifier: ^1.3.1
+        version: 1.3.1(grammy@1.37.0)
       '@grammyjs/parse-mode':
         specifier: ^1.11.1
-        version: 1.11.1(grammy@1.35.1)
+        version: 1.11.1(grammy@1.37.0)
       '@grammyjs/runner':
         specifier: ^2.0.3
-        version: 2.0.3(grammy@1.35.1)
+        version: 2.0.3(grammy@1.37.0)
       '@polinetwork/backend':
         specifier: ^0.9.0
         version: 0.9.0
@@ -36,8 +39,8 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0
       grammy:
-        specifier: ^1.35.1
-        version: 1.35.1
+        specifier: ^1.37.0
+        version: 1.37.0
       neverthrow:
         specifier: ^8.2.0
         version: 8.2.0
@@ -327,8 +330,8 @@ packages:
     peerDependencies:
       grammy: ^1.10.0
 
-  '@grammyjs/conversations@2.0.1':
-    resolution: {integrity: sha512-wpOXa4do03JeTVbv42CqsiWRczycey/58mccQekprhNZzJb/GL+/xSx0CSIDoaHm7x2MeGgtmBbpu9tGZQkqng==}
+  '@grammyjs/conversations@2.1.0':
+    resolution: {integrity: sha512-nYoHwFyXcQ2lkQejKReoINknkgFjeIZhyJNMBwHng5UHO/ewHKs1dV2XVaLrKkHTZ1gCZ+dKkjEp26wwHyQeGg==}
     engines: {node: ^12.20.0 || >=14.13.1}
     peerDependencies:
       grammy: ^1.20.1
@@ -338,6 +341,12 @@ packages:
     engines: {node: ^12.20.0 || >=14.13.1}
     peerDependencies:
       grammy: ^1.20.1
+
+  '@grammyjs/menu@1.3.1':
+    resolution: {integrity: sha512-HJslY/n76T1Ar5qDDhNtjLs+PpcrlB9aGsXu3CJHLt147DC3K3lpiRvRW/Xh9/x9hqYVw7KKbnvsQXVgzoU81Q==}
+    engines: {node: '>=12.20.0 || >=14.13.1'}
+    peerDependencies:
+      grammy: ^1.31.0
 
   '@grammyjs/parse-mode@1.11.1':
     resolution: {integrity: sha512-7yEKVtXjNZsG8EX/AOtgR/7Af5QxcmAcTB31Nju+QELvL2uSQMJKlix5rkx695gqocUodLwWtuwCDGDoXGD2xg==}
@@ -351,8 +360,8 @@ packages:
     peerDependencies:
       grammy: ^1.13.1
 
-  '@grammyjs/types@3.19.0':
-    resolution: {integrity: sha512-N0MS+RJG+AGSNuka1GWVj88oyK1oti4I0eQq6jGo4hic3P9MwFfnHjGQuIExZ3tlJUrZYwC/T7gk4Tu3+guJyg==}
+  '@grammyjs/types@3.21.0':
+    resolution: {integrity: sha512-IMj0EpmglPCICuyfGRx4ENKPSuzS2xMSoPgSPzHC6FtnWKDEmJLBP/GbPv/h3TAeb27txqxm/BUld+gbJk6ccQ==}
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -1355,8 +1364,8 @@ packages:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
     engines: {node: '>= 0.4'}
 
-  grammy@1.35.1:
-    resolution: {integrity: sha512-6kNMODaXVj0R+dqYcHqMyjOURsCUFGvVkd7z/dDO1H1cqrGW/kyAFc4oETUKkcyUN/X80N0DchNVuc2JmTPxPQ==}
+  grammy@1.37.0:
+    resolution: {integrity: sha512-UBGqGKux+49t1vm7n/m1BaeXIYbWESXjhaFxG+9z33VTLSHdQJwIOmpNKmZSaoBlSWbAJE+IJZ30X7RfWvEolA==}
     engines: {node: ^12.20.0 || >=14.13.1}
 
   graphemer@1.4.0:
@@ -2485,32 +2494,36 @@ snapshots:
       '@eslint/core': 0.10.0
       levn: 0.4.1
 
-  '@grammyjs/auto-retry@2.0.2(grammy@1.35.1)':
+  '@grammyjs/auto-retry@2.0.2(grammy@1.37.0)':
     dependencies:
       debug: 4.4.0
-      grammy: 1.35.1
+      grammy: 1.37.0
     transitivePeerDependencies:
       - supports-color
 
-  '@grammyjs/conversations@2.0.1(grammy@1.35.1)':
+  '@grammyjs/conversations@2.1.0(grammy@1.37.0)':
     dependencies:
-      grammy: 1.35.1
+      grammy: 1.37.0
 
-  '@grammyjs/hydrate@1.4.1(grammy@1.35.1)':
-    dependencies:
-      abort-controller: 3.0.0
-      grammy: 1.35.1
-
-  '@grammyjs/parse-mode@1.11.1(grammy@1.35.1)':
-    dependencies:
-      grammy: 1.35.1
-
-  '@grammyjs/runner@2.0.3(grammy@1.35.1)':
+  '@grammyjs/hydrate@1.4.1(grammy@1.37.0)':
     dependencies:
       abort-controller: 3.0.0
-      grammy: 1.35.1
+      grammy: 1.37.0
 
-  '@grammyjs/types@3.19.0': {}
+  '@grammyjs/menu@1.3.1(grammy@1.37.0)':
+    dependencies:
+      grammy: 1.37.0
+
+  '@grammyjs/parse-mode@1.11.1(grammy@1.37.0)':
+    dependencies:
+      grammy: 1.37.0
+
+  '@grammyjs/runner@2.0.3(grammy@1.37.0)':
+    dependencies:
+      abort-controller: 3.0.0
+      grammy: 1.37.0
+
+  '@grammyjs/types@3.21.0': {}
 
   '@humanfs/core@0.19.1': {}
 
@@ -3581,9 +3594,9 @@ snapshots:
 
   gopd@1.2.0: {}
 
-  grammy@1.35.1:
+  grammy@1.37.0:
     dependencies:
-      '@grammyjs/types': 3.19.0
+      '@grammyjs/types': 3.21.0
       abort-controller: 3.0.0
       debug: 4.4.0
       node-fetch: 2.7.0
