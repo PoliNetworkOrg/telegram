@@ -319,6 +319,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       createConversation(
         async (conv: CommandConversation<S>, ctx: CommandScopedContext<S>) => {
           // check for the requirements in the command invocation
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           const requirements = ManagedCommands.parseCommand(ctx.message!, cmd)
           if (requirements.isErr()) {
             const msg = await ctx.reply(

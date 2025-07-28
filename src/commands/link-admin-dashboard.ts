@@ -1,16 +1,15 @@
-import { InlineKeyboard } from "grammy"
+import type { ConversationContext } from "@/lib/managed-commands"
+import type { CommandConversation } from "@/lib/managed-commands/command"
+import type { ConversationMenuContext } from "@grammyjs/conversations"
 
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
+import { wait } from "@/utils/wait"
 
 import { _commandsBase } from "./_base"
-import { wait } from "@/utils/wait"
-import { ConversationMenuContext } from "@grammyjs/conversations"
-import { ConversationContext } from "@/lib/managed-commands"
-import { CommandConversation } from "@/lib/managed-commands/command"
 
-const mainMsg = fmt(({ b, n, u }) => [b`🔗 Admin dashboard link`, b`\nStatus: ⏳ WAITING FOR CODE`], { sep: "\n" })
+const mainMsg = fmt(({ b }) => [b`🔗 Admin dashboard link`, b`\nStatus: ⏳ WAITING FOR CODE`], { sep: "\n" })
 
 const warnMsg = fmt(
   ({ n, b, u }) => [
@@ -42,7 +41,7 @@ _commandsBase.createCommand({
   trigger: "link",
   scope: "private",
   description: "Verify the login code for the admin dashboard",
-  handler: async ({ context, args, conversation }) => {
+  handler: async ({ context, conversation }) => {
     await context.deleteMessage()
     // we need username
     if (context.from.username === undefined) {
