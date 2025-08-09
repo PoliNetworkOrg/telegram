@@ -6,12 +6,12 @@
   - [x] unban
   - [x] mute
   - [x] unmute
-- [ ] group management
+- [x] group management
   - [x] allow only specific roles to add bot to group
   - [x] copy groups from prod table, fix invite links
   - [x] create (or update) group in backend when the bot becomes admin of a group
   - [x] delete group from backend when the bot leaves a group
-  - [ ] search
+  - [x] search
 - [ ] advanced moderation
   - [ ] ban_all
   - [ ] unban_all
