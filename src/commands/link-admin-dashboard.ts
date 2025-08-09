@@ -1,40 +1,91 @@
+import type { ConversationContext } from "@/lib/managed-commands"
+import type { CommandConversation } from "@/lib/managed-commands/command"
+import type { ConversationMenuContext } from "@grammyjs/conversations"
+
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
+import { wait } from "@/utils/wait"
 
 import { _commandsBase } from "./_base"
+
+const mainMsg = fmt(({ b }) => [b`🔗 Admin dashboard link`, b`\nStatus: ⏳ WAITING FOR CODE`], { sep: "\n" })
+
+const warnMsg = fmt(
+  ({ n, b, u }) => [
+    b`🔗 Admin dashboard link`,
+    b`\n⚠️ ${u`WARN`}: Proceed ONLY if you started the Link from the Admin Dashboard intentionally.`,
+    b`\nWhat is this?`,
+    `This is the procedure to link your telegram account (id and username) to your account on PoliNetwork's Admin Dashboard.`,
+    `Once entered your username in the Admin Dashboard, it will give you a code; while you insert the code here, the link will be completed.`,
+    b`\nWhy is needed?`,
+    `For two reasons:`,
+    `1. It allows us to verify that you have sufficient permissions to use the dashboard`,
+    n`2. It allows you to perform ${b`Telegram actions`} from the Dashbord (like banning a user)`,
+  ],
+  { sep: "\n" }
+)
+
+async function cancel(
+  conv: CommandConversation<"private">,
+  ctx: ConversationMenuContext<ConversationContext<"private">>
+) {
+  await ctx.editMessageText(fmt(({ n, code }) => n`Linking procedure was canceled. Send ${code`/link`} to restart it.`))
+  await wait(4000)
+  await ctx.deleteMessage()
+  ctx.menu.close()
+  await conv.halt()
+}
 
 _commandsBase.createCommand({
   trigger: "link",
   scope: "private",
   description: "Verify the login code for the admin dashboard",
-  args: [{ key: "code", description: "The code to verify", optional: true }],
-  handler: async ({ context, args, conversation }) => {
-    let { code } = args
+  handler: async ({ context, conversation }) => {
+    await context.deleteMessage()
+    // we need username
     if (context.from.username === undefined) {
       await context.reply(fmt(() => `You need to set a username to use this command`))
       return
     }
 
-    if (code === undefined) {
-      let question = await context.reply(
-        fmt(() => `Please send me the code you received in the admin dashboard`),
-        { reply_markup: { force_reply: true } }
-      )
-      let { message } = await conversation.waitFor("message")
-      while (!/^\d{6}$/.test(message.text)) {
-        await question.delete()
-        await message.delete()
-        question = await context.reply(
-          fmt(() => `Invalid code, please paste the 6 digit code directly`),
-          { reply_markup: { force_reply: true } }
+    const cancelMenu = conversation.menu().text("Cancel", (ctx) => cancel(conversation, ctx))
+    const warnMenu = conversation
+      .menu()
+      .text("Proceed", async (ctx) => {
+        await ctx.editMessageText(mainMsg, { reply_markup: cancelMenu })
+      })
+      .row()
+      .text("Cancel", (ctx) => cancel(conversation, ctx))
+
+    const msg = await context.reply(warnMsg, { reply_markup: warnMenu })
+    let failed = false
+    let codeMsg = await conversation.waitFor("message:text")
+    while (!/^\d{6}$/.test(codeMsg.message.text)) {
+      void codeMsg.deleteMessage()
+      if (!failed) {
+        // first time invalid
+        await msg.editText(
+          fmt(
+            ({ b }) => [
+              b`🔗 Admin dashboard link`,
+              b`\nStatus: ⭕️ Invalid Code (must be a 6-digit number), send again`,
+            ],
+            { sep: "\n" }
+          ),
+          { reply_markup: cancelMenu, parse_mode: "MarkdownV2" }
         )
-        message = (await conversation.waitFor("message")).message
+        failed = true
       }
-      code = message.text
-      void question.delete()
-      void message.delete()
+      codeMsg = await conversation.waitFor("message:text")
     }
+
+    const code = codeMsg.message.text
+    await codeMsg.deleteMessage()
+    await msg.editText(
+      fmt(({ b }) => [b`🔗 Admin dashboard link`, b`\nStatus: 🔄 Verifying the code ${code}`], { sep: "\n" }),
+      { parse_mode: "MarkdownV2" }
+    )
 
     const res = await api.tg.link.link.query({
       code,
@@ -43,15 +94,26 @@ _commandsBase.createCommand({
     })
     if (res.error) {
       logger.error(res.error)
-      await context.reply(fmt(() => `Invalid code or your username does not match.`))
-      return
-    }
-    if (res.success) {
-      await context.reply(
-        fmt(({ b }) => [b`Code verified!`, `This telegram account is now linked in the admin dashboard.`], {
-          sep: "\n",
-        })
+
+      await msg.editText(
+        fmt(
+          ({ b }) => [
+            b`🔗 Admin dashboard link`,
+            b`\nStatus: 🔴 Invalid code or username mismatch`,
+            `You need to send again the command to try again.`,
+          ],
+          { sep: "\n" }
+        ),
+        { parse_mode: "MarkdownV2" }
+      )
+    } else if (res.success) {
+      await msg.editText(
+        fmt(({ b }) => [b`🔗 Admin dashboard link`, b`\nStatus: ✅ LINKED SUCCESSFULLY`], { sep: "\n" }),
+        { parse_mode: "MarkdownV2" }
       )
     }
+
+    await wait(4000)
+    await msg.delete()
   },
 })
