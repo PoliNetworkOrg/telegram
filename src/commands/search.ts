@@ -7,6 +7,9 @@ import { _commandsBase } from "./_base"
 
 const LIMIT = 9
 
+type Group = Awaited<ReturnType<typeof api.tg.groups.search.query>>["groups"][number]
+type LinkedGroup = Group & { link: string }
+
 _commandsBase.createCommand({
   trigger: "search",
   scope: "both",
@@ -38,11 +41,10 @@ _commandsBase.createCommand({
 
     const inlineKeyboard = new InlineKeyboard()
     res.groups
-      .filter((g) => g.link !== null)
+      .filter((g): g is LinkedGroup => g.link !== null)
       .forEach((g, i) => {
         if (i % 3 === 0) inlineKeyboard.row()
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        inlineKeyboard.url(g.title, g.link!)
+        inlineKeyboard.url(g.title, g.link)
       })
 
     await context.reply(reply, { link_preview_options: { is_disabled: true }, reply_markup: inlineKeyboard })
