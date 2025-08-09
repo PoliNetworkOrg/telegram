@@ -15,6 +15,15 @@ _commandsBase.createCommand({
   handler: async ({ context, args }) => {
     try {
       const res = await api.tg.groups.search.query({ query: args.query, limit: LIMIT })
+      if (res.count === 0) {
+        await context.reply(
+          fmt(({ n, b, i }) => [b`🔎 Group Search`, n`${i`Query:`} ${b`${args.query}`}`, b`❌ No results`], {
+            sep: "\n",
+          })
+        )
+        return
+      }
+
       const noInviteLink = res.groups.filter((g) => g.link === null)
       const reply = fmt(
         ({ n, b, i }) => [
