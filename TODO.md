@@ -1,4 +1,6 @@
-### features
+# TODO
+
+## features
 
 - [x] simple moderation
   - [x] kick
@@ -16,12 +18,12 @@
   - [ ] ban_all
   - [ ] unban_all
   - [x] audit log
-  - [ ] @admin (and similar) to allow user to report -- if using @admin, 
+  - [ ] @admin (and similar) to allow user to report -- if using @admin,
   - [ ] track ban, mute and kick done via telegram UI (not by command)
 - [ ] automatic moderation
   - [x] check spam links
   - [x] check harmful messages
-  - [ ] check spam across different groups (mute + del)
+  - [x] check spam across different groups (mute + del)
   - [ ] exception to send our whatsapp links?
   - [ ] do not delete Direttivo's allowed messages
   - [x] check if user has username
@@ -36,7 +38,7 @@
 - [ ] backfill mod actions done with previous bot(s)
 - [x] log channel (note: not all logs go there)
 
-### unimportant features
+## unimportant features
 
 - [ ] bot aule ???????????????
 - [ ] manage actions from admin dashboard (trpc's WebSocket impl)
