@@ -16,6 +16,8 @@
   - [ ] ban_all
   - [ ] unban_all
   - [x] audit log
+  - [ ] @admin (and similar) to allow user to report
+  - [ ] track ban, mute and kick done via telegram UI (not by command)
 - [ ] automatic moderation
   - [x] check spam links
   - [x] check harmful messages
@@ -23,6 +25,7 @@
   - [ ] exception to send our whatsapp links?
   - [ ] do not delete Direttivo's allowed messages
   - [x] check if user has username
+  - [ ] group-specific moderation (eg. #cerco #vendo in polihouse)
 - [ ] role management
   - [ ] setrole: set role for some username (only Direttivo, maybe HR)
   - [x] getrole: get user role
@@ -30,10 +33,11 @@
 - [ ] manage channel for associations
 - [x] cron setup (non mandatory)
 - [x] crash handling
+- [ ] backfill mod actions done with previous bot(s)
+- [x] log channel (note: not all logs go there)
 
 ### unimportant features
 
-- [ ] log channel (maybe redirecting all Pino's messages there)
 - [ ] bot aule ???????????????
 - [ ] manage actions from admin dashboard (trpc's WebSocket impl)
 - [ ] set exceptions on what the bot can do in some specific group
