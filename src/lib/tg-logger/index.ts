@@ -99,14 +99,18 @@ export class TgLogger<C extends Context> {
 
   public async autoModeration(props: Types.AutoModeration): Promise<string> {
     let msg: string
-    const { invite_link } = await this.bot.api.getChat(props.message.chat.id)
+    let chatstr: string
+    if (props.message) {
+      const { invite_link } = await this.bot.api.getChat(props.message.chat.id)
+      chatstr = fmtChat(props.message.chat, invite_link)
+    }
     switch (props.action) {
       case "DELETE":
         msg = fmt(
           ({ b, n }) => [
             b`🗑 Delete`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat, invite_link)}`,
+            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -120,7 +124,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🗑 Delete + 🤫 Mute`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat, invite_link)}`,
+            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -134,7 +138,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🗑 Delete + 👢 Kick`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat, invite_link)}`,
+            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -148,7 +152,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🗑 Delete + 🚫 Ban`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat, invite_link)}`,
+            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -162,7 +166,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🔶 Possible Harmful Content Detection`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat, invite_link)}`,
+            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -172,10 +176,11 @@ export class TgLogger<C extends Context> {
         break
     }
     await this.log(this.topics.autoModeration, msg)
-    await this.bot.api.forwardMessage(this.groupId, props.message.chat.id, props.message.message_id, {
-      message_thread_id: this.topics.autoModeration,
-      disable_notification: true,
-    })
+    if (props.message)
+      await this.bot.api.forwardMessage(this.groupId, props.message.chat.id, props.message.message_id, {
+        message_thread_id: this.topics.autoModeration,
+        disable_notification: true,
+      })
     return msg
   }
 

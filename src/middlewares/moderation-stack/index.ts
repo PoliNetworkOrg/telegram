@@ -6,10 +6,13 @@ import EventEmitter from "events"
 
 import { Composer } from "grammy"
 import OpenAI from "openai"
+import ssdeep from "ssdeep.js"
 
 import { tgLogger } from "@/bot"
 import { mute } from "@/lib/moderation"
 import { logger } from "@/logger"
+import { redis } from "@/redis"
+import { RestrictPermissions } from "@/utils/chat"
 import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
@@ -109,6 +112,49 @@ export class ModerationStack<C extends Context>
             message,
             reason: `Message flagged for moderation: \n${reasons}`,
           })
+        }
+      })
+    )
+
+    this.composer.on(
+      ["message:text", "message:media"],
+      defer(async (ctx) => {
+        if (ctx.from.is_bot) return
+        const { text } = getText(ctx.message)
+        if (text === null) return
+        const key = `moderation:multichatspam:${ctx.from.id}`
+        const hash = ssdeep.digest(text)
+        const res = await redis.rPush(key, `${hash}|${ctx.chat.id}|${ctx.message.message_id}`)
+        await redis.expire(key, 500)
+        if (res >= 3) {
+          const range = await redis.lRange(key, 0, -1)
+          const chats = range
+            .map((r) => r.split("|"))
+            .filter((v) => ssdeep.similarity(v[0], hash) > 90)
+            .reduce<{ chatid: string; messageids: number[] }[]>((acc, [_, chatid, mid]) => {
+              const e = acc.find((v) => v.chatid === chatid)
+              if (e) e.messageids.push(parseInt(mid))
+              else acc.push({ chatid, messageids: [parseInt(mid)] })
+              return acc
+            }, [])
+          if (chats.length === 0) return
+          await tgLogger.autoModeration({
+            action: "SILENT",
+            message: ctx.message,
+            target: ctx.from,
+            reason: "Multichat spam detected",
+          })
+          const deleted = await Promise.all(
+            chats.map(async (chat) => {
+              await ctx.api.restrictChatMember(chat.chatid, ctx.from.id, RestrictPermissions.mute, {
+                until_date: duration.zod.parse("1d").timestamp_s,
+              })
+              return await ctx.api.deleteMessages(chat.chatid, chat.messageids).catch(() => false)
+            })
+          )
+          logger.info(
+            `Deleted messages from ${deleted.filter((v) => v).length}/${chats.length} chats due to multichat spam. (${res} total messages)`
+          )
         }
       })
     )

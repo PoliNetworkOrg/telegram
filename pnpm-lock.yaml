@@ -35,6 +35,9 @@ importers:
       '@trpc/client':
         specifier: ^11.1.1
         version: 11.1.1(@trpc/server@11.1.1(typescript@5.7.3))(typescript@5.7.3)
+      '@types/ssdeep.js':
+        specifier: ^0.0.2
+        version: 0.0.2
       croner:
         specifier: ^9.0.0
         version: 9.0.0
@@ -56,6 +59,9 @@ importers:
       secure-json-parse:
         specifier: ^4.0.0
         version: 4.0.0
+      ssdeep.js:
+        specifier: ^0.0.3
+        version: 0.0.3
       superjson:
         specifier: ^2.2.2
         version: 2.2.2
@@ -627,6 +633,9 @@ packages:
 
   '@types/node@22.13.1':
     resolution: {integrity: sha512-jK8uzQlrvXqEU91UxiK5J7pKHyzgnI1Qnl0QDHIgVGuolJhRb9EEl28Cj9b3rGR8B2lhFCtvIm5os8lFnO/1Ew==}
+
+  '@types/ssdeep.js@0.0.2':
+    resolution: {integrity: sha512-WSmAg2j7lIuETBTlos0erBWeL9C8nLe8rF5IydmHkhD8w64gyrbALINtXS+i0qJv6p0fEDRkNYLLC9KGderQJw==}
 
   '@typescript-eslint/eslint-plugin@8.23.0':
     resolution: {integrity: sha512-vBz65tJgRrA1Q5gWlRfvoH+w943dq9K1p1yDBY2pc+a1nbBLZp7fB9+Hk8DaALUbzjqlMfgaqlVPT1REJdkt/w==}
@@ -1976,6 +1985,9 @@ packages:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
     engines: {node: '>= 10.x'}
 
+  ssdeep.js@0.0.3:
+    resolution: {integrity: sha512-QXKADMuEsOmRYGlB9JvrulcF5NLAjAvYLg3qDHUrEEilUFLKoL4fUQDw1s7hF+mOL96jwcdyXpnmCqyNu7Wm3Q==}
+
   stable-hash@0.0.5:
     resolution: {integrity: sha512-+L3ccpzibovGXFK+Ap/f8LOS0ahMrHTf3xu7mMLSpEGU0EO9ucaysSylKo9eRDFNhWve/y275iPmIZ4z39a9iA==}
 
@@ -2738,6 +2750,8 @@ snapshots:
   '@types/node@22.13.1':
     dependencies:
       undici-types: 6.20.0
+
+  '@types/ssdeep.js@0.0.2': {}
 
   '@typescript-eslint/eslint-plugin@8.23.0(@typescript-eslint/parser@8.23.0(eslint@9.20.0)(typescript@5.7.3))(eslint@9.20.0)(typescript@5.7.3)':
     dependencies:
@@ -4224,6 +4238,8 @@ snapshots:
       whatwg-url: 7.1.0
 
   split2@4.2.0: {}
+
+  ssdeep.js@0.0.3: {}
 
   stable-hash@0.0.5: {}
 

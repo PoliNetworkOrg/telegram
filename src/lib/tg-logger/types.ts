@@ -39,14 +39,16 @@ export type ExceptionLog =
 
 export type AutoModeration = {
   target: User
-  message: Message
+  message?: Message
   reason?: string
 } & (
   | {
       action: "DELETE"
+      message: Message
     }
   | {
       action: "MUTE_DELETE"
+      message: Message
       duration?: Duration
     }
   | {
