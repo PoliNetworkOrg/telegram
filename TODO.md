@@ -21,6 +21,7 @@
   - [ ] @admin (and similar) to allow user to report
   - [ ] track ban, mute and kick done via telegram UI (not by command)
 - [ ] automatic moderation
+  - [ ] delete non-latin alphabet characters 
   - [x] check spam links
   - [x] check harmful messages
   - [x] check spam across different groups (mute + del)
