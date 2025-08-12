@@ -1,3 +1,4 @@
+import type { MultiChatMsgCollection } from "@/middlewares/auto-moderation-stack/types"
 import type { duration } from "@/utils/duration"
 import type { GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"
@@ -39,14 +40,16 @@ export type ExceptionLog =
 
 export type AutoModeration = {
   target: User
-  message: Message
+  message?: Message
   reason?: string
 } & (
   | {
       action: "DELETE"
+      message: Message
     }
   | {
       action: "MUTE_DELETE"
+      message: Message
       duration?: Duration
     }
   | {
@@ -55,6 +58,11 @@ export type AutoModeration = {
   | {
       action: "BAN_DELETE"
       duration?: Duration
+    }
+  | {
+      action: "MULTI_CHAT_SPAM"
+      duration: Duration
+      chatCollections: MultiChatMsgCollection[]
     }
   | {
       action: "SILENT"

@@ -7,7 +7,7 @@ import { api } from "@/backend"
 import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
 
-type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
+export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
 
 export class MessageStorage {
   private memoryStorage: Message[]

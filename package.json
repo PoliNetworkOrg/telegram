@@ -49,6 +49,7 @@
     "@polinetwork/backend": "^0.9.1",
     "@t3-oss/env-core": "^0.13.4",
     "@trpc/client": "^11.1.1",
+    "@types/ssdeep.js": "^0.0.2",
     "croner": "^9.0.0",
     "grammy": "^1.37.0",
     "neverthrow": "^8.2.0",
@@ -56,6 +57,7 @@
     "pino": "^9.6.0",
     "redis": "^4.7.0",
     "secure-json-parse": "^4.0.0",
+    "ssdeep.js": "^0.0.3",
     "superjson": "^2.2.2",
     "zod": "^3.25.30"
   },

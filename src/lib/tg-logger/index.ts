@@ -99,14 +99,18 @@ export class TgLogger<C extends Context> {
 
   public async autoModeration(props: Types.AutoModeration): Promise<string> {
     let msg: string
-    const { invite_link } = await this.bot.api.getChat(props.message.chat.id)
+    let chatstr: string
+    if (props.message) {
+      const { invite_link } = await this.bot.api.getChat(props.message.chat.id)
+      chatstr = fmtChat(props.message.chat, invite_link)
+    }
     switch (props.action) {
       case "DELETE":
         msg = fmt(
           ({ b, n }) => [
             b`🗑 Delete`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat, invite_link)}`,
+            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -120,7 +124,8 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🗑 Delete + 🤫 Mute`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat, invite_link)}`,
+            n`${b`Until:`} ${props.duration?.dateStr ?? "FOREVER"}`,
+            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -134,7 +139,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🗑 Delete + 👢 Kick`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat, invite_link)}`,
+            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -148,7 +153,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🗑 Delete + 🚫 Ban`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat, invite_link)}`,
+            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -157,12 +162,42 @@ export class TgLogger<C extends Context> {
         )
         break
 
+      case "MULTI_CHAT_SPAM": {
+        const chats = await Promise.all(
+          props.chatCollections.map(async (coll) => {
+            const { invite_link } = await this.bot.api.getChat(coll.chatId)
+            const chat = await this.bot.api.getChat(coll.chatId)
+            chatstr = fmtChat(chat, invite_link)
+
+            return fmt(
+              ({ n, i }) =>
+                n`${chatstr} \n${i`Messages: ${coll.messages.length} in cache, ${coll.unknownMessages.length} unknown`}`
+            )
+          })
+        )
+        msg = fmt(
+          ({ b, n, i, skip }) => [
+            b`📑 Multi Chat Spam (Del + Mute)`,
+            n`${b`Sender:`} ${fmtUser(props.target)}`,
+            n`${b`Until:`} ${props.duration.dateStr}`,
+            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
+            b`\nChats involved:`,
+            ...chats.map((c) => skip`${c}`),
+            i`\nSample message is forwarded...`,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        break
+      }
+
       case "SILENT":
         msg = fmt(
           ({ b, n }) => [
             b`🔶 Possible Harmful Content Detection`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat, invite_link)}`,
+            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -172,10 +207,11 @@ export class TgLogger<C extends Context> {
         break
     }
     await this.log(this.topics.autoModeration, msg)
-    await this.bot.api.forwardMessage(this.groupId, props.message.chat.id, props.message.message_id, {
-      message_thread_id: this.topics.autoModeration,
-      disable_notification: true,
-    })
+    if (props.message)
+      await this.bot.api.forwardMessage(this.groupId, props.message.chat.id, props.message.message_id, {
+        message_thread_id: this.topics.autoModeration,
+        disable_notification: true,
+      })
     return msg
   }
 
