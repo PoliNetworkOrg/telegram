@@ -1,4 +1,4 @@
-import type { FlaggedCategory, ModerationCandidate, ModerationResult } from "./types"
+import type { FlaggedCategory, ModerationCandidate, ModerationResult, MultiChatMsgCollection } from "./types"
 import type { Context } from "@/lib/managed-commands"
 import type { Filter, MiddlewareFn, MiddlewareObj } from "grammy"
 
@@ -8,7 +8,7 @@ import { Composer } from "grammy"
 import OpenAI from "openai"
 import ssdeep from "ssdeep.js"
 
-import { tgLogger } from "@/bot"
+import { messageStorage, tgLogger } from "@/bot"
 import { mute } from "@/lib/moderation"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
@@ -128,32 +128,58 @@ export class ModerationStack<C extends Context>
         await redis.expire(key, 500)
         if (res >= 3) {
           const range = await redis.lRange(key, 0, -1)
-          const chats = range
-            .map((r) => r.split("|"))
-            .filter((v) => ssdeep.similarity(v[0], hash) > 90)
-            .reduce<{ chatid: string; messageids: number[] }[]>((acc, [_, chatid, mid]) => {
-              const e = acc.find((v) => v.chatid === chatid)
-              if (e) e.messageids.push(parseInt(mid))
-              else acc.push({ chatid, messageids: [parseInt(mid)] })
-              return acc
-            }, [])
-          if (chats.length === 0) return
+          const similarMessages = await Promise.all(
+            range
+              .map((r) => r.split("|"))
+              .map(([hash, chatId, messageId]) => ({ hash, chatId: Number(chatId), messageId: Number(messageId) }))
+              .filter((v) => ssdeep.similarity(v.hash, hash) > 90)
+              .map(
+                async (v) =>
+                  (await messageStorage.get(v.chatId, v.messageId)) ?? { chatId: v.chatId, messageId: v.messageId }
+              )
+          )
+
+          if (similarMessages.length === 0) return
+
+          const chatsMap = new Map<number, number[]>()
+          const chatsCollection = new Map<number, MultiChatMsgCollection>()
+          similarMessages.forEach((msg) => {
+            const ids = chatsMap.get(msg.chatId) ?? []
+            ids.push(msg.messageId)
+            chatsMap.set(msg.chatId, ids)
+
+            const collection: MultiChatMsgCollection = chatsCollection.get(msg.chatId) ?? {
+              chatId: msg.chatId,
+              messages: [],
+              unknownMessages: [],
+            }
+
+            if ("message" in msg) {
+              collection.messages.push({ id: msg.messageId, message: msg.message, timestamp: msg.timestamp })
+            } else collection.unknownMessages.push(msg.messageId)
+            chatsCollection.set(msg.chatId, collection)
+          })
+
+          const muteDuration = duration.zod.parse("1d")
+          const deleted = await Promise.all(
+            chatsMap.entries().map(async ([chatId, mIds]) => {
+              await ctx.api.restrictChatMember(chatId, ctx.from.id, RestrictPermissions.mute, {
+                until_date: muteDuration.timestamp_s,
+              })
+              return await ctx.api.deleteMessages(chatId, mIds).catch(() => false)
+            })
+          )
+
           await tgLogger.autoModeration({
-            action: "SILENT",
-            message: ctx.message,
+            action: "MULTI_CHAT_SPAM",
+            duration: muteDuration,
+            chatCollections: Array.from(chatsCollection.values()),
             target: ctx.from,
             reason: "Multichat spam detected",
           })
-          const deleted = await Promise.all(
-            chats.map(async (chat) => {
-              await ctx.api.restrictChatMember(chat.chatid, ctx.from.id, RestrictPermissions.mute, {
-                until_date: duration.zod.parse("1d").timestamp_s,
-              })
-              return await ctx.api.deleteMessages(chat.chatid, chat.messageids).catch(() => false)
-            })
-          )
+
           logger.info(
-            `Deleted messages from ${deleted.filter((v) => v).length}/${chats.length} chats due to multichat spam. (${res} total messages)`
+            `Deleted messages from ${deleted.filter((v) => v).length}/${chatsMap.size} chats due to multichat spam. (${similarMessages.length} total messages)`
           )
         }
       })

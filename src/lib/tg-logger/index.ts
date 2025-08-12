@@ -124,6 +124,7 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🗑 Delete + 🤫 Mute`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
+            n`${b`Until:`} ${props.duration?.dateStr ?? "FOREVER"}`,
             n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
@@ -152,6 +153,21 @@ export class TgLogger<C extends Context> {
           ({ b, n }) => [
             b`🗑 Delete + 🚫 Ban`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${chatstr}`,
+            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        break
+
+      case "MULTI_CHAT_SPAM":
+        msg = fmt(
+          ({ b, n }) => [
+            b`📑 Multi Chat Spam (Del + Mute)`,
+            n`${b`Sender:`} ${fmtUser(props.target)}`,
+            n`${b`Until:`} ${props.duration.dateStr}`,
             n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
