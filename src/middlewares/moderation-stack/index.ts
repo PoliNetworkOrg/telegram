@@ -21,6 +21,9 @@ import { wait } from "@/utils/wait"
 
 import { checkForAllowedLinks, parseFlaggedCategories } from "./functions"
 
+const MULTI_CHAT_SIMILARITY_THRESHOLD = 87
+const MULTI_CHAT_LENGTH_THRESHOLD = 128
+
 const client = process.env.OPENAI_API_KEY
   ? new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -122,17 +125,18 @@ export class ModerationStack<C extends Context>
         if (ctx.from.is_bot) return
         const { text } = getText(ctx.message)
         if (text === null) return
+        if (text.length < MULTI_CHAT_LENGTH_THRESHOLD) return // skip because too short
         const key = `moderation:multichatspam:${ctx.from.id}`
         const hash = ssdeep.digest(text)
         const res = await redis.rPush(key, `${hash}|${ctx.chat.id}|${ctx.message.message_id}`)
-        await redis.expire(key, 500)
+        await redis.expire(key, 60)
         if (res >= 3) {
-          const range = await redis.lRange(key, 0, -1)
+          const range = await redis.lRange(key, 0, -2)
           const similarMessages = await Promise.all(
             range
               .map((r) => r.split("|"))
               .map(([hash, chatId, messageId]) => ({ hash, chatId: Number(chatId), messageId: Number(messageId) }))
-              .filter((v) => ssdeep.similarity(v.hash, hash) > 90)
+              .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SIMILARITY_THRESHOLD)
               .map(
                 async (v) =>
                   (await messageStorage.get(v.chatId, v.messageId)) ?? { chatId: v.chatId, messageId: v.messageId }
@@ -140,6 +144,13 @@ export class ModerationStack<C extends Context>
           )
 
           if (similarMessages.length === 0) return
+          similarMessages.push({
+            message: text,
+            chatId: ctx.chat.id,
+            authorId: ctx.from.id,
+            messageId: ctx.message.message_id,
+            timestamp: new Date(),
+          })
 
           const chatsMap = new Map<number, number[]>()
           const chatsCollection = new Map<number, MultiChatMsgCollection>()
