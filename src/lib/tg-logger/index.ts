@@ -169,9 +169,7 @@ export class TgLogger<C extends Context> {
             const chat = await this.bot.api.getChat(coll.chatId)
             chatstr = fmtChat(chat, invite_link)
 
-            return fmt(
-              ({ n }) => n`${chatstr} (count: ${coll.messages.length}/${coll.unknownMessages.length} unknown)`
-            )
+            return fmt(({ n }) => n`${chatstr} (count: ${coll.messages.length}/${coll.unknownMessages.length} unknown)`)
           })
         )
         msg = fmt(
@@ -181,7 +179,7 @@ export class TgLogger<C extends Context> {
             n`${b`Until:`} ${props.duration.dateStr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
             b`\nChats involved:`,
-            ...chats.map(c => skip`${c}`),
+            ...chats.map((c) => skip`${c}`),
             i`\nSample message is forwarded...`,
           ],
           {
