@@ -162,20 +162,34 @@ export class TgLogger<C extends Context> {
         )
         break
 
-      case "MULTI_CHAT_SPAM":
+      case "MULTI_CHAT_SPAM": {
+        const chats = await Promise.all(
+          props.chatCollections.map(async (coll) => {
+            const { invite_link } = await this.bot.api.getChat(coll.chatId)
+            const chat = await this.bot.api.getChat(coll.chatId)
+            chatstr = fmtChat(chat, invite_link)
+
+            return fmt(
+              ({ n }) => n`${chatstr} (count: ${coll.messages.length}/${coll.unknownMessages.length} unknown)`
+            )
+          })
+        )
         msg = fmt(
-          ({ b, n }) => [
+          ({ b, n, i, skip }) => [
             b`📑 Multi Chat Spam (Del + Mute)`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
             n`${b`Until:`} ${props.duration.dateStr}`,
-            n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
+            b`\nChats involved:`,
+            ...chats.map(c => skip`${c}`),
+            i`\nSample message is forwarded...`,
           ],
           {
             sep: "\n",
           }
         )
         break
+      }
 
       case "SILENT":
         msg = fmt(

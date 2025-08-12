@@ -161,6 +161,15 @@ export class ModerationStack<C extends Context>
           })
 
           const muteDuration = duration.zod.parse("1d")
+          await tgLogger.autoModeration({
+            action: "MULTI_CHAT_SPAM",
+            message: ctx.message,
+            duration: muteDuration,
+            chatCollections: Array.from(chatsCollection.values()),
+            target: ctx.from,
+            reason: "Multichat spam detected",
+          })
+
           const deleted = await Promise.all(
             chatsMap.entries().map(async ([chatId, mIds]) => {
               await ctx.api.restrictChatMember(chatId, ctx.from.id, RestrictPermissions.mute, {
@@ -169,14 +178,6 @@ export class ModerationStack<C extends Context>
               return await ctx.api.deleteMessages(chatId, mIds).catch(() => false)
             })
           )
-
-          await tgLogger.autoModeration({
-            action: "MULTI_CHAT_SPAM",
-            duration: muteDuration,
-            chatCollections: Array.from(chatsCollection.values()),
-            target: ctx.from,
-            reason: "Multichat spam detected",
-          })
 
           logger.info(
             `Deleted messages from ${deleted.filter((v) => v).length}/${chatsMap.size} chats due to multichat spam. (${similarMessages.length} total messages)`
