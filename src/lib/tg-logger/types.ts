@@ -1,4 +1,4 @@
-import type { MultiChatMsgCollection } from "@/middlewares/moderation-stack/types"
+import type { MultiChatMsgCollection } from "@/middlewares/auto-moderation-stack/types"
 import type { duration } from "@/utils/duration"
 import type { GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"

@@ -33,7 +33,21 @@ const client = process.env.OPENAI_API_KEY
 if (!client) logger.warn("Missing env OPENAI_API_KEY, automatic moderation will not work.")
 else logger.debug("OpenAI client initialized for moderation.")
 
-export class ModerationStack<C extends Context>
+/**
+ * # Auto-Moderation stack
+ * ## Handles automatic message moderation.
+ *
+ * This stack contains middlewares for various automatic message deletion policies.
+ * Things like automatic URL detection, harmful content, spam, should all be handled here.
+ *
+ * ### current features:
+ * - [x] Links handler
+ * - [x] Harmful content handler
+ * - [x] Multichat spam handler for similar messages
+ * - [ ] Avoid deletion for messages explicitly allowed by Direttivo or from privileged users
+ * - [ ] handle non-latin characters
+ */
+export class AutoModerationStack<C extends Context>
   extends EventEmitter<{
     results: [ModerationResult[]]
   }>
@@ -46,10 +60,13 @@ export class ModerationStack<C extends Context>
   constructor() {
     super()
 
+    // Links handler, deletes blacklisted domains
     this.composer.on(
       ["message::url", "message::text_link", "edited_message::url", "edited_message::text_link"],
       defer(async (ctx) => {
+        // check both messages sent and edited
         const message = ctx.message ?? ctx.editedMessage
+        // extract all links from the message, might be inside entities, or inside the message text body
         const links = ctx
           .entities("text_link")
           .map((e) => e.url)
@@ -78,47 +95,51 @@ export class ModerationStack<C extends Context>
       })
     )
 
+    // Harmful content handler, mutes user if harmful content is detected (via OpenAI)
     this.composer.on(
       "message",
       defer(async (ctx) => {
         const message = ctx.message
         const flaggedCategories = await this.checkForHarmfulContent(ctx)
-        const reasons = flaggedCategories
-          .map((cat) => ` - ${cat.category} (${(cat.score * 100).toFixed(1)}%)`)
-          .join("\n")
-
-        if (flaggedCategories.some((cat) => cat.aboveThreshold)) {
-          await mute({
-            ctx,
-            author: ctx.me,
-            target: ctx.from,
-            reason: `Automatic moderation detected harmful content\n${reasons}`,
-            duration: duration.zod.parse("1d"), // 1 day
-            message,
-          })
-
-          const msg = await ctx.reply(
-            fmt(({ i, b }) => [
-              b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
-              i`If you think this is a mistake, please contact the group administrators.`,
-            ])
-          )
-          await wait(5000)
-          await msg.delete()
-          return
-        }
 
         if (flaggedCategories.length > 0) {
-          await tgLogger.autoModeration({
-            action: "SILENT",
-            target: ctx.from,
-            message,
-            reason: `Message flagged for moderation: \n${reasons}`,
-          })
+          const reasons = flaggedCategories
+            .map((cat) => ` - ${cat.category} (${(cat.score * 100).toFixed(1)}%)`)
+            .join("\n")
+
+          if (flaggedCategories.some((cat) => cat.aboveThreshold)) {
+            // above threshold, mute user and delete the message
+            await mute({
+              ctx,
+              author: ctx.me,
+              target: ctx.from,
+              reason: `Automatic moderation detected harmful content\n${reasons}`,
+              duration: duration.zod.parse("1d"), // 1 day
+              message,
+            })
+
+            const msg = await ctx.reply(
+              fmt(({ i, b }) => [
+                b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
+                i`If you think this is a mistake, please contact the group administrators.`,
+              ])
+            )
+            await wait(5000)
+            await msg.delete()
+          } else {
+            // no flagged category is above the threshold, still log it for manual review
+            await tgLogger.autoModeration({
+              action: "SILENT",
+              target: ctx.from,
+              message,
+              reason: `Message flagged for moderation: \n${reasons}`,
+            })
+          }
         }
       })
     )
 
+    // Multichat spam handler, mutes user if they send the same message in multiple chats
     this.composer.on(
       ["message:text", "message:media"],
       defer(async (ctx) => {
@@ -126,12 +147,14 @@ export class ModerationStack<C extends Context>
         const { text } = getText(ctx.message)
         if (text === null) return
         if (text.length < MULTI_CHAT_LENGTH_THRESHOLD) return // skip because too short
-        const key = `moderation:multichatspam:${ctx.from.id}`
-        const hash = ssdeep.digest(text)
-        const res = await redis.rPush(key, `${hash}|${ctx.chat.id}|${ctx.message.message_id}`)
-        await redis.expire(key, 60)
+        const key = `moderation:multichatspam:${ctx.from.id}` // the key is unique for each user
+        const hash = ssdeep.digest(text) // hash to compute message similarity
+        const res = await redis.rPush(key, `${hash}|${ctx.chat.id}|${ctx.message.message_id}`) // push the message data to the redis list
+        await redis.expire(key, 60) // 60 seconds expiry, refreshed with each message
+
+        // triggered when more than 3 messages have been sent within 60 seconds from each other
         if (res >= 3) {
-          const range = await redis.lRange(key, 0, -2)
+          const range = await redis.lRange(key, 0, -2) // get all but the last
           const similarMessages = await Promise.all(
             range
               .map((r) => r.split("|"))
@@ -171,7 +194,7 @@ export class ModerationStack<C extends Context>
             chatsCollection.set(msg.chatId, collection)
           })
 
-          const muteDuration = duration.zod.parse("1d")
+          const muteDuration = duration.zod.parse("5m")
           await tgLogger.autoModeration({
             action: "MULTI_CHAT_SPAM",
             message: ctx.message,
@@ -198,6 +221,11 @@ export class ModerationStack<C extends Context>
     )
   }
 
+  /**
+   * Triggers a moderation check for the queued messages.
+   *
+   * Called by a timeout after pushing an element in the queue
+   */
   private triggerCheck() {
     if (!client) return
     if (this.checkQueue.length === 0) return
@@ -214,6 +242,12 @@ export class ModerationStack<C extends Context>
       })
   }
 
+  /**
+   * Wait for the moderation results to be emitted.
+   *
+   * This is done to allow batching of moderation checks.
+   * @returns A promise that resolves with the moderation results, mapped as they were queued.
+   */
   private async waitForResults(): Promise<ModerationResult[]> {
     return new Promise((resolve, reject) => {
       this.once("results", (results) => {
@@ -225,6 +259,11 @@ export class ModerationStack<C extends Context>
     })
   }
 
+  /**
+   * Add a candidate to the moderation check queue, returns the result if found.
+   * @param candidate the candidate to add to the queue, either text or image
+   * @returns A promise that resolves with the moderation result, or null if not found or timed out.
+   */
   private async addToCheckQueue(candidate: ModerationCandidate): Promise<ModerationResult | null> {
     const index = this.checkQueue.push(candidate) - 1
     if (this.timeout === null) {
@@ -239,6 +278,11 @@ export class ModerationStack<C extends Context>
       .catch(() => null) // check timed out
   }
 
+  /**
+   * Check for harmful content in the message context.
+   * @param context the message context to check
+   * @returns A list of flagged categories found in the message
+   */
   private async checkForHarmfulContent(context: Filter<C, "message">): Promise<FlaggedCategory[]> {
     if (!client) return []
     const candidates: ModerationCandidate[] = []
