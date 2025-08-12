@@ -169,7 +169,10 @@ export class TgLogger<C extends Context> {
             const chat = await this.bot.api.getChat(coll.chatId)
             chatstr = fmtChat(chat, invite_link)
 
-            return fmt(({ n }) => n`${chatstr} (count: ${coll.messages.length}/${coll.unknownMessages.length} unknown)`)
+            return fmt(
+              ({ n, i }) =>
+                n`${chatstr} \n${i`Messages: ${coll.messages.length} in cache, ${coll.unknownMessages.length} unknown`}`
+            )
           })
         )
         msg = fmt(
