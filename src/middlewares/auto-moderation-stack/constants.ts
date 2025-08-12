@@ -30,3 +30,10 @@ export const DELETION_THRESHOLDS: Record<Category, number | false> = {
   "self-harm/intent": false,
   "self-harm/instructions": false,
 } as const
+
+export const MULTI_CHAT_SPAM = {
+  SIMILARITY_THR: 87,
+  LENGTH_THR: 128,
+  EXPIRY: 60, // seconds
+  MUTE_DURATION: "5m",
+} as const

@@ -19,10 +19,8 @@ import { fmt, fmtUser } from "@/utils/format"
 import { getText } from "@/utils/messages"
 import { wait } from "@/utils/wait"
 
+import { MULTI_CHAT_SPAM } from "./constants"
 import { checkForAllowedLinks, parseFlaggedCategories } from "./functions"
-
-const MULTI_CHAT_SIMILARITY_THRESHOLD = 87
-const MULTI_CHAT_LENGTH_THRESHOLD = 128
 
 const client = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -146,20 +144,20 @@ export class AutoModerationStack<C extends Context>
         if (ctx.from.is_bot) return
         const { text } = getText(ctx.message)
         if (text === null) return
-        if (text.length < MULTI_CHAT_LENGTH_THRESHOLD) return // skip because too short
+        if (text.length < MULTI_CHAT_SPAM.LENGTH_THR) return // skip because too short
         const key = `moderation:multichatspam:${ctx.from.id}` // the key is unique for each user
         const hash = ssdeep.digest(text) // hash to compute message similarity
         const res = await redis.rPush(key, `${hash}|${ctx.chat.id}|${ctx.message.message_id}`) // push the message data to the redis list
-        await redis.expire(key, 60) // 60 seconds expiry, refreshed with each message
+        await redis.expire(key, MULTI_CHAT_SPAM.EXPIRY) // seconds expiry, refreshed with each message
 
-        // triggered when more than 3 messages have been sent within 60 seconds from each other
+        // triggered when more than 3 messages have been sent within EXPIRY seconds of each other
         if (res >= 3) {
           const range = await redis.lRange(key, 0, -2) // get all but the last
           const similarMessages = await Promise.all(
             range
               .map((r) => r.split("|"))
               .map(([hash, chatId, messageId]) => ({ hash, chatId: Number(chatId), messageId: Number(messageId) }))
-              .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SIMILARITY_THRESHOLD)
+              .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SPAM.SIMILARITY_THR)
               .map(
                 async (v) =>
                   (await messageStorage.get(v.chatId, v.messageId)) ?? { chatId: v.chatId, messageId: v.messageId }
@@ -194,7 +192,7 @@ export class AutoModerationStack<C extends Context>
             chatsCollection.set(msg.chatId, collection)
           })
 
-          const muteDuration = duration.zod.parse("5m")
+          const muteDuration = duration.zod.parse(MULTI_CHAT_SPAM.MUTE_DURATION)
           await tgLogger.autoModeration({
             action: "MULTI_CHAT_SPAM",
             message: ctx.message,
