@@ -19,7 +19,7 @@ import { fmt, fmtUser } from "@/utils/format"
 import { getText } from "@/utils/messages"
 import { wait } from "@/utils/wait"
 
-import { MULTI_CHAT_SPAM } from "./constants"
+import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
 import { checkForAllowedLinks, parseFlaggedCategories } from "./functions"
 
 const client = process.env.OPENAI_API_KEY
@@ -30,6 +30,8 @@ const client = process.env.OPENAI_API_KEY
 
 if (!client) logger.warn("Missing env OPENAI_API_KEY, automatic moderation will not work.")
 else logger.debug("OpenAI client initialized for moderation.")
+
+const nonLatinRegex = /[^\p{Script=Latin}\p{Nd}\p{P}\p{S}\p{Z}\p{C}]/gu
 
 /**
  * # Auto-Moderation stack
@@ -43,7 +45,7 @@ else logger.debug("OpenAI client initialized for moderation.")
  * - [x] Harmful content handler
  * - [x] Multichat spam handler for similar messages
  * - [ ] Avoid deletion for messages explicitly allowed by Direttivo or from privileged users
- * - [ ] handle non-latin characters
+ * - [x] handle non-latin characters
  */
 export class AutoModerationStack<C extends Context>
   extends EventEmitter<{
@@ -134,6 +136,27 @@ export class AutoModerationStack<C extends Context>
             })
           }
         }
+      })
+    )
+
+    this.composer.on(
+      ["message:text", "message:caption"],
+      defer(async (ctx) => {
+        const text = ctx.message.caption ?? ctx.message.text
+        const match = text.match(nonLatinRegex)
+        if (!match || match.length < NON_LATIN.LENGTH_THR) {
+          logger.debug(`Message with non-latin chars skipped because char count is less than ${NON_LATIN.LENGTH_THR}.`)
+          return
+        }
+
+        await mute({
+          ctx,
+          message: ctx.message,
+          target: ctx.from,
+          reason: "Message contains non-latin characters",
+          duration: duration.zod.parse(NON_LATIN.MUTE_DURATION),
+          author: ctx.me,
+        })
       })
     )
 

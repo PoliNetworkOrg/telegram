@@ -37,3 +37,8 @@ export const MULTI_CHAT_SPAM = {
   EXPIRY: 60, // seconds
   MUTE_DURATION: "5m",
 } as const
+
+export const NON_LATIN = {
+  LENGTH_THR: 10,
+  MUTE_DURATION: "10m",
+} as const
