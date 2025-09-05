@@ -39,6 +39,22 @@ export const MULTI_CHAT_SPAM = {
 } as const
 
 export const NON_LATIN = {
-  LENGTH_THR: 10,
+  LENGTH_THR: 8,
+  PERCENTAGE_THR: 0.2,
   MUTE_DURATION: "10m",
+  /**
+   * Regex to match non-latin characters, greek is allowed as well.
+   * matches any character that is not:
+   * - Latin extended script
+   * - Undetermined script (common script) (for some reason µ is here, maths ig)
+   * - Greek script (just because engineering, catching stray π and Ω characters)
+   * - Decimal numbers in any script
+   * - Punctuation
+   * - Symbols, math, currency, emojis, etc.
+   * - Spaces and separators
+   * - Control characters
+   *
+   * I really hope this covers everything we want to allow. - tm
+   */
+  REGEX: /[^\p{scx=Latin}\p{sc=Zyyy}\p{sc=Greek}\p{Nd}\p{P}\p{S}\p{Z}\p{C}]/gu,
 } as const

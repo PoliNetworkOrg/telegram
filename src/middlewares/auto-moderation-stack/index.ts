@@ -31,8 +31,6 @@ const client = process.env.OPENAI_API_KEY
 if (!client) logger.warn("Missing env OPENAI_API_KEY, automatic moderation will not work.")
 else logger.debug("OpenAI client initialized for moderation.")
 
-const nonLatinRegex = /[^\p{Script=Latin}\p{Nd}\p{P}\p{S}\p{Z}\p{C}]/gu
-
 /**
  * # Auto-Moderation stack
  * ## Handles automatic message moderation.
@@ -143,20 +141,25 @@ export class AutoModerationStack<C extends Context>
       ["message:text", "message:caption"],
       defer(async (ctx) => {
         const text = ctx.message.caption ?? ctx.message.text
-        const match = text.match(nonLatinRegex)
-        if (!match || match.length < NON_LATIN.LENGTH_THR) {
-          logger.debug(`Message with non-latin chars skipped because char count is less than ${NON_LATIN.LENGTH_THR}.`)
-          return
-        }
+        const match = text.match(NON_LATIN.REGEX)
 
-        await mute({
-          ctx,
-          message: ctx.message,
-          target: ctx.from,
-          reason: "Message contains non-latin characters",
-          duration: duration.zod.parse(NON_LATIN.MUTE_DURATION),
-          author: ctx.me,
-        })
+        // 1. there are non latin characters
+        // 2. there are more than LENGTH_THR non-latin characters
+        // 3. the percentage of non-latin characters after the LENGTH_THR is more than PERCENTAGE_THR
+        // that should catch messages respecting this inequality: 0.2y + 8 < x ≤ y
+        // with x = number of non-latin characters, y = total length of the message
+        // longer messages can have more non-latin characters, but less in percentage
+        if (match && (match.length - NON_LATIN.LENGTH_THR) / text.length > NON_LATIN.PERCENTAGE_THR) {
+          // just delete the message and mute the user for 10 minutes
+          await mute({
+            ctx,
+            message: ctx.message,
+            target: ctx.from,
+            reason: "Message contains non-latin characters",
+            duration: duration.zod.parse(NON_LATIN.MUTE_DURATION),
+            author: ctx.me,
+          })
+        }
       })
     )
 
