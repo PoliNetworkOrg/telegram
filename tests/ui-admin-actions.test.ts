@@ -53,7 +53,7 @@ describe("UIAdminActionsTracker", () => {
     }
 
     const restrictedButNotMuted = {
-      status: "restricted" as const, 
+      status: "restricted" as const,
       can_send_messages: true,
     }
 
@@ -64,7 +64,7 @@ describe("UIAdminActionsTracker", () => {
 
   it("should detect kick vs ban correctly", () => {
     const previousMember = { status: "member" as const }
-    
+
     // Short-term ban (kick)
     const kickedMember = {
       status: "kicked" as const,

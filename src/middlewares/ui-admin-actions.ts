@@ -9,7 +9,7 @@ import { logger } from "@/logger"
  * Middleware to track administrative actions performed via Telegram UI
  * (not via bot commands) such as bans, mutes, kicks done through right-click menus
  * or admin panels.
- * 
+ *
  * IMPLEMENTED FEATURES:
  * - ✅ Ban detection (user status changes to "kicked")
  * - ✅ Unban detection (user status changes from "kicked")
@@ -17,18 +17,18 @@ import { logger } from "@/logger"
  * - ✅ Unmute detection (user permissions restored)
  * - ✅ Kick detection (short-term ban with quick expiration)
  * - ✅ Prevents double-logging of command-based actions
- * 
+ *
  * LIMITATIONS:
- * - ❌ Message deletion detection via UI: Telegram Bot API doesn't provide 
+ * - ❌ Message deletion detection via UI: Telegram Bot API doesn't provide
  *   deletion events. Would require admin permissions and complex workarounds.
  * - ❌ Duration/reason detection: UI actions don't include duration or reason
  *   information in the chat_member updates.
- * 
+ *
  * This middleware listens for chat_member updates which are sent when:
  * - User is banned/unbanned via admin panel or right-click menu
- * - User is muted/unmuted via admin panel or right-click menu  
+ * - User is muted/unmuted via admin panel or right-click menu
  * - User is kicked via admin panel or right-click menu
- * 
+ *
  * Note: For message deletion detection, consider enabling admin permissions
  * for the bot or implementing a separate system.
  */
@@ -42,7 +42,7 @@ export class UIAdminActionsTracker {
   markCommandAction(chatId: number, userId: number): void {
     const key = `${chatId}:${userId}`
     this.commandActionUsers.add(key)
-    
+
     // Auto-cleanup after 5 seconds to prevent memory leaks
     setTimeout(() => {
       this.commandActionUsers.delete(key)
@@ -133,7 +133,6 @@ export class UIAdminActionsTracker {
       // Note: Kick detection is tricky because kicks look like temporary bans
       // We'd need to track if the ban expires quickly, but that's complex
       // For now, we'll treat short-term kicks as bans which is acceptable
-
     } catch (error) {
       logger.error({ error, update }, "Error handling UI admin action")
     }
@@ -144,7 +143,7 @@ export class UIAdminActionsTracker {
    */
   private isMuted(member: ChatMember): boolean {
     if (member.status !== "restricted") return false
-    
+
     // A user is considered muted if they can't send messages
     return !member.can_send_messages
   }
@@ -159,7 +158,7 @@ export class UIAdminActionsTracker {
     // 2. Ban has a short expiration time (< 2 minutes)
     // However, Telegram API doesn't provide the until_date in chat_member updates
     // So we'll treat all short-term status changes from non-kicked to kicked as potential kicks
-    
+
     if (previousMember.status === "kicked" || member.status !== "kicked") {
       return false
     }
