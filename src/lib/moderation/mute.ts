@@ -6,7 +6,7 @@ import type { z } from "zod/v4"
 import { type Result, err, ok } from "neverthrow"
 
 import { api } from "@/backend"
-import { tgLogger } from "@/bot"
+import { tgLogger, uiAdminTracker } from "@/bot"
 import { RestrictPermissions } from "@/utils/chat"
 import { fmt, fmtUser } from "@/utils/format"
 
@@ -38,6 +38,9 @@ export async function mute({
   const chatMember = await ctx.getChatMember(target.id).catch(() => null)
   if (chatMember?.status === "administrator" || chatMember?.status === "creator")
     return err(fmt(({ b }) => b`@${author.username} the user ${fmtUser(target)} cannot be muted`))
+
+  // Mark this as a command action to avoid double-logging
+  uiAdminTracker.markCommandAction(ctx.chat.id, target.id)
 
   await ctx.restrictChatMember(target.id, RestrictPermissions.mute, { until_date: duration?.timestamp_s })
   void api.tg.auditLog.create.mutate({
@@ -79,6 +82,9 @@ export async function unmute({ ctx, targetId, author }: UnmuteProps): Promise<Re
 
   if (target.status !== "restricted" || target.can_send_messages)
     return err(fmt(({ b }) => b`@${author.username} this user is not muted`))
+
+  // Mark this as a command action to avoid double-logging
+  uiAdminTracker.markCommandAction(ctx.chat.id, targetId)
 
   await ctx.restrictChatMember(target.user.id, RestrictPermissions.unmute)
   return ok(await tgLogger.adminAction({ type: "UNMUTE", from: author, target: target.user, chat: ctx.chat }))
