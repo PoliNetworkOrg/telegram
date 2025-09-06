@@ -38,6 +38,11 @@ export const duration = {
   zod: zDuration,
   values: Durations,
   formatDesc: `Format: <number><unit> where unit can be ${DURATIONS.join(",")}`,
+  /**
+   * Create Duration object starting from until_date given by Telegram API.
+   *
+   * @param until_date Until date in seconds (like `Date.now() / 1000`).
+   */
   fromUntilDate: (until_date: number): Duration => {
     const seconds = until_date - Date.now() / 1000
     const date = new Date(until_date * 1000)
