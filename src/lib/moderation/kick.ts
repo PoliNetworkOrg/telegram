@@ -4,7 +4,7 @@ import type { User } from "grammy/types"
 import { type Result, err, ok } from "neverthrow"
 
 import { api } from "@/backend"
-import { tgLogger, uiAdminTracker } from "@/bot"
+import { tgLogger } from "@/bot"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 
@@ -22,9 +22,6 @@ export async function kick({ ctx, target, author, reason }: KickProps): Promise<
   const chatMember = await ctx.getChatMember(target.id).catch(() => null)
   if (chatMember?.status === "administrator" || chatMember?.status === "creator")
     return err(fmt(({ b }) => b`@${author.username} the user @${target.username} cannot be kicked (admin)`))
-
-  // Mark this as a command action to avoid double-logging
-  uiAdminTracker.markCommandAction(ctx.chat.id, target.id)
 
   const until_date = Math.floor(Date.now() / 1000) + duration.values.m
   await ctx.banChatMember(target.id, { until_date })

@@ -6,7 +6,7 @@ import type { z } from "zod/v4"
 import { type Result, err, ok } from "neverthrow"
 
 import { api } from "@/backend"
-import { tgLogger, uiAdminTracker } from "@/bot"
+import { tgLogger } from "@/bot"
 import { fmt } from "@/utils/format"
 
 interface BanProps {
@@ -24,9 +24,6 @@ export async function ban({ ctx, target, author, reason, duration }: BanProps): 
   const chatMember = await ctx.getChatMember(target.id).catch(() => null)
   if (chatMember?.status === "administrator" || chatMember?.status === "creator")
     return err(fmt(({ b }) => b`@${author.username} the user @${target.username} cannot be banned (admin)`))
-
-  // Mark this as a command action to avoid double-logging
-  uiAdminTracker.markCommandAction(ctx.chat.id, target.id)
 
   await ctx.banChatMember(target.id, { until_date: duration?.timestamp_s })
   void api.tg.auditLog.create.mutate({
@@ -53,9 +50,6 @@ export async function unban({ ctx, targetId, author }: UnbanProps): Promise<Resu
   const target = await ctx.getChatMember(targetId).catch(() => null)
   if (!target || target.status !== "kicked")
     return err(fmt(({ b }) => b`@${author.username} this user is not banned in this chat`))
-
-  // Mark this as a command action to avoid double-logging
-  uiAdminTracker.markCommandAction(ctx.chat.id, targetId)
 
   await ctx.unbanChatMember(target.user.id)
   return ok(await tgLogger.adminAction({ type: "UNBAN", from: author, target: target.user, chat: ctx.chat }))

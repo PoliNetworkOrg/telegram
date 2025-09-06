@@ -1,4 +1,4 @@
-import { tgLogger, uiAdminTracker } from "@/bot"
+import { tgLogger } from "@/bot"
 import { logger } from "@/logger"
 import { getText } from "@/utils/messages"
 
@@ -21,9 +21,6 @@ _commandsBase.createCommand({
       messageType: type,
       sender: repliedTo.from?.username,
     })
-
-    // Mark this as a command action to avoid double-logging
-    uiAdminTracker.markCommandAction(repliedTo.chat.id, repliedTo.from?.id || 0)
 
     if (repliedTo.from)
       await tgLogger.adminAction({
