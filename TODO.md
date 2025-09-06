@@ -20,6 +20,7 @@
   - [x] audit log
   - [ ] @admin (and similar) to allow user to report
   - [x] track ban, mute and kick done via telegram UI (not by command)
+  - [ ] send in-chat action log (deprived of chat ids and stuff)
 - [ ] automatic moderation
   - [x] delete non-latin alphabet characters 
   - [x] check spam links
