@@ -7,11 +7,11 @@ type DurationUnit = (typeof DURATIONS)[number]
 const durationRegex = new RegExp(`(\\d+)[${DURATIONS.join("")}]`)
 
 type Duration = {
-  raw: string;
-  date: Date;
-  timestamp_s: number;
-  secondsFromNow: number;
-  dateStr: string;
+  raw: string
+  date: Date
+  timestamp_s: number
+  secondsFromNow: number
+  dateStr: string
 }
 
 const Durations: Record<DurationUnit, number> = {
@@ -34,20 +34,19 @@ const zDuration = z
   })
   .refine((a) => a.secondsFromNow < Durations.d * 366, "The maximum duration is 365 days")
 
-
 export const duration = {
   zod: zDuration,
   values: Durations,
   formatDesc: `Format: <number><unit> where unit can be ${DURATIONS.join(",")}`,
   fromUntilDate: (until_date: number): Duration => {
-    const seconds = until_date - (Date.now() / 1000)
+    const seconds = until_date - Date.now() / 1000
     const date = new Date(until_date * 1000)
     return {
       raw: "custom",
       secondsFromNow: seconds,
       date,
       timestamp_s: until_date,
-      dateStr: fmtDate(date)
+      dateStr: fmtDate(date),
     }
-  }
+  },
 } as const
