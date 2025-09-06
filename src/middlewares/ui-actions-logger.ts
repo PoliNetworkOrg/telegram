@@ -3,6 +3,7 @@ import type { Context } from "@/lib/managed-commands"
 import { Composer, type MiddlewareFn, type MiddlewareObj } from "grammy"
 
 import { tgLogger } from "@/bot"
+import { duration } from "@/utils/duration"
 
 /**
  * Middleware to track administrative actions performed via Telegram UI (not via bot commands).
@@ -53,8 +54,7 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       if (prev === "member" && curr === "restricted" && !new_chat_member.can_send_messages) {
         await tgLogger.adminAction({
           type: "MUTE",
-          // TODO duration:
-          // new_chat_member.until_date
+          duration: duration.fromUntilDate(new_chat_member.until_date),
           from: admin,
           target,
           chat,
@@ -67,8 +67,7 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
           // mute
           await tgLogger.adminAction({
             type: "MUTE",
-            // TODO duration:
-            // new_chat_member.until_date
+            duration: duration.fromUntilDate(new_chat_member.until_date),
             from: admin,
             target,
             chat,
