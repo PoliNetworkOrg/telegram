@@ -16,6 +16,7 @@ import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
 import { MessageStorage } from "./middlewares/message-storage"
+import { UIAdminActionsTracker } from "./middlewares/ui-admin-actions"
 import { redis } from "./redis"
 import { setTelegramId } from "./utils/telegram-id"
 
@@ -23,6 +24,7 @@ const TEST_CHAT_ID = -1002669533277
 
 await apiTestQuery()
 export const messageStorage = new MessageStorage()
+export const uiAdminTracker = new UIAdminActionsTracker()
 
 const bot = new Bot<Context>(env.BOT_TOKEN)
 bot.use(hydrate())
@@ -48,6 +50,7 @@ export const tgLogger = new TgLogger<Context>(bot, -1002685849173, {
 bot.use(commands)
 bot.use(new BotMembershipHandler())
 bot.use(new AutoModerationStack())
+bot.use(uiAdminTracker.middleware)
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
