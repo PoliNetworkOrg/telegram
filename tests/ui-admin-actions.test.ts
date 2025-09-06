@@ -43,47 +43,47 @@ describe("UIAdminActionsTracker", () => {
 
   it("should detect muted status correctly", () => {
     const mutedMember = {
-      status: "restricted",
+      status: "restricted" as const,
       can_send_messages: false,
     }
 
     const unrestrictedMember = {
-      status: "member",
+      status: "member" as const,
       can_send_messages: true,
     }
 
     const restrictedButNotMuted = {
-      status: "restricted", 
+      status: "restricted" as const, 
       can_send_messages: true,
     }
 
-    expect(tracker["isMuted"](mutedMember)).toBe(true)
-    expect(tracker["isMuted"](unrestrictedMember)).toBe(false)
-    expect(tracker["isMuted"](restrictedButNotMuted)).toBe(false)
+    expect(tracker["isMuted"](mutedMember as any)).toBe(true)
+    expect(tracker["isMuted"](unrestrictedMember as any)).toBe(false)
+    expect(tracker["isMuted"](restrictedButNotMuted as any)).toBe(false)
   })
 
   it("should detect kick vs ban correctly", () => {
-    const previousMember = { status: "member" }
+    const previousMember = { status: "member" as const }
     
     // Short-term ban (kick)
     const kickedMember = {
-      status: "kicked",
+      status: "kicked" as const,
       until_date: Math.floor(Date.now() / 1000) + 60, // expires in 1 minute
     }
 
     // Long-term ban
     const bannedMember = {
-      status: "kicked",
+      status: "kicked" as const,
       until_date: Math.floor(Date.now() / 1000) + 3600, // expires in 1 hour
     }
 
     // Permanent ban (no until_date)
     const permanentBannedMember = {
-      status: "kicked",
+      status: "kicked" as const,
     }
 
-    expect(tracker["isKick"](kickedMember, previousMember)).toBe(true)
-    expect(tracker["isKick"](bannedMember, previousMember)).toBe(false)
-    expect(tracker["isKick"](permanentBannedMember, previousMember)).toBe(false)
+    expect(tracker["isKick"](kickedMember as any, previousMember as any)).toBe(true)
+    expect(tracker["isKick"](bannedMember as any, previousMember as any)).toBe(false)
+    expect(tracker["isKick"](permanentBannedMember as any, previousMember as any)).toBe(false)
   })
 })
