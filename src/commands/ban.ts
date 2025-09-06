@@ -31,6 +31,7 @@ _commandsBase
         author: context.from,
         reason: args.reason,
       })
+
       if (res.isErr()) {
         const msg = await context.reply(res.error)
         await wait(5000)
@@ -38,7 +39,6 @@ _commandsBase
         return
       }
 
-      await context.reply(res.value)
       await context.deleteMessages([repliedTo.message_id])
     },
   })
@@ -74,6 +74,7 @@ _commandsBase
         duration: args.duration,
         reason: args.reason,
       })
+
       if (res.isErr()) {
         const msg = await context.reply(res.error)
         await wait(5000)
@@ -81,7 +82,6 @@ _commandsBase
         return
       }
 
-      await context.reply(res.value)
       await context.deleteMessages([repliedTo.message_id])
     },
   })
@@ -112,7 +112,5 @@ _commandsBase
         await msg.delete()
         return
       }
-
-      await context.reply(res.value)
     },
   })

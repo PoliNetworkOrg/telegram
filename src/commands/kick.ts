@@ -34,7 +34,6 @@ _commandsBase.createCommand({
       return
     }
 
-    await context.reply(res.value)
     await context.deleteMessages([repliedTo.message_id])
   },
 })

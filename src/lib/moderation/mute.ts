@@ -31,7 +31,7 @@ export async function mute({
   reason,
   duration,
   message,
-}: MuteProps): Promise<Result<string, string>> {
+}: MuteProps): Promise<Result<void, string>> {
   if (target.id === author.id) return err(fmt(({ b }) => b`@${author.username} you cannot mute youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${author.username} you cannot mute the bot!`))
 
@@ -49,19 +49,18 @@ export async function mute({
     type: "mute",
   })
 
-  const res =
-    author.id === ctx.me.id
-      ? await tgLogger.autoModeration({
-          action: "MUTE_DELETE",
-          target,
-          duration,
-          reason,
-          message,
-        })
-      : await tgLogger.adminAction({ type: "MUTE", from: author, target, duration, reason, chat: ctx.chat })
+  if (author.id === ctx.me.id)
+    await tgLogger.autoModeration({
+      action: "MUTE_DELETE",
+      target,
+      duration,
+      reason,
+      message,
+    })
+  else await tgLogger.adminAction({ type: "MUTE", from: author, target, duration, reason, chat: ctx.chat })
 
   await ctx.deleteMessages([message.message_id])
-  return ok(res)
+  return ok()
 }
 
 interface UnmuteProps {
@@ -70,7 +69,7 @@ interface UnmuteProps {
   targetId: number
 }
 
-export async function unmute({ ctx, targetId, author }: UnmuteProps): Promise<Result<string, string>> {
+export async function unmute({ ctx, targetId, author }: UnmuteProps): Promise<Result<void, string>> {
   if (targetId === author.id) return err(fmt(({ b }) => b`@${author.username} you cannot unmute youself (smh)`))
   if (targetId === ctx.me.id) return err(fmt(({ b }) => b`@${author.username} you cannot unmute the bot!`))
 
@@ -81,5 +80,6 @@ export async function unmute({ ctx, targetId, author }: UnmuteProps): Promise<Re
     return err(fmt(({ b }) => b`@${author.username} this user is not muted`))
 
   await ctx.restrictChatMember(target.user.id, RestrictPermissions.unmute)
-  return ok(await tgLogger.adminAction({ type: "UNMUTE", from: author, target: target.user, chat: ctx.chat }))
+  await tgLogger.adminAction({ type: "UNMUTE", from: author, target: target.user, chat: ctx.chat })
+  return ok()
 }

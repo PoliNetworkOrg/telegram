@@ -15,7 +15,7 @@ interface KickProps {
   reason?: string
 }
 
-export async function kick({ ctx, target, author, reason }: KickProps): Promise<Result<string, string>> {
+export async function kick({ ctx, target, author, reason }: KickProps): Promise<Result<void, string>> {
   if (target.id === author.id) return err(fmt(({ b }) => b`@${author.username} you cannot kick youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${author.username} you cannot kick the bot!`))
 
@@ -33,5 +33,6 @@ export async function kick({ ctx, target, author, reason }: KickProps): Promise<
     reason,
     type: "kick",
   })
-  return ok(await tgLogger.adminAction({ type: "KICK", from: author, target, reason, chat: ctx.chat }))
+  await tgLogger.adminAction({ type: "KICK", from: author, target, reason, chat: ctx.chat })
+  return ok()
 }
