@@ -5,8 +5,8 @@ import type { Message, User } from "grammy/types"
 import { type Bot, GrammyError, InlineKeyboard } from "grammy"
 
 import { logger } from "@/logger"
+import { stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
-
 
 type Topics = {
   actionRequired: number
@@ -71,7 +71,11 @@ export class TgLogger<C extends Context> {
       })
   }
 
-  async delete(messages: Message[], reason: string, deleter: User = this.bot.botInfo): Promise<Types.DeleteResult | null> {
+  async delete(
+    messages: Message[],
+    reason: string,
+    deleter: User = this.bot.botInfo
+  ): Promise<Types.DeleteResult | null> {
     if (!messages.length) return null
 
     const sendersMap = new Map<number, User>()
@@ -110,7 +114,7 @@ export class TgLogger<C extends Context> {
 
     return {
       count: messages.length,
-      link: `https://t.me/c/${this.groupId}/${this.topics.deletedMessages}/${sent.message_id}`,
+      link: `https://t.me/c/${stripChatId(this.groupId)}/${this.topics.deletedMessages}/${sent.message_id}`,
     }
   }
 
@@ -150,21 +154,8 @@ export class TgLogger<C extends Context> {
       const { invite_link } = await this.bot.api.getChat(props.message.chat.id)
       chatstr = fmtChat(props.message.chat, invite_link)
     }
-    switch (props.action) {
-      case "DELETE":
-        msg = fmt(
-          ({ b, n }) => [
-            b`🗑 Delete`,
-            n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${chatstr}`,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
-        break
 
+    switch (props.action) {
       case "MUTE_DELETE":
         msg = fmt(
           ({ b, n }) => [
@@ -262,22 +253,16 @@ export class TgLogger<C extends Context> {
   }
 
   public async adminAction(props: Types.AdminAction): Promise<string> {
+    const deleteMsg = props.message
+      ? await this.delete(
+          [props.message],
+          `${props.type}${"reason" in props && props.reason ? ` -- ${props.reason}` : ""}`,
+          props.from
+        )
+      : null
+
     let msg: string
     switch (props.type) {
-      case "DELETE":
-        msg = fmt(
-          ({ b, n }) => [
-            b`🗑 Delete`,
-            n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.message.chat)}`,
-            n`${b`Admin:`} ${fmtUser(props.from)}`,
-          ],
-          {
-            sep: "\n",
-          }
-        )
-        break
-
       case "BAN":
         msg = fmt(
           ({ b, n }) => [
@@ -354,8 +339,8 @@ export class TgLogger<C extends Context> {
         break
     }
 
-    await this.log(this.topics.adminActions, msg)
-    if (props.type === "DELETE") await this.forward(this.topics.adminActions, props.message)
+    const reply_markup = deleteMsg ? new InlineKeyboard().url("See Deleted Message", deleteMsg.link) : undefined
+    await this.log(this.topics.adminActions, msg, { reply_markup })
     return msg
   }
 

@@ -23,6 +23,6 @@ _commandsBase.createCommand({
     })
 
     await tgLogger.delete([repliedTo], "Command /del", context.from) // actual message to delete
-    await context.deleteMessage() // /del message 
+    await context.deleteMessage() // /del message
   },
 })

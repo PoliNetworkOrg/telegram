@@ -58,9 +58,8 @@ export async function mute({
           reason,
           message,
         })
-      : await tgLogger.adminAction({ type: "MUTE", from: author, target, duration, reason, chat: ctx.chat })
+      : await tgLogger.adminAction({ type: "MUTE", from: author, target, duration, reason, chat: ctx.chat, message })
 
-  await ctx.deleteMessages([message.message_id])
   return ok(res)
 }
 

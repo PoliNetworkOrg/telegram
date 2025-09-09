@@ -29,6 +29,7 @@ _commandsBase
         ctx: context,
         target: repliedTo.from,
         author: context.from,
+        message: repliedTo,
         reason: args.reason,
       })
       if (res.isErr()) {
@@ -39,7 +40,6 @@ _commandsBase
       }
 
       await context.reply(res.value)
-      await context.deleteMessages([repliedTo.message_id])
     },
   })
   .createCommand({
@@ -71,6 +71,7 @@ _commandsBase
         ctx: context,
         target: repliedTo.from,
         author: context.from,
+        message: repliedTo,
         duration: args.duration,
         reason: args.reason,
       })
@@ -82,7 +83,6 @@ _commandsBase
       }
 
       await context.reply(res.value)
-      await context.deleteMessages([repliedTo.message_id])
     },
   })
   .createCommand({

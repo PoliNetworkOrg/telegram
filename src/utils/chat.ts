@@ -12,6 +12,15 @@ export function padChatId(chatId: number): number {
   return parseInt(`-${padding}${chatId}`)
 }
 
+export function stripChatId(chatId: number): number {
+  if (chatId > 0) return chatId
+  const positive = -chatId
+
+  const str = positive.toString()
+  if (str.length < 13) return positive
+  return parseInt(str.slice(1))
+}
+
 export const RestrictPermissions: Record<string, ChatPermissions> = {
   mute: {
     can_send_messages: false,

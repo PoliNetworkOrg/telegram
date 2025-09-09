@@ -1,5 +1,5 @@
 import type { ContextWith } from "@/utils/types"
-import type { User } from "grammy/types"
+import type { Message, User } from "grammy/types"
 
 import { type Result, err, ok } from "neverthrow"
 
@@ -12,10 +12,11 @@ interface KickProps {
   ctx: ContextWith<"chat">
   author: User
   target: User
+  message?: Message
   reason?: string
 }
 
-export async function kick({ ctx, target, author, reason }: KickProps): Promise<Result<string, string>> {
+export async function kick({ ctx, target, author, reason, message }: KickProps): Promise<Result<string, string>> {
   if (target.id === author.id) return err(fmt(({ b }) => b`@${author.username} you cannot kick youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${author.username} you cannot kick the bot!`))
 
@@ -33,5 +34,5 @@ export async function kick({ ctx, target, author, reason }: KickProps): Promise<
     reason,
     type: "kick",
   })
-  return ok(await tgLogger.adminAction({ type: "KICK", from: author, target, reason, chat: ctx.chat }))
+  return ok(await tgLogger.adminAction({ type: "KICK", from: author, target, reason, message, chat: ctx.chat }))
 }

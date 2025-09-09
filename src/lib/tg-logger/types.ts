@@ -44,10 +44,6 @@ export type AutoModeration = {
   reason?: string
 } & (
   | {
-      action: "DELETE"
-      message: Message
-    }
-  | {
       action: "MUTE_DELETE"
       message: Message
       duration?: Duration
@@ -73,6 +69,7 @@ export type AdminAction = {
   from: User
   target: User
   chat: Chat
+  message?: Message
 } & (
   | {
       type: "BAN" | "MUTE"
@@ -85,10 +82,6 @@ export type AdminAction = {
     }
   | {
       type: "UNBAN" | "UNMUTE"
-    }
-  | {
-      type: "DELETE"
-      message: Message
     }
 )
 
@@ -115,6 +108,6 @@ export type GroupManagement = {
 )
 
 export type DeleteResult = {
-  count: number;
-  link: string;
+  count: number
+  link: string
 }

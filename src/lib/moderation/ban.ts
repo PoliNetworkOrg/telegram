@@ -1,6 +1,6 @@
 import type { duration } from "@/utils/duration"
 import type { ContextWith } from "@/utils/types"
-import type { User } from "grammy/types"
+import type { Message, User } from "grammy/types"
 import type { z } from "zod/v4"
 
 import { type Result, err, ok } from "neverthrow"
@@ -11,13 +11,21 @@ import { fmt } from "@/utils/format"
 
 interface BanProps {
   ctx: ContextWith<"chat">
+  message?: Message
   author: User
   target: User
   reason?: string
   duration?: z.output<typeof duration.zod>
 }
 
-export async function ban({ ctx, target, author, reason, duration }: BanProps): Promise<Result<string, string>> {
+export async function ban({
+  ctx,
+  target,
+  author,
+  reason,
+  duration,
+  message,
+}: BanProps): Promise<Result<string, string>> {
   if (target.id === author.id) return err(fmt(({ b }) => b`@${author.username} you cannot ban youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${author.username} you cannot ban the bot!`))
 
@@ -34,7 +42,9 @@ export async function ban({ ctx, target, author, reason, duration }: BanProps): 
     reason,
     type: "ban",
   })
-  return ok(await tgLogger.adminAction({ type: "BAN", from: author, target, duration, reason, chat: ctx.chat }))
+  return ok(
+    await tgLogger.adminAction({ type: "BAN", from: author, message, target, duration, reason, chat: ctx.chat })
+  )
 }
 
 interface UnbanProps {
