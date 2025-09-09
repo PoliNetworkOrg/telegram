@@ -1,4 +1,6 @@
-import type { ChatPermissions } from "grammy/types"
+import type { ChatPermissions, Message } from "grammy/types"
+
+import { type SimpleMessage, getSimpleMessages } from "./messages"
 
 export function padChatId(chatId: number): number {
   if (chatId < 0) return chatId
@@ -44,4 +46,16 @@ export const RestrictPermissions: Record<string, ChatPermissions> = {
     can_send_polls: true,
     can_send_other_messages: true,
   },
+}
+
+export function groupMessagesByChat(messages: (Message | SimpleMessage)[]): Map<number, number[]> {
+  const msgs = getSimpleMessages(messages)
+  const chatsMap = new Map<number, number[]>()
+  msgs.forEach((msg) => {
+    const ids = chatsMap.get(msg.chatId) ?? []
+    ids.push(msg.messageId)
+    chatsMap.set(msg.chatId, ids)
+  })
+
+  return chatsMap
 }

@@ -5,8 +5,9 @@ import type { Message, User } from "grammy/types"
 import { type Bot, GrammyError, InlineKeyboard } from "grammy"
 
 import { logger } from "@/logger"
-import { stripChatId } from "@/utils/chat"
+import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
+import { type SimpleMessage, getSimpleMessages } from "@/utils/messages"
 
 type Topics = {
   actionRequired: number
@@ -46,9 +47,9 @@ export class TgLogger<C extends Context> {
       })
   }
 
-  private async forward(topicId: number, message: Message): Promise<void> {
+  private async forward(topicId: number, chatId: number, messageIds: number[]): Promise<void> {
     await this.bot.api
-      .forwardMessage(this.groupId, message.chat.id, message.message_id, {
+      .forwardMessages(this.groupId, chatId, messageIds, {
         message_thread_id: topicId,
         disable_notification: true,
       })
@@ -72,16 +73,15 @@ export class TgLogger<C extends Context> {
   }
 
   async delete(
-    messages: Message[],
+    messages: (Message | SimpleMessage)[],
     reason: string,
     deleter: User = this.bot.botInfo
   ): Promise<Types.DeleteResult | null> {
     if (!messages.length) return null
-
+    const msgs = getSimpleMessages(messages)
     const sendersMap = new Map<number, User>()
-    messages
+    msgs
       .map((m) => m.from)
-      .filter((u) => u !== undefined)
       .forEach((u) => {
         if (!sendersMap.has(u.id)) sendersMap.set(u.id, u)
       })
@@ -91,14 +91,14 @@ export class TgLogger<C extends Context> {
     const sent = await this.log(
       this.topics.deletedMessages,
       fmt(
-        ({ n, b, i }) => [
+        ({ n, b, i, code }) => [
           b`🗑 Delete`,
           senders.length > 1
             ? n`${b`Senders:`} \n - ${senders.map(fmtUser).join("\n - ")}`
             : n`${b`Sender:`} ${fmtUser(senders[0])}`,
 
           deleter.id === this.bot.botInfo.id ? i`Automatic deletion by BOT` : n`${b`Deleter:`} ${fmtUser(deleter)}`,
-          b`Count ${messages.length}`,
+          n`${b`Count:`} ${code`${messages.length}`}`,
 
           reason ? n`${b`Reason:`} ${reason}` : undefined,
         ],
@@ -107,9 +107,9 @@ export class TgLogger<C extends Context> {
     )
     if (!sent) return null
 
-    for (const message of messages) {
-      await this.forward(this.topics.deletedMessages, message)
-      await this.bot.api.deleteMessage(message.chat.id, message.message_id)
+    for (const [chatId, mIds] of groupMessagesByChat(msgs)) {
+      await this.forward(this.topics.deletedMessages, chatId, mIds)
+      await this.bot.api.deleteMessages(chatId, mIds)
     }
 
     return {
@@ -150,18 +150,37 @@ export class TgLogger<C extends Context> {
   public async autoModeration(props: Types.AutoModeration): Promise<string> {
     let msg: string
     let chatstr: string
+    let deleteRes: Types.DeleteResult | null = null
     if (props.message) {
       const { invite_link } = await this.bot.api.getChat(props.message.chat.id)
       chatstr = fmtChat(props.message.chat, invite_link)
     }
 
+    const delReason = `${props.action}${"reason" in props && props.reason ? ` -- ${props.reason}` : ""}`
+
     switch (props.action) {
-      case "MUTE_DELETE":
+      case "MUTE":
+        deleteRes = await this.delete([props.message], delReason, this.bot.botInfo)
         msg = fmt(
           ({ b, n }) => [
-            b`🗑 Delete + 🤫 Mute`,
+            b`🤫 ${props.duration ? "Temp" : "PERMA"} Mute`,
+            n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`Group:`} ${chatstr}`,
+            props.duration ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})` : undefined,
+            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
+          ],
+          {
+            sep: "\n",
+          }
+        )
+        break
+
+      case "KICK":
+        deleteRes = await this.delete([props.message], delReason, this.bot.botInfo)
+        msg = fmt(
+          ({ b, n }) => [
+            b`👢 Kick`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Until:`} ${props.duration?.dateStr ?? "FOREVER"}`,
             n`${b`Group:`} ${chatstr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
@@ -171,26 +190,14 @@ export class TgLogger<C extends Context> {
         )
         break
 
-      case "KICK_DELETE":
+      case "BAN":
+        deleteRes = await this.delete([props.message], delReason, this.bot.botInfo)
         msg = fmt(
           ({ b, n }) => [
-            b`🗑 Delete + 👢 Kick`,
-            n`${b`Sender:`} ${fmtUser(props.target)}`,
+            b`🚫 ${props.duration ? "Temp" : "PERMA"} Ban`,
+            n`${b`Target:`} ${fmtUser(props.target)}`,
             n`${b`Group:`} ${chatstr}`,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
-        break
-
-      case "BAN_DELETE":
-        msg = fmt(
-          ({ b, n }) => [
-            b`🗑 Delete + 🚫 Ban`,
-            n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${chatstr}`,
+            props.duration ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})` : undefined,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
           ],
           {
@@ -200,27 +207,25 @@ export class TgLogger<C extends Context> {
         break
 
       case "MULTI_CHAT_SPAM": {
+        const groupByChat = groupMessagesByChat(props.messages)
         const chats = await Promise.all(
-          props.chatCollections.map(async (coll) => {
-            const { invite_link } = await this.bot.api.getChat(coll.chatId)
-            const chat = await this.bot.api.getChat(coll.chatId)
-            chatstr = fmtChat(chat, invite_link)
+          groupByChat.entries().map(async ([chatId, mIds]) => {
+            const chat = await this.bot.api.getChat(chatId)
+            chatstr = fmtChat(chat, chat.invite_link)
 
-            return fmt(
-              ({ n, i }) =>
-                n`${chatstr} \n${i`Messages: ${coll.messages.length} in cache, ${coll.unknownMessages.length} unknown`}`
-            )
+            return fmt(({ n, i }) => n`${chatstr} \n${i`Messages: ${mIds.length}`}`)
           })
         )
+        deleteRes = await this.delete(props.messages, delReason, this.bot.botInfo)
+
         msg = fmt(
-          ({ b, n, i, skip }) => [
+          ({ b, n, skip }) => [
             b`📑 Multi Chat Spam (Del + Mute)`,
             n`${b`Sender:`} ${fmtUser(props.target)}`,
             n`${b`Until:`} ${props.duration.dateStr}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
             b`\nChats involved:`,
             ...chats.map((c) => skip`${c}`),
-            i`\nSample message is forwarded...`,
           ],
           {
             sep: "\n",
@@ -243,12 +248,9 @@ export class TgLogger<C extends Context> {
         )
         break
     }
-    await this.log(this.topics.autoModeration, msg)
-    if (props.message)
-      await this.bot.api.forwardMessage(this.groupId, props.message.chat.id, props.message.message_id, {
-        message_thread_id: this.topics.autoModeration,
-        disable_notification: true,
-      })
+
+    const reply_markup = deleteRes ? new InlineKeyboard().url("See Deleted Message", deleteRes.link) : undefined
+    await this.log(this.topics.autoModeration, msg, { reply_markup })
     return msg
   }
 

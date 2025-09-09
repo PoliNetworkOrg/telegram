@@ -1,5 +1,6 @@
-import type { FlaggedCategory, ModerationCandidate, ModerationResult, MultiChatMsgCollection } from "./types"
+import type { FlaggedCategory, ModerationCandidate, ModerationResult } from "./types"
 import type { Context } from "@/lib/managed-commands"
+import type { SimpleMessage } from "@/utils/messages"
 import type { Filter, MiddlewareFn, MiddlewareObj } from "grammy"
 
 import EventEmitter from "events"
@@ -12,7 +13,7 @@ import { messageStorage, tgLogger } from "@/bot"
 import { mute } from "@/lib/moderation"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
-import { RestrictPermissions } from "@/utils/chat"
+import { RestrictPermissions, groupMessagesByChat } from "@/utils/chat"
 import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
@@ -179,67 +180,43 @@ export class AutoModerationStack<C extends Context>
         // triggered when more than 3 messages have been sent within EXPIRY seconds of each other
         if (res >= 3) {
           const range = await redis.lRange(key, 0, -2) // get all but the last
-          const similarMessages = await Promise.all(
+          const similarMessages: SimpleMessage[] = await Promise.all(
             range
               .map((r) => r.split("|"))
               .map(([hash, chatId, messageId]) => ({ hash, chatId: Number(chatId), messageId: Number(messageId) }))
               .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SPAM.SIMILARITY_THR)
-              .map(
-                async (v) =>
-                  (await messageStorage.get(v.chatId, v.messageId)) ?? { chatId: v.chatId, messageId: v.messageId }
-              )
+              .map(async (v) => {
+                const msg: Partial<SimpleMessage> | null = (await messageStorage.get(v.chatId, v.messageId)) ?? {
+                  chatId: v.chatId,
+                  messageId: v.messageId,
+                }
+                msg.from = ctx.from
+                return msg as SimpleMessage
+              })
           )
 
           if (similarMessages.length === 0) return
           similarMessages.push({
-            message: text,
             chatId: ctx.chat.id,
-            authorId: ctx.from.id,
             messageId: ctx.message.message_id,
-            timestamp: new Date(),
-          })
-
-          const chatsMap = new Map<number, number[]>()
-          const chatsCollection = new Map<number, MultiChatMsgCollection>()
-          similarMessages.forEach((msg) => {
-            const ids = chatsMap.get(msg.chatId) ?? []
-            ids.push(msg.messageId)
-            chatsMap.set(msg.chatId, ids)
-
-            const collection: MultiChatMsgCollection = chatsCollection.get(msg.chatId) ?? {
-              chatId: msg.chatId,
-              messages: [],
-              unknownMessages: [],
-            }
-
-            if ("message" in msg) {
-              collection.messages.push({ id: msg.messageId, message: msg.message, timestamp: msg.timestamp })
-            } else collection.unknownMessages.push(msg.messageId)
-            chatsCollection.set(msg.chatId, collection)
+            from: ctx.from,
           })
 
           const muteDuration = duration.zod.parse(MULTI_CHAT_SPAM.MUTE_DURATION)
+          for (const chatId of groupMessagesByChat(similarMessages).keys()) {
+            await ctx.api.restrictChatMember(chatId, ctx.from.id, RestrictPermissions.mute, {
+              until_date: muteDuration.timestamp_s,
+            })
+          }
+
           await tgLogger.autoModeration({
             action: "MULTI_CHAT_SPAM",
             message: ctx.message,
+            messages: similarMessages,
             duration: muteDuration,
-            chatCollections: Array.from(chatsCollection.values()),
             target: ctx.from,
             reason: "Multichat spam detected",
           })
-
-          const deleted = await Promise.all(
-            chatsMap.entries().map(async ([chatId, mIds]) => {
-              await ctx.api.restrictChatMember(chatId, ctx.from.id, RestrictPermissions.mute, {
-                until_date: muteDuration.timestamp_s,
-              })
-              return await ctx.api.deleteMessages(chatId, mIds).catch(() => false)
-            })
-          )
-
-          logger.info(
-            `Deleted messages from ${deleted.filter((v) => v).length}/${chatsMap.size} chats due to multichat spam. (${similarMessages.length} total messages)`
-          )
         }
       })
     )

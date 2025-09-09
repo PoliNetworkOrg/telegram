@@ -1,11 +1,10 @@
-import type { MultiChatMsgCollection } from "@/middlewares/auto-moderation-stack/types"
 import type { duration } from "@/utils/duration"
+import type { SimpleMessage } from "@/utils/messages"
 import type { GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"
 import type { z } from "zod/v4"
 
 type Duration = z.output<typeof duration.zod>
-
 export type BanAllLog = {
   target: User
   from: User
@@ -44,21 +43,23 @@ export type AutoModeration = {
   reason?: string
 } & (
   | {
-      action: "MUTE_DELETE"
+      action: "MUTE"
       message: Message
       duration?: Duration
     }
   | {
-      action: "KICK_DELETE"
+      action: "KICK"
+      message: Message
     }
   | {
-      action: "BAN_DELETE"
+      action: "BAN"
+      message: Message
       duration?: Duration
     }
   | {
       action: "MULTI_CHAT_SPAM"
       duration: Duration
-      chatCollections: MultiChatMsgCollection[]
+      messages: (Message | SimpleMessage)[]
     }
   | {
       action: "SILENT"

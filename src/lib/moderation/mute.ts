@@ -52,7 +52,7 @@ export async function mute({
   const res =
     author.id === ctx.me.id
       ? await tgLogger.autoModeration({
-          action: "MUTE_DELETE",
+          action: "MUTE",
           target,
           duration,
           reason,
