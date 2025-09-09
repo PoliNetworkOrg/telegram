@@ -1,16 +1,18 @@
 import type { Context } from "../managed-commands"
 import type * as Types from "./types"
-import type { Message } from "grammy/types"
+import type { Message, User } from "grammy/types"
 
 import { type Bot, GrammyError, InlineKeyboard } from "grammy"
 
 import { logger } from "@/logger"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
 
+
 type Topics = {
   actionRequired: number
   banAll: number
   autoModeration: number
+  deletedMessages: number
   adminActions: number
   exceptions: number
   groupManagement: number
@@ -27,8 +29,8 @@ export class TgLogger<C extends Context> {
     topicId: number,
     fmtString: string,
     opts?: Parameters<typeof this.bot.api.sendMessage>[2]
-  ): Promise<void> {
-    await this.bot.api
+  ): Promise<Message | null> {
+    return await this.bot.api
       .sendMessage(this.groupId, fmtString, {
         message_thread_id: topicId,
         disable_notification: true,
@@ -40,6 +42,7 @@ export class TgLogger<C extends Context> {
           { error: e },
           `Couldn't log in the telegram group (groupId ${this.groupId} topicId ${topicId}) through the bot`
         )
+        return null
       })
   }
 
@@ -66,6 +69,49 @@ export class TgLogger<C extends Context> {
           await this.exception({ type: "GENERIC", error: e }, "TgLogger.forward")
         }
       })
+  }
+
+  async delete(messages: Message[], reason: string, deleter: User = this.bot.botInfo): Promise<Types.DeleteResult | null> {
+    if (!messages.length) return null
+
+    const sendersMap = new Map<number, User>()
+    messages
+      .map((m) => m.from)
+      .filter((u) => u !== undefined)
+      .forEach((u) => {
+        if (!sendersMap.has(u.id)) sendersMap.set(u.id, u)
+      })
+    const senders = Array.from(sendersMap.values())
+    if (!senders.length) return null
+
+    const sent = await this.log(
+      this.topics.deletedMessages,
+      fmt(
+        ({ n, b, i }) => [
+          b`🗑 Delete`,
+          senders.length > 1
+            ? n`${b`Senders:`} \n - ${senders.map(fmtUser).join("\n - ")}`
+            : n`${b`Sender:`} ${fmtUser(senders[0])}`,
+
+          deleter.id === this.bot.botInfo.id ? i`Automatic deletion by BOT` : n`${b`Deleter:`} ${fmtUser(deleter)}`,
+          b`Count ${messages.length}`,
+
+          reason ? n`${b`Reason:`} ${reason}` : undefined,
+        ],
+        { sep: "\n" }
+      )
+    )
+    if (!sent) return null
+
+    for (const message of messages) {
+      await this.forward(this.topics.deletedMessages, message)
+      await this.bot.api.deleteMessage(message.chat.id, message.message_id)
+    }
+
+    return {
+      count: messages.length,
+      link: `https://t.me/c/${this.groupId}/${this.topics.deletedMessages}/${sent.message_id}`,
+    }
   }
 
   public async banAll(props: Types.BanAllLog): Promise<string> {

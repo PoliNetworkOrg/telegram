@@ -113,3 +113,8 @@ export type GroupManagement = {
       inviteLink?: string
     }
 )
+
+export type DeleteResult = {
+  count: number;
+  link: string;
+}
