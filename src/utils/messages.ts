@@ -1,4 +1,4 @@
-import type { Message } from "grammy/types"
+import type { Message, User } from "grammy/types"
 
 type TextReturn<M extends Message> = M extends { text: string }
   ? { text: string; type: "TEXT" }
@@ -11,4 +11,17 @@ export function getText<M extends Message>(message: M): TextReturn<M> {
   if ("caption" in message && message.caption) return { text: message.caption, type: "CAPTION" } as TextReturn<M>
 
   return { text: null, type: "OTHER" } as TextReturn<M>
+}
+
+export function createFakeMessage(chatId: number, messageId: number, from: User, date?: Date): Message {
+  return {
+    from,
+    message_id: messageId,
+    date: date ? date.getTime() / 1000 : Date.now(),
+    chat: {
+      id: chatId,
+      type: "supergroup",
+      title: "NO_TITLE",
+    },
+  }
 }

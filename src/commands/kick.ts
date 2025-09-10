@@ -24,7 +24,8 @@ _commandsBase.createCommand({
     const res = await kick({
       ctx: context,
       target: repliedTo.from,
-      author: context.from,
+      from: context.from,
+      message: repliedTo,
       reason: args.reason,
     })
     if (res.isErr()) {
@@ -35,6 +36,5 @@ _commandsBase.createCommand({
     }
 
     await context.reply(res.value)
-    await context.deleteMessages([repliedTo.message_id])
   },
 })
