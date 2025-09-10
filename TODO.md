@@ -18,7 +18,7 @@
   - [ ] ban_all
   - [ ] unban_all
   - [x] audit log
-  - [ ] @admin (and similar) to allow user to report
+  - [x] @admin (and similar) to allow user to report (/report)
   - [ ] track ban, mute and kick done via telegram UI (not by command)
 - [ ] automatic moderation
   - [x] delete non-latin alphabet characters 
