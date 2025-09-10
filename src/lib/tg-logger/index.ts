@@ -144,7 +144,6 @@ export class TgLogger<C extends Context> {
     return true
   }
 
-
   private async handleReportAction(actionId: string, id: string, cqId: string): Promise<void> {
     const report = await this.reportStorage.read(id)
     if (!report) return
