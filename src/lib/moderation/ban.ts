@@ -18,14 +18,7 @@ interface BanProps {
   duration?: z.output<typeof duration.zod>
 }
 
-export async function ban({
-  ctx,
-  target,
-  from,
-  reason,
-  duration,
-  message,
-}: BanProps): Promise<Result<string, string>> {
+export async function ban({ ctx, target, from, reason, duration, message }: BanProps): Promise<Result<string, string>> {
   if (target.id === from.id) return err(fmt(({ b }) => b`@${from.username} you cannot ban youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${from.username} you cannot ban the bot!`))
 

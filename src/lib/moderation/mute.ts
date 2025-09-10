@@ -79,5 +79,5 @@ export async function unmute({ ctx, targetId, from }: UnmuteProps): Promise<Resu
     return err(fmt(({ b }) => b`@${from.username} this user is not muted`))
 
   await ctx.restrictChatMember(target.user.id, RestrictPermissions.unmute)
-  return ok(await tgLogger.moderationAction({ action: "UNMUTE", from, target: target.user, chat: ctx.chat  }))
+  return ok(await tgLogger.moderationAction({ action: "UNMUTE", from, target: target.user, chat: ctx.chat }))
 }
