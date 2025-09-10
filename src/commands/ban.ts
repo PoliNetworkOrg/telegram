@@ -28,7 +28,7 @@ _commandsBase
       const res = await ban({
         ctx: context,
         target: repliedTo.from,
-        author: context.from,
+        from: context.from,
         message: repliedTo,
         reason: args.reason,
       })
@@ -70,7 +70,7 @@ _commandsBase
       const res = await ban({
         ctx: context,
         target: repliedTo.from,
-        author: context.from,
+        from: context.from,
         message: repliedTo,
         duration: args.duration,
         reason: args.reason,
@@ -105,7 +105,7 @@ _commandsBase
         return
       }
 
-      const res = await unban({ ctx: context, author: context.from, targetId: userId })
+      const res = await unban({ ctx: context, from: context.from, targetId: userId })
       if (res.isErr()) {
         const msg = await context.reply(res.error)
         await wait(5000)

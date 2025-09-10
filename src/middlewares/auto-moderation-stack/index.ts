@@ -74,7 +74,7 @@ export class AutoModerationStack<C extends Context>
         if (!allowed) {
           await mute({
             ctx,
-            author: ctx.me,
+            from: ctx.me,
             target: ctx.from,
             reason: "Shared link not allowed",
             duration: duration.zod.parse("1m"), // 1 minute
@@ -110,7 +110,7 @@ export class AutoModerationStack<C extends Context>
             // above threshold, mute user and delete the message
             await mute({
               ctx,
-              author: ctx.me,
+              from: ctx.me,
               target: ctx.from,
               reason: `Automatic moderation detected harmful content\n${reasons}`,
               duration: duration.zod.parse("1d"), // 1 day
@@ -127,9 +127,11 @@ export class AutoModerationStack<C extends Context>
             await msg.delete()
           } else {
             // no flagged category is above the threshold, still log it for manual review
-            await tgLogger.autoModeration({
+            await tgLogger.moderationAction({
               action: "SILENT",
               target: ctx.from,
+              from: ctx.me,
+              chat: ctx.chat,
               message,
               reason: `Message flagged for moderation: \n${reasons}`,
             })
@@ -158,7 +160,7 @@ export class AutoModerationStack<C extends Context>
             target: ctx.from,
             reason: "Message contains non-latin characters",
             duration: duration.zod.parse(NON_LATIN.MUTE_DURATION),
-            author: ctx.me,
+            from: ctx.me,
           })
         }
       })
@@ -209,13 +211,14 @@ export class AutoModerationStack<C extends Context>
             })
           }
 
-          await tgLogger.autoModeration({
+          await tgLogger.moderationAction({
             action: "MULTI_CHAT_SPAM",
+            from: ctx.me,
+            chat: ctx.chat,
             message: ctx.message,
             messages: similarMessages,
             duration: muteDuration,
             target: ctx.from,
-            reason: "Multichat spam detected",
           })
         }
       })

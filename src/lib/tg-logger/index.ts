@@ -147,203 +147,82 @@ export class TgLogger<C extends Context> {
     return msg
   }
 
-  public async autoModeration(props: Types.AutoModeration): Promise<string> {
-    let msg: string
-    let chatstr: string
+  public async moderationAction(props: Types.ModerationAction): Promise<string> {
+    const isAutoModeration = props.from.id === this.bot.botInfo.id
+
+    let title: string
+    const others: string[] = []
     let deleteRes: Types.DeleteResult | null = null
-    if (props.message) {
-      const { invite_link } = await this.bot.api.getChat(props.message.chat.id)
-      chatstr = fmtChat(props.message.chat, invite_link)
-    }
+    const { invite_link } = await this.bot.api.getChat(props.chat.id)
 
     const delReason = `${props.action}${"reason" in props && props.reason ? ` -- ${props.reason}` : ""}`
-
     switch (props.action) {
       case "MUTE":
-        deleteRes = await this.delete([props.message], delReason, this.bot.botInfo)
-        msg = fmt(
-          ({ b, n }) => [
-            b`🤫 ${props.duration ? "Temp" : "PERMA"} Mute`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${chatstr}`,
-            props.duration ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})` : undefined,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
+        title = fmt(({ b }) => b`🤫 ${props.duration ? "Temp" : "PERMA"} Mute`)
+        if (props.message) deleteRes = await this.delete([props.message], delReason, props.from)
         break
 
       case "KICK":
-        deleteRes = await this.delete([props.message], delReason, this.bot.botInfo)
-        msg = fmt(
-          ({ b, n }) => [
-            b`👢 Kick`,
-            n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${chatstr}`,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
+        title = fmt(({ b }) => b`👢 Kick`)
+        if (props.message) deleteRes = await this.delete([props.message], delReason, props.from)
         break
 
       case "BAN":
-        deleteRes = await this.delete([props.message], delReason, this.bot.botInfo)
-        msg = fmt(
-          ({ b, n }) => [
-            b`🚫 ${props.duration ? "Temp" : "PERMA"} Ban`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${chatstr}`,
-            props.duration ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})` : undefined,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
+        title = fmt(({ b }) => b`🚫 ${props.duration ? "Temp" : "PERMA"} Ban`)
+        if (props.message) deleteRes = await this.delete([props.message], delReason, props.from)
         break
 
       case "MULTI_CHAT_SPAM": {
+        title = fmt(({ b }) => [b`📑 Multi Chat Spam (MuteDel)`])
+
         const groupByChat = groupMessagesByChat(props.messages)
-        const chats = await Promise.all(
-          groupByChat.entries().map(async ([chatId, mIds]) => {
-            const chat = await this.bot.api.getChat(chatId)
-            chatstr = fmtChat(chat, chat.invite_link)
+        others.push(fmt(({ b }) => b`\nChats involved:`))
+        for (const [chatId, mIds] of groupByChat) {
+          const chat = await this.bot.api.getChat(chatId)
+          others.push(fmt(({ n, i }) => n`${fmtChat(chat, chat.invite_link)} \n${i`Messages: ${mIds.length}`}`))
+        }
 
-            return fmt(({ n, i }) => n`${chatstr} \n${i`Messages: ${mIds.length}`}`)
-          })
-        )
         deleteRes = await this.delete(props.messages, delReason, this.bot.botInfo)
-
-        msg = fmt(
-          ({ b, n, skip }) => [
-            b`📑 Multi Chat Spam (Del + Mute)`,
-            n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Until:`} ${props.duration.dateStr}`,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-            b`\nChats involved:`,
-            ...chats.map((c) => skip`${c}`),
-          ],
-          {
-            sep: "\n",
-          }
-        )
         break
       }
 
-      case "SILENT":
-        msg = fmt(
-          ({ b, n }) => [
-            b`🔶 Possible Harmful Content Detection`,
-            n`${b`Sender:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${chatstr}`,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
-        break
-    }
-
-    const reply_markup = deleteRes ? new InlineKeyboard().url("See Deleted Message", deleteRes.link) : undefined
-    await this.log(this.topics.autoModeration, msg, { reply_markup })
-    return msg
-  }
-
-  public async adminAction(props: Types.AdminAction): Promise<string> {
-    const deleteMsg = props.message
-      ? await this.delete(
-          [props.message],
-          `${props.type}${"reason" in props && props.reason ? ` -- ${props.reason}` : ""}`,
-          props.from
-        )
-      : null
-
-    let msg: string
-    switch (props.type) {
-      case "BAN":
-        msg = fmt(
-          ({ b, n }) => [
-            b`🚫 ${props.duration ? "Temp" : "PERMA"} Ban`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.chat)}`,
-            n`${b`Admin:`} ${fmtUser(props.from)}`,
-            props.duration ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})` : undefined,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
-        break
-
       case "UNBAN":
-        msg = fmt(
-          ({ b, n }) => [
-            b`✅ Unban`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.chat)}`,
-            n`${b`Admin:`} ${fmtUser(props.from)}`,
-          ],
-          {
-            sep: "\n",
-          }
-        )
-        break
-
-      case "MUTE":
-        msg = fmt(
-          ({ b, n }) => [
-            b`🤫 ${props.duration ? "Temp" : "PERMA"} Mute`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.chat)}`,
-            n`${b`Admin:`} ${fmtUser(props.from)}`,
-            props.duration ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})` : undefined,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
+        title = fmt(({ b }) => b`✅ Unban`)
         break
 
       case "UNMUTE":
-        msg = fmt(
-          ({ b, n }) => [
-            b`🎤 Unmute`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.chat)}`,
-            n`${b`Admin:`} ${fmtUser(props.from)}`,
-          ],
-          {
-            sep: "\n",
-          }
-        )
+        title = fmt(({ b }) => b`🎤 Unmute`)
         break
 
-      case "KICK":
-        msg = fmt(
-          ({ b, n }) => [
-            b`👢 Kick`,
-            n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`Group:`} ${fmtChat(props.chat)}`,
-            n`${b`Admin:`} ${fmtUser(props.from)}`,
-            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          ],
-          {
-            sep: "\n",
-          }
-        )
+      case "SILENT":
+        title = fmt(({ b }) => b`🔶 Possible Harmful Content Detection`)
         break
     }
 
-    const reply_markup = deleteMsg ? new InlineKeyboard().url("See Deleted Message", deleteMsg.link) : undefined
-    await this.log(this.topics.adminActions, msg, { reply_markup })
-    return msg
+    const mainMsg = fmt(
+      ({ n, b, skip }) => [
+        skip`${title}`,
+
+        n`${b`Target:`} ${fmtUser(props.target)}`,
+
+        // for MULTI_CHAT we have specific per-chat info
+        props.action !== "MULTI_CHAT_SPAM" ? `${b`Group:`} ${fmtChat(props.chat, invite_link)}` : undefined,
+
+        "duration" in props && props.duration
+          ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`
+          : undefined,
+
+        "reason" in props && props.reason ? fmt(({ n, b }) => n`${b`Reason:`} ${props.reason}`) : undefined,
+
+        /// per-action specific info, like MULTI_CHAT
+        ...others.map((o) => skip`${o}`),
+      ],
+      { sep: "\n" }
+    )
+
+    const reply_markup = deleteRes ? new InlineKeyboard().url("See Deleted Message", deleteRes.link) : undefined
+    await this.log(isAutoModeration ? this.topics.autoModeration : this.topics.adminActions, mainMsg, { reply_markup })
+    return mainMsg
   }
 
   public async groupManagement(props: Types.GroupManagement): Promise<string> {

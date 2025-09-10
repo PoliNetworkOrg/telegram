@@ -37,24 +37,23 @@ export type ExceptionLog =
       error: unknown
     }
 
-export type AutoModeration = {
+export type ModerationAction = {
+  from: User
   target: User
+  chat: Chat
   message?: Message
-  reason?: string
 } & (
   | {
-      action: "MUTE"
-      message: Message
+      action: "BAN" | "MUTE"
       duration?: Duration
+      reason?: string
     }
   | {
       action: "KICK"
-      message: Message
+      reason?: string
     }
   | {
-      action: "BAN"
-      message: Message
-      duration?: Duration
+      action: "UNBAN" | "UNMUTE"
     }
   | {
       action: "MULTI_CHAT_SPAM"
@@ -63,26 +62,7 @@ export type AutoModeration = {
     }
   | {
       action: "SILENT"
-    }
-)
-
-export type AdminAction = {
-  from: User
-  target: User
-  chat: Chat
-  message?: Message
-} & (
-  | {
-      type: "BAN" | "MUTE"
-      duration?: Duration
       reason?: string
-    }
-  | {
-      type: "KICK"
-      reason?: string
-    }
-  | {
-      type: "UNBAN" | "UNMUTE"
     }
 )
 
