@@ -7,7 +7,6 @@ import { type Bot, GrammyError, InlineKeyboard } from "grammy"
 import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
-import { type SimpleMessage, getSimpleMessages } from "@/utils/messages"
 
 type Topics = {
   actionRequired: number
@@ -73,15 +72,15 @@ export class TgLogger<C extends Context> {
   }
 
   async delete(
-    messages: (Message | SimpleMessage)[],
+    messages: Message[],
     reason: string,
     deleter: User = this.bot.botInfo
   ): Promise<Types.DeleteResult | null> {
     if (!messages.length) return null
-    const msgs = getSimpleMessages(messages)
     const sendersMap = new Map<number, User>()
-    msgs
+    messages
       .map((m) => m.from)
+      .filter((m): m is User => m !== undefined)
       .forEach((u) => {
         if (!sendersMap.has(u.id)) sendersMap.set(u.id, u)
       })
@@ -107,7 +106,7 @@ export class TgLogger<C extends Context> {
     )
     if (!sent) return null
 
-    for (const [chatId, mIds] of groupMessagesByChat(msgs)) {
+    for (const [chatId, mIds] of groupMessagesByChat(messages)) {
       await this.forward(this.topics.deletedMessages, chatId, mIds)
       await this.bot.api.deleteMessages(chatId, mIds)
     }

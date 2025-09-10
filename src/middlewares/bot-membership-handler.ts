@@ -7,7 +7,7 @@ import { tgLogger } from "@/bot"
 import { GroupManagement } from "@/lib/group-management"
 import { logger } from "@/logger"
 
-type ChatType = "group" | "supergroup" | "private" | "channel"
+export type ChatType = "group" | "supergroup" | "private" | "channel"
 type StatusType = "member" | "administrator" | "creator" | "restricted" | "left" | "kicked"
 
 // if added as member, tg fires:

@@ -1,5 +1,4 @@
 import type { duration } from "@/utils/duration"
-import type { SimpleMessage } from "@/utils/messages"
 import type { GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"
 import type { z } from "zod/v4"
@@ -58,7 +57,7 @@ export type ModerationAction = {
   | {
       action: "MULTI_CHAT_SPAM"
       duration: Duration
-      messages: (Message | SimpleMessage)[]
+      messages: Message[]
     }
   | {
       action: "SILENT"

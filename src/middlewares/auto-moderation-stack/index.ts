@@ -1,7 +1,7 @@
 import type { FlaggedCategory, ModerationCandidate, ModerationResult } from "./types"
 import type { Context } from "@/lib/managed-commands"
-import type { SimpleMessage } from "@/utils/messages"
 import type { Filter, MiddlewareFn, MiddlewareObj } from "grammy"
+import type { Message } from "grammy/types"
 
 import EventEmitter from "events"
 
@@ -17,7 +17,7 @@ import { RestrictPermissions, groupMessagesByChat } from "@/utils/chat"
 import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
-import { getText } from "@/utils/messages"
+import { createFakeMessage, getText } from "@/utils/messages"
 import { wait } from "@/utils/wait"
 
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
@@ -182,27 +182,20 @@ export class AutoModerationStack<C extends Context>
         // triggered when more than 3 messages have been sent within EXPIRY seconds of each other
         if (res >= 3) {
           const range = await redis.lRange(key, 0, -2) // get all but the last
-          const similarMessages: SimpleMessage[] = await Promise.all(
+          const similarMessages: Message[] = await Promise.all(
             range
               .map((r) => r.split("|"))
               .map(([hash, chatId, messageId]) => ({ hash, chatId: Number(chatId), messageId: Number(messageId) }))
               .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SPAM.SIMILARITY_THR)
               .map(async (v) => {
-                const msg: Partial<SimpleMessage> | null = (await messageStorage.get(v.chatId, v.messageId)) ?? {
-                  chatId: v.chatId,
-                  messageId: v.messageId,
-                }
-                msg.from = ctx.from
-                return msg as SimpleMessage
+                const msg = await messageStorage.get(v.chatId, v.messageId)
+                const message = createFakeMessage(v.chatId, v.messageId, ctx.from, msg?.timestamp)
+                return message
               })
           )
 
           if (similarMessages.length === 0) return
-          similarMessages.push({
-            chatId: ctx.chat.id,
-            messageId: ctx.message.message_id,
-            from: ctx.from,
-          })
+          similarMessages.push(ctx.message)
 
           const muteDuration = duration.zod.parse(MULTI_CHAT_SPAM.MUTE_DURATION)
           for (const chatId of groupMessagesByChat(similarMessages).keys()) {
