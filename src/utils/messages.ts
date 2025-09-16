@@ -12,7 +12,14 @@ export function getText<M extends Message>(message: M): TextReturn<M> {
 
   return { text: null, type: "OTHER" } as TextReturn<M>
 }
-
+/**
+ * Wraps message metadata into a fake message object compatible with grammy's Message type.
+ * @param chatId The ID of the chat the message belongs to.
+ * @param messageId The ID of the message.
+ * @param from The user who sent the message.
+ * @param date The date the message was sent.
+ * @returns A fake message object with the specified metadata.
+ */
 export function createFakeMessage(chatId: number, messageId: number, from: User, date?: Date): Message {
   return {
     from,
