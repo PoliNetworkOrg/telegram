@@ -17,7 +17,7 @@ interface BanProps {
   duration?: z.output<typeof duration.zod>
 }
 
-export async function ban({ ctx, target, author, reason, duration }: BanProps): Promise<Result<string, string>> {
+export async function ban({ ctx, target, author, reason, duration }: BanProps): Promise<Result<void, string>> {
   if (target.id === author.id) return err(fmt(({ b }) => b`@${author.username} you cannot ban youself (smh)`))
   if (target.id === ctx.me.id) return err(fmt(({ b }) => b`@${author.username} you cannot ban the bot!`))
 
@@ -34,7 +34,8 @@ export async function ban({ ctx, target, author, reason, duration }: BanProps): 
     reason,
     type: "ban",
   })
-  return ok(await tgLogger.adminAction({ type: "BAN", from: author, target, duration, reason, chat: ctx.chat }))
+  await tgLogger.adminAction({ type: "BAN", from: author, target, duration, reason, chat: ctx.chat })
+  return ok()
 }
 
 interface UnbanProps {
@@ -43,7 +44,7 @@ interface UnbanProps {
   targetId: number
 }
 
-export async function unban({ ctx, targetId, author }: UnbanProps): Promise<Result<string, string>> {
+export async function unban({ ctx, targetId, author }: UnbanProps): Promise<Result<void, string>> {
   if (targetId === author.id) return err(fmt(({ b }) => b`@${author.username} you cannot unban youself (smh)`))
   if (targetId === ctx.me.id) return err(fmt(({ b }) => b`@${author.username} you cannot unban the bot!`))
 
@@ -52,5 +53,6 @@ export async function unban({ ctx, targetId, author }: UnbanProps): Promise<Resu
     return err(fmt(({ b }) => b`@${author.username} this user is not banned in this chat`))
 
   await ctx.unbanChatMember(target.user.id)
-  return ok(await tgLogger.adminAction({ type: "UNBAN", from: author, target: target.user, chat: ctx.chat }))
+  await tgLogger.adminAction({ type: "UNBAN", from: author, target: target.user, chat: ctx.chat })
+  return ok()
 }

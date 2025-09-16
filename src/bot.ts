@@ -1,4 +1,5 @@
 import type { Context } from "@/lib/managed-commands"
+import type { Update } from "grammy/types"
 
 import { autoRetry } from "@grammyjs/auto-retry"
 import { hydrate } from "@grammyjs/hydrate"
@@ -16,10 +17,36 @@ import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
 import { MessageStorage } from "./middlewares/message-storage"
+import { UIActionsLogger } from "./middlewares/ui-actions-logger"
 import { redis } from "./redis"
 import { setTelegramId } from "./utils/telegram-id"
 
 const TEST_CHAT_ID = -1002669533277
+const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
+  "message",
+  "edited_message",
+  "message_reaction",
+  "message_reaction_count",
+  "inline_query",
+  "chosen_inline_result",
+  "callback_query",
+  "poll",
+  "poll_answer",
+  "my_chat_member",
+  "chat_member",
+  // "channel_post",
+  // "edited_channel_post",
+  // "business_connection",
+  // "business_message",
+  // "edited_business_message",
+  // "deleted_business_messages",
+  // "shipping_query",
+  // "pre_checkout_query",
+  // "purchased_paid_media",
+  // "chat_join_request",
+  // "chat_boost",
+  // "removed_chat_boost",
+]
 
 await apiTestQuery()
 export const messageStorage = new MessageStorage()
@@ -48,6 +75,7 @@ export const tgLogger = new TgLogger<Context>(bot, -1002685849173, {
 bot.use(commands)
 bot.use(new BotMembershipHandler())
 bot.use(new AutoModerationStack())
+bot.use(new UIActionsLogger())
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
@@ -78,7 +106,13 @@ bot.catch(async (err) => {
   logger.error(e)
 })
 
-const runner = run(bot)
+const runner = run(bot, {
+  runner: {
+    fetch: {
+      allowed_updates: ALLOWED_UPDATES,
+    },
+  },
+})
 
 let terminateStarted = false // this ensure that it's called only once. otherwise strange behaviours
 async function terminate(signal: NodeJS.Signals) {

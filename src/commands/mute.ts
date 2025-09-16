@@ -48,8 +48,6 @@ _commandsBase
         await msg.delete()
         return
       }
-
-      await context.reply(res.value)
     },
   })
   .createCommand({
@@ -83,8 +81,6 @@ _commandsBase
         await msg.delete()
         return
       }
-
-      await context.reply(res.value)
     },
   })
   .createCommand({
@@ -114,7 +110,5 @@ _commandsBase
         await msg.delete()
         return
       }
-
-      await context.reply(res.value)
     },
   })
