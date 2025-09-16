@@ -198,11 +198,15 @@ export class AutoModerationStack<C extends Context>
           similarMessages.push(ctx.message)
 
           const muteDuration = duration.zod.parse(MULTI_CHAT_SPAM.MUTE_DURATION)
-          for (const chatId of groupMessagesByChat(similarMessages).keys()) {
-            await ctx.api.restrictChatMember(chatId, ctx.from.id, RestrictPermissions.mute, {
-              until_date: muteDuration.timestamp_s,
-            })
-          }
+          await Promise.allSettled(
+            groupMessagesByChat(similarMessages)
+              .keys()
+              .map((chatId) =>
+                ctx.api.restrictChatMember(chatId, ctx.from.id, RestrictPermissions.mute, {
+                  until_date: muteDuration.timestamp_s,
+                })
+              )
+          )
 
           await tgLogger.moderationAction({
             action: "MULTI_CHAT_SPAM",
