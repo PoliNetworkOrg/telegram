@@ -1,6 +1,5 @@
-import type { Category, FlaggedCategory, ModerationResult } from "./types"
-
 import { BANNED_DOMAINS, DELETION_THRESHOLDS, POLINETWORK_DISCORD_GUILD_ID } from "./constants"
+import type { Category, FlaggedCategory, ModerationResult } from "./types"
 
 /**
  * Takes each category, and for the flagged ones takes the score (highest among related results) and
@@ -54,8 +53,7 @@ export async function checkForAllowedLinks(links: string[]): Promise<boolean> {
       const code = match[1]
       const isPolinetworkDiscord = await fetch(`https://discordapp.com/api/invites/${code}`)
         .then((res) => res.json())
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        .then((v) => v?.guild?.id === POLINETWORK_DISCORD_GUILD_ID) // opt chaining, wont crash, and even if it did there's a catch clause
+        .then((v) => v?.guild?.id === POLINETWORK_DISCORD_GUILD_ID)
         .catch(() => false)
       if (!isPolinetworkDiscord) return false
     }

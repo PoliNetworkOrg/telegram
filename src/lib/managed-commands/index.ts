@@ -1,7 +1,19 @@
-export * from "./context"
 export type { CommandScopedContext } from "./command"
 export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
+export * from "./context"
 
+import type { ConversationData, ConversationStorage } from "@grammyjs/conversations"
+import { conversations, createConversation } from "@grammyjs/conversations"
+import { hydrate } from "@grammyjs/hydrate"
+import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
+import type { CommandContext, MiddlewareFn, MiddlewareObj } from "grammy"
+import { Composer, MemorySessionStorage } from "grammy"
+import type { ChatMember, Message } from "grammy/types"
+import type { Result } from "neverthrow"
+import { err, ok } from "neverthrow"
+import type { LogFn } from "pino"
+import { fmt } from "@/utils/format"
+import { wait } from "@/utils/wait"
 import type {
   ArgumentMap,
   ArgumentOptions,
@@ -13,23 +25,8 @@ import type {
   CommandScopedContext,
   RepliedTo,
 } from "./command"
-import type { Context } from "./context"
-import type { ConversationData, ConversationStorage } from "@grammyjs/conversations"
-import type { CommandContext, MiddlewareFn, MiddlewareObj } from "grammy"
-import type { ChatMember, Message } from "grammy/types"
-import type { Result } from "neverthrow"
-import type { LogFn } from "pino"
-
-import { conversations, createConversation } from "@grammyjs/conversations"
-import { hydrate } from "@grammyjs/hydrate"
-import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
-import { Composer, MemorySessionStorage } from "grammy"
-import { err, ok } from "neverthrow"
-
-import { fmt } from "@/utils/format"
-import { wait } from "@/utils/wait"
-
 import { isTypedArgumentOptions } from "./command"
+import type { Context } from "./context"
 
 export type PermissionHandler<TRole extends string> = (arg: {
   context: CommandContext<Context>
@@ -319,7 +316,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       createConversation(
         async (conv: CommandConversation<S>, ctx: CommandScopedContext<S>) => {
           // check for the requirements in the command invocation
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          // biome-ignore lint/style/noNonNullAssertion: conversations cannot start without a message
           const requirements = ManagedCommands.parseCommand(ctx.message!, cmd)
           if (requirements.isErr()) {
             const msg = await ctx.reply(
