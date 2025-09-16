@@ -1,5 +1,5 @@
-import type { Context } from "@/lib/managed-commands"
 import type { Filter, MiddlewareFn } from "grammy"
+import type { Context } from "@/lib/managed-commands"
 
 import { logger } from "@/logger"
 import { RestrictPermissions } from "@/utils/chat"

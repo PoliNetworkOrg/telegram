@@ -1,10 +1,8 @@
-import type { Context } from "@/lib/managed-commands"
-
 import { Composer, type Filter, InlineKeyboard, type MiddlewareFn, type MiddlewareObj } from "grammy"
-
 import { api } from "@/backend"
 import { tgLogger } from "@/bot"
 import { GroupManagement } from "@/lib/group-management"
+import type { Context } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 
 type ChatType = "group" | "supergroup" | "private" | "channel"

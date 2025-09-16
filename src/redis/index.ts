@@ -1,4 +1,4 @@
-import { SocketClosedUnexpectedlyError, createClient } from "redis"
+import { createClient, SocketClosedUnexpectedlyError } from "redis"
 
 import { env } from "@/env"
 import { logger } from "@/logger"
@@ -13,7 +13,7 @@ const client = createClient({
       logger.debug(`[REDIS] reconnect retry #${n}`)
       if (openSuccess && n < 5) {
         const jitter = Math.floor(Math.random() * 200)
-        const delay = Math.min(Math.pow(2, retries) * 50, 2000)
+        const delay = Math.min(2 ** retries * 50, 2000)
         return delay + jitter
       }
 

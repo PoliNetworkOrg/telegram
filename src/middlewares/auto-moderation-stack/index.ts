@@ -1,4 +1,4 @@
-import EventEmitter from "events"
+import EventEmitter from "node:events"
 import type { Filter, MiddlewareFn, MiddlewareObj } from "grammy"
 import { Composer } from "grammy"
 import OpenAI from "openai"

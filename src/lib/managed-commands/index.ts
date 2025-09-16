@@ -40,7 +40,7 @@ const defaultPermissionHandler: PermissionHandler<string> = async ({ context, co
   const member = await context.getChatMember(context.from.id)
 
   if (allowedRoles && !allowedRoles.includes(member.status)) return false
-  if (excludedRoles && excludedRoles.includes(member.status)) return false
+  if (excludedRoles?.includes(member.status)) return false
 
   return true
 }
@@ -187,8 +187,8 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
   ): Result<{ args: ArgumentMap; repliedTo: RepliedTo<R> }, string[]> {
     const text = msg.text ?? msg.caption
     if (!text) return err(["Cannot parse arguments"])
-    const args = this.parseArgs(text, cmd)
-    const repliedTo = this.parseReplyTo(msg, cmd)
+    const args = ManagedCommands.parseArgs(text, cmd)
+    const repliedTo = ManagedCommands.parseReplyTo(msg, cmd)
     if (args.isOk() && repliedTo.isOk()) {
       return ok({ args: args.value, repliedTo: repliedTo.value })
     }

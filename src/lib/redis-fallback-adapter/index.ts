@@ -1,12 +1,10 @@
+import { EventEmitter } from "node:events"
 import type { StorageAdapter } from "grammy"
 import type { LogFn } from "pino"
 import type { RedisClientOptions, RedisClientType, RedisFunctions, RedisModules, RedisScripts } from "redis"
-import type { ZodType } from "zod/v4"
-
-import { EventEmitter } from "events"
-
 import { createClient } from "redis"
 import sjs from "secure-json-parse"
+import type { ZodType } from "zod/v4"
 
 interface Logger {
   info: LogFn

@@ -10,8 +10,8 @@ _commandsBase.createCommand({
   description: "Get role of userid",
   args: [{ key: "userId" }],
   handler: async ({ context, args }) => {
-    let userId: number | null = parseInt(args.userId)
-    if (isNaN(userId)) {
+    let userId: number | null = parseInt(args.userId, 10)
+    if (Number.isNaN(userId)) {
       userId = await getTelegramId(args.userId.replaceAll("@", ""))
     }
     if (userId === null) {

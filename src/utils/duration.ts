@@ -16,7 +16,7 @@ const zDuration = z
   .string()
   .regex(durationRegex)
   .transform((a) => {
-    const parsed = parseInt(a.slice(0, -1)) * Durations[a.slice(-1) as Duration]
+    const parsed = parseInt(a.slice(0, -1), 10) * Durations[a.slice(-1) as Duration]
 
     const date = new Date(Date.now() + parsed * 1000)
     const timestamp_s = Math.floor(date.getTime() / 1000)
