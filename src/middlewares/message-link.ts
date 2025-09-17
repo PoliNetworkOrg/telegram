@@ -116,7 +116,7 @@ async function makeResponse(
   }
 
   const content =
-    message.message.length > CHAR_LIMIT ? `${message.message.slice(50 * CHAR_LIMIT).trimEnd()} [...]` : message.message
+    message.message.length > CHAR_LIMIT ? `${message.message.slice(0, CHAR_LIMIT).trimEnd()} [...]` : message.message
   const msgRes = fmt(
     ({ n, b, i }) => [
       n`${b`Timestamp:`} ${message.timestamp.toLocaleDateString("it")} ${message.timestamp.toLocaleTimeString("it", { hour: "2-digit", minute: "2-digit" })}`,
