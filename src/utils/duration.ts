@@ -3,10 +3,18 @@ import { z } from "zod/v4"
 import { fmtDate } from "./format"
 
 const DURATIONS = ["m", "h", "d", "w"] as const
-type Duration = (typeof DURATIONS)[number]
+type DurationUnit = (typeof DURATIONS)[number]
 const durationRegex = new RegExp(`(\\d+)[${DURATIONS.join("")}]`)
 
-const Durations: Record<Duration, number> = {
+type Duration = {
+  raw: string
+  date: Date
+  timestamp_s: number
+  secondsFromNow: number
+  dateStr: string
+}
+
+const Durations: Record<DurationUnit, number> = {
   m: 60,
   h: 3600,
   d: 86400,
@@ -15,8 +23,8 @@ const Durations: Record<Duration, number> = {
 const zDuration = z
   .string()
   .regex(durationRegex)
-  .transform((a) => {
-    const parsed = parseInt(a.slice(0, -1), 10) * Durations[a.slice(-1) as Duration]
+  .transform<Duration>((a) => {
+    const parsed = parseInt(a.slice(0, -1), 10) * Durations[a.slice(-1) as DurationUnit]
 
     const date = new Date(Date.now() + parsed * 1000)
     const timestamp_s = Math.floor(date.getTime() / 1000)
@@ -30,4 +38,20 @@ export const duration = {
   zod: zDuration,
   values: Durations,
   formatDesc: `Format: <number><unit> where unit can be ${DURATIONS.join(",")}`,
+  /**
+   * Create Duration object starting from until_date given by Telegram API.
+   *
+   * @param until_date Until date in seconds (like `Date.now() / 1000`).
+   */
+  fromUntilDate: (until_date: number): Duration => {
+    const seconds = until_date - Date.now() / 1000
+    const date = new Date(until_date * 1000)
+    return {
+      raw: "custom",
+      secondsFromNow: seconds,
+      date,
+      timestamp_s: until_date,
+      dateStr: fmtDate(date),
+    }
+  },
 } as const
