@@ -1,11 +1,12 @@
 import { EventEmitter } from "node:events"
 import type { Filter } from "grammy"
 import OpenAI from "openai"
+import { env } from "@/env"
 import type { Context } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { getText } from "@/utils/messages"
-import { parseFlaggedCategories } from "./functions"
-import type { FlaggedCategory, ModerationCandidate, ModerationResult } from "./types"
+import { DELETION_THRESHOLDS } from "./constants"
+import type { Category, FlaggedCategory, ModerationCandidate, ModerationResult } from "./types"
 
 /**
  * # AI Moderation
@@ -24,17 +25,48 @@ import type { FlaggedCategory, ModerationCandidate, ModerationResult } from "./t
 export class AIModeration<C extends Context> extends EventEmitter<{
   results: [ModerationResult[]]
 }> {
+  /**
+   * Takes each category, and for the flagged ones takes the score (highest among related results) and
+   * confronts it with predefined thresholds
+   *
+   * @param results The array of results as provided by OpenAI's API
+   * @returns An array of {@link FlaggedCategory} containing each category that was flagged by OpenAI
+   */
+  static parseFlaggedCategories(results: ModerationResult[]): FlaggedCategory[] {
+    const categories = new Set(
+      results
+        .map((result) => result.categories)
+        .reduce<Category[]>((acc, curr) => {
+          Object.keys(curr).forEach((key) => {
+            const k = key as Category
+            if (curr[k]) acc.push(k)
+          })
+          return acc
+        }, [])
+    )
+    const scores = results
+      .map((result) => result.category_scores)
+      .reduce<Record<Category, number>>((acc, curr) => {
+        Object.keys(curr).forEach((key) => {
+          const k = key as Category
+          acc[k] = Math.max(acc[k], curr[k])
+        })
+        return acc
+      }, results[0].category_scores)
+    return Array.from(categories).map((category) => ({
+      category,
+      score: scores[category],
+      aboveThreshold: DELETION_THRESHOLDS[category] ? scores[category] >= DELETION_THRESHOLDS[category] : false,
+    }))
+  }
+
   private client: OpenAI | null
   private checkQueue: ModerationCandidate[] = []
   private timeout: NodeJS.Timeout | null = null
 
   constructor() {
     super()
-    this.client = process.env.OPENAI_API_KEY
-      ? new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-        })
-      : null
+    this.client = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null
 
     if (!this.client) logger.warn("[AI Mod] Missing env OPENAI_API_KEY, automatic moderation will not work.")
     else logger.debug("[AI Mod] OpenAI client initialized for moderation.")
@@ -118,6 +150,6 @@ export class AIModeration<C extends Context> extends EventEmitter<{
     const raw = await Promise.all(candidates.map((candidate) => this.addToCheckQueue(candidate)))
     const results = raw.filter((result) => result !== null) // fail open, e.g check times out: leave the message be
 
-    return parseFlaggedCategories(results)
+    return AIModeration.parseFlaggedCategories(results)
   }
 }
