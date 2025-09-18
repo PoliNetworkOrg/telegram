@@ -1,12 +1,10 @@
-import type { ContextWith } from "@/utils/types"
 import type { User } from "grammy/types"
-
-import { type Result, err, ok } from "neverthrow"
-
+import { err, ok, type Result } from "neverthrow"
 import { api } from "@/backend"
 import { tgLogger } from "@/bot"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
+import type { ContextWith } from "@/utils/types"
 
 interface KickProps {
   ctx: ContextWith<"chat">

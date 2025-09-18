@@ -1,13 +1,11 @@
-import type { duration } from "@/utils/duration"
-import type { ContextWith } from "@/utils/types"
 import type { User } from "grammy/types"
+import { err, ok, type Result } from "neverthrow"
 import type { z } from "zod/v4"
-
-import { type Result, err, ok } from "neverthrow"
-
 import { api } from "@/backend"
 import { tgLogger } from "@/bot"
+import type { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
+import type { ContextWith } from "@/utils/types"
 
 interface BanProps {
   ctx: ContextWith<"chat">

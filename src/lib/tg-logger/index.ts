@@ -1,11 +1,9 @@
-import type { Context } from "../managed-commands"
-import type * as Types from "./types"
-import type { Message } from "grammy/types"
-
 import { type Bot, GrammyError, InlineKeyboard } from "grammy"
-
+import type { Message } from "grammy/types"
 import { logger } from "@/logger"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
+import type { Context } from "../managed-commands"
+import type * as Types from "./types"
 
 type Topics = {
   actionRequired: number

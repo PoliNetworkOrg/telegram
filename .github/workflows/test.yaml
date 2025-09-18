@@ -9,7 +9,7 @@ jobs:
     name: Typecheck and Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
         with:
           # version: 10 # not set because it's specified in package.json -> packageManager field
@@ -19,12 +19,10 @@ jobs:
           node-version-file: "package.json"
           cache: pnpm
       - name: Install Dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
       - name: Unit Test
         run: pnpm run test
       - name: Typecheck
         run: pnpm run typecheck
-      - name: Lint
-        run: pnpm run lint
-      - name: Check Format
-        run: pnpm run format:check
+      - name: Run Biome
+        run: pnpm exec biome ci .

@@ -13,8 +13,8 @@ _commandsBase.createCommand({
     allowedRoles: ["hr", "owner", "direttivo"],
   },
   handler: async ({ context, args }) => {
-    let userId: number | null = parseInt(args.username)
-    if (isNaN(userId)) {
+    let userId: number | null = parseInt(args.username, 10)
+    if (Number.isNaN(userId)) {
       userId = await getTelegramId(args.username)
     }
 

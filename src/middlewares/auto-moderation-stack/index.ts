@@ -1,14 +1,10 @@
-import type { FlaggedCategory, ModerationCandidate, ModerationResult, MultiChatMsgCollection } from "./types"
-import type { Context } from "@/lib/managed-commands"
+import EventEmitter from "node:events"
 import type { Filter, MiddlewareFn, MiddlewareObj } from "grammy"
-
-import EventEmitter from "events"
-
 import { Composer } from "grammy"
 import OpenAI from "openai"
 import ssdeep from "ssdeep.js"
-
 import { messageStorage, tgLogger } from "@/bot"
+import type { Context } from "@/lib/managed-commands"
 import { mute } from "@/lib/moderation"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
@@ -18,9 +14,9 @@ import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { getText } from "@/utils/messages"
 import { wait } from "@/utils/wait"
-
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
 import { checkForAllowedLinks, parseFlaggedCategories } from "./functions"
+import type { FlaggedCategory, ModerationCandidate, ModerationResult, MultiChatMsgCollection } from "./types"
 
 const client = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -272,7 +268,7 @@ export class AutoModerationStack<C extends Context>
    * This is done to allow batching of moderation checks.
    * @returns A promise that resolves with the moderation results, mapped as they were queued.
    */
-  private async waitForResults(): Promise<ModerationResult[]> {
+  private waitForResults(): Promise<ModerationResult[]> {
     return new Promise((resolve, reject) => {
       this.once("results", (results) => {
         resolve(results)
@@ -288,7 +284,7 @@ export class AutoModerationStack<C extends Context>
    * @param candidate the candidate to add to the queue, either text or image
    * @returns A promise that resolves with the moderation result, or null if not found or timed out.
    */
-  private async addToCheckQueue(candidate: ModerationCandidate): Promise<ModerationResult | null> {
+  private addToCheckQueue(candidate: ModerationCandidate): Promise<ModerationResult | null> {
     const index = this.checkQueue.push(candidate) - 1
     if (this.timeout === null) {
       // throttle a check every 10 seconds

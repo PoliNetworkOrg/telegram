@@ -1,14 +1,12 @@
-import type { duration } from "@/utils/duration"
-import type { ContextWith } from "@/utils/types"
 import type { Message, User } from "grammy/types"
+import { err, ok, type Result } from "neverthrow"
 import type { z } from "zod/v4"
-
-import { type Result, err, ok } from "neverthrow"
-
 import { api } from "@/backend"
 import { tgLogger } from "@/bot"
 import { RestrictPermissions } from "@/utils/chat"
+import type { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
+import type { ContextWith } from "@/utils/types"
 
 interface MuteProps {
   /** The context within which the mute was dispatched, will be used to identify the chat mute */
