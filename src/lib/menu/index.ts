@@ -6,17 +6,25 @@ import { logger } from "@/logger"
 import { redis } from "@/redis"
 import { nanohash } from "@/utils/crypto"
 
+const CONSTANTS = {
+  prefix: "menugen",
+  maxRows: 100,
+  maxCols: 12,
+  hashLen: 16,
+  padLen: 3,
+}
+
 class Menu<T> {
   private dataStorage: RedisFallbackAdapter<T>
   private callbacks: Map<string, (data: T) => void> = new Map()
 
   constructor(
-    private hashedID: string,
+    private hashedId: string,
     private items: Array<Array<{ text: string; cb: (data: T) => void }>>
   ) {
     this.dataStorage = new RedisFallbackAdapter({
       redis,
-      prefix: `menu-data:${this.hashedID}:`,
+      prefix: `menu-data:${this.hashedId}`,
     })
 
     // Initialize menu with type T
@@ -29,49 +37,70 @@ class Menu<T> {
   }
 
   async generateKeyboard(data: T): Promise<InlineKeyboard> {
-    const keyboardID = nanoid(16)
-    await this.dataStorage.write(keyboardID, data)
+    // this Id is unique to the message to which the inlineKeyboard is attached
+    // this means that it is unique to the message itself
+    const keyboardId = nanoid(CONSTANTS.hashLen)
+    await this.dataStorage.write(keyboardId, data)
 
     const keyboard = new InlineKeyboard()
     this.items.forEach((row, rowIndex) => {
       row.forEach((item, colIndex) => {
-        keyboard.text(item.text, MenuGenerator.toCallbackID(this.hashedID, rowIndex, colIndex, keyboardID))
+        // TODO: add possibility to add non-callback buttons, like url
+        const callbackId = MenuGenerator.toCallbackId(this.hashedId, rowIndex, colIndex, keyboardId)
+
+        if (callbackId) keyboard.text(item.text, callbackId)
       })
+
       if (rowIndex < this.items.length - 1) keyboard.row()
     })
     return keyboard
   }
 
-  async call(row: number, col: number, keyboardID: string) {
+  async call(row: number, col: number, keyboardId: string) {
     const buttonId = `${row}:${col}`
     const callback = this.callbacks.get(buttonId)
-    const data = await this.dataStorage.read(keyboardID)
-    if (callback && data) {
-      callback(data)
-    } else {
-      throw new Error(`Callback or data not found for ID: ${buttonId}`)
-    }
+    if (!callback) throw new Error(`Callback not found for buttonId(row,col): ${buttonId}`)
+
+    const data = await this.dataStorage.read(keyboardId)
+    if (!data) throw new Error(`Data in redis not found for buttonId(row,col): ${buttonId}`)
+
+    callback(data)
   }
 }
 
 export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
-  static toCallbackID(menuHash: string, row: number, col: number, keyboardID: string): string {
-    const coords = `${row.toString().padStart(4, "0")}:${col.toString().padStart(4, "0")}`
-    return `${menuHash}|${coords}|${keyboardID}`
+  static toCallbackId(menuHash: string, row: number, col: number, keyboardId: string): string | null {
+    if (menuHash.length !== CONSTANTS.hashLen) return null
+    if (row > CONSTANTS.maxRows || col > CONSTANTS.maxCols) {
+      logger.warn({ row, col }, "[MenuGen] Asking to create a callbackId with row or col too high!")
+      return null
+    }
+
+    const paddedRow = row.toString().padStart(CONSTANTS.padLen, "0")
+    const paddedCol = col.toString().padStart(CONSTANTS.padLen, "0")
+    return `${CONSTANTS.prefix}:${menuHash}:${paddedRow}:${paddedCol}:${keyboardId}`
   }
 
-  static fromCallbackID(
+  static fromCallbackId(
     callbackData: string
-  ): { menuHash: string; row: number; col: number; keyboardID: string } | null {
-    const parts = callbackData.split("|")
-    if (parts.length !== 3) return null
-    const [menuHash, coords, keyboardID] = parts
-    const [rowStr, colStr] = coords.split(":")
-    if (!rowStr || !colStr) return null
+  ): { menuHash: string; row: number; col: number; keyboardId: string } | null {
+    const parts = callbackData.split(":")
+    if (parts.length !== 5) return null
+
+    const [_, menuHash, rowStr, colStr, keyboardId] = parts
+    if (
+      menuHash.length !== CONSTANTS.hashLen ||
+      keyboardId.length !== CONSTANTS.hashLen ||
+      rowStr.length !== CONSTANTS.padLen ||
+      colStr.length !== CONSTANTS.padLen
+    )
+      return null
+
     const row = parseInt(rowStr, 10)
     const col = parseInt(colStr, 10)
     if (Number.isNaN(row) || Number.isNaN(col)) return null
-    return { menuHash, row, col, keyboardID }
+
+    return { menuHash, row, col, keyboardId }
   }
 
   private composer: Composer<C> = new Composer<C>()
@@ -81,14 +110,17 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
     this.composer.on("callback_query:data", (ctx, next) => {
       // Handle callback query
       const callbackData = ctx.callbackQuery.data
-      const parsed = MenuGenerator.fromCallbackID(callbackData)
+      if (!callbackData.startsWith(CONSTANTS.prefix)) return next()
+
+      const parsed = MenuGenerator.fromCallbackId(callbackData)
       if (!parsed) return next()
 
-      const { menuHash, row, col, keyboardID } = parsed
+      const { menuHash, row, col, keyboardId } = parsed
       const menu = this.menus.get(menuHash)
       if (!menu) return next()
-      return menu.call(row, col, keyboardID).catch((err) => {
-        logger.error({ err }, "Error handling menu callback")
+
+      return menu.call(row, col, keyboardId).catch((err) => {
+        logger.error({ err }, "[MenuGen] Error handling menu callback")
         return next()
       })
     })
@@ -103,9 +135,10 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
       }>
     >
   ): (data: T) => Promise<InlineKeyboard> {
-    const hash = nanohash(id)
+    const hash = nanohash(id, CONSTANTS.hashLen)
     if (this.menus.has(hash)) {
-      throw new Error(`Menu with id ${id} already exists`)
+      // not the best solution, but it works
+      throw new Error(`[MenuGen] Menu with id ${id} already exists`)
     }
 
     const menu = new Menu<T>(hash, items)
