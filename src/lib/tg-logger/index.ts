@@ -1,5 +1,5 @@
-import type { Message, User } from "grammy/types"
 import { type Bot, GrammyError, InlineKeyboard } from "grammy"
+import type { Message, User } from "grammy/types"
 import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
