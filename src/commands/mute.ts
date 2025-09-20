@@ -37,7 +37,7 @@ _commandsBase
         ctx: context,
         target: repliedTo.from,
         message: repliedTo,
-        author: context.from,
+        from: context.from,
         duration: args.duration,
         reason: args.reason,
       })
@@ -71,7 +71,7 @@ _commandsBase
         ctx: context,
         target: repliedTo.from,
         message: repliedTo,
-        author: context.from,
+        from: context.from,
         reason: args.reason,
       })
 
@@ -103,7 +103,7 @@ _commandsBase
         return
       }
 
-      const res = await unmute({ ctx: context, author: context.from, targetId: userId })
+      const res = await unmute({ ctx: context, from: context.from, targetId: userId })
       if (res.isErr()) {
         const msg = await context.reply(res.error)
         await wait(5000)

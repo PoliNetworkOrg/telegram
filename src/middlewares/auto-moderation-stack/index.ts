@@ -1,21 +1,20 @@
 import type { Filter, MiddlewareFn, MiddlewareObj } from "grammy"
 import { Composer } from "grammy"
+import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
 import { messageStorage, tgLogger } from "@/bot"
 import type { Context } from "@/lib/managed-commands"
 import { mute } from "@/lib/moderation"
-import { logger } from "@/logger"
 import { redis } from "@/redis"
-import { RestrictPermissions } from "@/utils/chat"
+import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
-import { getText } from "@/utils/messages"
+import { createFakeMessage, getText } from "@/utils/messages"
 import { wait } from "@/utils/wait"
 import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
 import { checkForAllowedLinks } from "./functions"
-import type { MultiChatMsgCollection } from "./types"
 
 /**
  * # Auto-Moderation stack
@@ -94,7 +93,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
     if (!allowed) {
       await mute({
         ctx,
-        author: ctx.me,
+        from: ctx.me,
         target: ctx.from,
         reason: "Shared link not allowed",
         duration: duration.zod.parse("1m"), // 1 minute
@@ -128,7 +127,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         // above threshold, mute user and delete the message
         await mute({
           ctx,
-          author: ctx.me,
+          from: ctx.me,
           target: ctx.from,
           reason: `Automatic moderation detected harmful content\n${reasons}`,
           duration: duration.zod.parse("1d"), // 1 day
@@ -145,8 +144,10 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         await msg.delete()
       } else {
         // no flagged category is above the threshold, still log it for manual review
-        await tgLogger.autoModeration({
+        await tgLogger.moderationAction({
           action: "SILENT",
+          from: ctx.me,
+          chat: ctx.chat,
           target: ctx.from,
           message,
           reason: `Message flagged for moderation: \n${reasons}`,
@@ -177,7 +178,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         target: ctx.from,
         reason: "Message contains non-latin characters",
         duration: duration.zod.parse(NON_LATIN.MUTE_DURATION),
-        author: ctx.me,
+        from: ctx.me,
       })
     }
   }
@@ -198,67 +199,41 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
     // triggered when more than 3 messages have been sent within EXPIRY seconds of each other
     if (res >= 3) {
       const range = await redis.lRange(key, 0, -2) // get all but the last
-      const similarMessages = await Promise.all(
+      const similarMessages: Message[] = await Promise.all(
         range
           .map((r) => r.split("|"))
           .map(([hash, chatId, messageId]) => ({ hash, chatId: Number(chatId), messageId: Number(messageId) }))
           .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SPAM.SIMILARITY_THR)
-          .map(
-            async (v) =>
-              (await messageStorage.get(v.chatId, v.messageId)) ?? { chatId: v.chatId, messageId: v.messageId }
-          )
+          .map(async (v) => {
+            const msg = await messageStorage.get(v.chatId, v.messageId)
+            const message = createFakeMessage(v.chatId, v.messageId, ctx.from, msg?.timestamp)
+            return message
+          })
       )
 
       if (similarMessages.length === 0) return
-      similarMessages.push({
-        message: text,
-        chatId: ctx.chat.id,
-        authorId: ctx.from.id,
-        messageId: ctx.message.message_id,
-        timestamp: new Date(),
-      })
-
-      const chatsMap = new Map<number, number[]>()
-      const chatsCollection = new Map<number, MultiChatMsgCollection>()
-      similarMessages.forEach((msg) => {
-        const ids = chatsMap.get(msg.chatId) ?? []
-        ids.push(msg.messageId)
-        chatsMap.set(msg.chatId, ids)
-
-        const collection: MultiChatMsgCollection = chatsCollection.get(msg.chatId) ?? {
-          chatId: msg.chatId,
-          messages: [],
-          unknownMessages: [],
-        }
-
-        if ("message" in msg) {
-          collection.messages.push({ id: msg.messageId, message: msg.message, timestamp: msg.timestamp })
-        } else collection.unknownMessages.push(msg.messageId)
-        chatsCollection.set(msg.chatId, collection)
-      })
+      similarMessages.push(ctx.message)
 
       const muteDuration = duration.zod.parse(MULTI_CHAT_SPAM.MUTE_DURATION)
-      await tgLogger.autoModeration({
+      await Promise.allSettled(
+        groupMessagesByChat(similarMessages)
+          .keys()
+          .map((chatId) =>
+            ctx.api.restrictChatMember(chatId, ctx.from.id, RestrictPermissions.mute, {
+              until_date: muteDuration.timestamp_s,
+            })
+          )
+      )
+
+      await tgLogger.moderationAction({
         action: "MULTI_CHAT_SPAM",
+        from: ctx.me,
+        chat: ctx.chat,
         message: ctx.message,
+        messages: similarMessages,
         duration: muteDuration,
-        chatCollections: Array.from(chatsCollection.values()),
         target: ctx.from,
-        reason: "Multichat spam detected",
       })
-
-      const deleted = await Promise.all(
-        chatsMap.entries().map(async ([chatId, mIds]) => {
-          await ctx.api.restrictChatMember(chatId, ctx.from.id, RestrictPermissions.mute, {
-            until_date: muteDuration.timestamp_s,
-          })
-          return await ctx.api.deleteMessages(chatId, mIds).catch(() => false)
-        })
-      )
-
-      logger.info(
-        `Deleted messages from ${deleted.filter((v) => v).length}/${chatsMap.size} chats due to multichat spam. (${similarMessages.length} total messages)`
-      )
     }
   }
 

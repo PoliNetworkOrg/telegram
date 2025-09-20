@@ -317,8 +317,15 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
         async (conv: CommandConversation<S>, ctx: CommandScopedContext<S>) => {
           // check for the requirements in the command invocation
           // biome-ignore lint/style/noNonNullAssertion: conversations cannot start without a message
-          const requirements = ManagedCommands.parseCommand(ctx.message!, cmd)
+          const message = ctx.message!
+          const requirements = ManagedCommands.parseCommand(message, cmd)
           if (requirements.isErr()) {
+            // Command messages that don't meet requirements
+            // AND are sent in a group/supergroup are deleted from here because
+            // they don't reach command handler so they would remain in chat.
+            // In private chats we keep them, we don't care
+            if (message.chat.type !== "private") await ctx.deleteMessage()
+
             const msg = await ctx.reply(
               fmt(({ b, skip }) => [
                 `Error:`,
