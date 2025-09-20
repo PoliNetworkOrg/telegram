@@ -6,9 +6,7 @@ import type { Message } from "grammy/types"
 import EventEmitter from "events"
 
 import { Composer } from "grammy"
-import OpenAI from "openai"
 import ssdeep from "ssdeep.js"
-
 import { messageStorage, tgLogger } from "@/bot"
 import { mute } from "@/lib/moderation"
 import { logger } from "@/logger"
@@ -19,18 +17,10 @@ import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { createFakeMessage, getText } from "@/utils/messages"
 import { wait } from "@/utils/wait"
-
+import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
-import { checkForAllowedLinks, parseFlaggedCategories } from "./functions"
-
-const client = process.env.OPENAI_API_KEY
-  ? new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    })
-  : null
-
-if (!client) logger.warn("Missing env OPENAI_API_KEY, automatic moderation will not work.")
-else logger.debug("OpenAI client initialized for moderation.")
+import { checkForAllowedLinks } from "./functions"
+import type { MultiChatMsgCollection } from "./types"
 
 /**
  * # Auto-Moderation stack
@@ -46,19 +36,11 @@ else logger.debug("OpenAI client initialized for moderation.")
  * - [ ] Avoid deletion for messages explicitly allowed by Direttivo or from privileged users
  * - [x] handle non-latin characters
  */
-export class AutoModerationStack<C extends Context>
-  extends EventEmitter<{
-    results: [ModerationResult[]]
-  }>
-  implements MiddlewareObj<C>
-{
+export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> {
   private composer = new Composer<C>()
-  private checkQueue: ModerationCandidate[] = []
-  private timeout: NodeJS.Timeout | null = null
+  private aiModeration: AIModeration<C> = new AIModeration<C>()
 
   constructor() {
-    super()
-
     // Links handler, deletes blacklisted domains
     this.composer.on(
       ["message::url", "message::text_link", "edited_message::url", "edited_message::text_link"],
@@ -99,7 +81,7 @@ export class AutoModerationStack<C extends Context>
       "message",
       defer(async (ctx) => {
         const message = ctx.message
-        const flaggedCategories = await this.checkForHarmfulContent(ctx)
+        const flaggedCategories = await this.aiModeration.checkForHarmfulContent(ctx)
 
         if (flaggedCategories.length > 0) {
           const reasons = flaggedCategories
@@ -220,87 +202,6 @@ export class AutoModerationStack<C extends Context>
         }
       })
     )
-  }
-
-  /**
-   * Triggers a moderation check for the queued messages.
-   *
-   * Called by a timeout after pushing an element in the queue
-   */
-  private triggerCheck() {
-    if (!client) return
-    if (this.checkQueue.length === 0) return
-
-    const candidates = this.checkQueue.splice(0, this.checkQueue.length)
-
-    void client.moderations
-      .create({ input: candidates, model: "omni-moderation-latest" })
-      .then((response) => {
-        this.emit("results", response.results)
-      })
-      .catch((error: unknown) => {
-        logger.error({ error }, "Error during moderation check")
-      })
-  }
-
-  /**
-   * Wait for the moderation results to be emitted.
-   *
-   * This is done to allow batching of moderation checks.
-   * @returns A promise that resolves with the moderation results, mapped as they were queued.
-   */
-  private async waitForResults(): Promise<ModerationResult[]> {
-    return new Promise((resolve, reject) => {
-      this.once("results", (results) => {
-        resolve(results)
-      })
-      setTimeout(() => {
-        reject(new Error("Moderation Check timed out"))
-      }, 1000 * 30)
-    })
-  }
-
-  /**
-   * Add a candidate to the moderation check queue, returns the result if found.
-   * @param candidate the candidate to add to the queue, either text or image
-   * @returns A promise that resolves with the moderation result, or null if not found or timed out.
-   */
-  private async addToCheckQueue(candidate: ModerationCandidate): Promise<ModerationResult | null> {
-    const index = this.checkQueue.push(candidate) - 1
-    if (this.timeout === null) {
-      // throttle a check every 10 seconds
-      this.timeout = setTimeout(() => {
-        this.triggerCheck()
-        this.timeout = null
-      }, 10 * 1000)
-    }
-    return this.waitForResults()
-      .then((results) => results[index] ?? null)
-      .catch(() => null) // check timed out
-  }
-
-  /**
-   * Check for harmful content in the message context.
-   * @param context the message context to check
-   * @returns A list of flagged categories found in the message
-   */
-  private async checkForHarmfulContent(context: Filter<C, "message">): Promise<FlaggedCategory[]> {
-    if (!client) return []
-    const candidates: ModerationCandidate[] = []
-    const { text } = getText(context.message)
-    if (text) candidates.push({ text, type: "text" })
-    if (context.message.photo) {
-      const photo = context.message.photo[0]
-      const file = await context.api.getFile(photo.file_id)
-      const url = `https://api.telegram.org/file/bot${context.api.token}/${file.file_path}`
-
-      candidates.push({ image_url: { url }, type: "image_url" })
-    }
-
-    const raw = await Promise.all(candidates.map((candidate) => this.addToCheckQueue(candidate)))
-    const results = raw.filter((result) => result !== null) // fail open, e.g check times out: leave the message be
-
-    return parseFlaggedCategories(results)
   }
 
   middleware(): MiddlewareFn<C> {

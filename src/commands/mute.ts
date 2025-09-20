@@ -15,7 +15,7 @@ _commandsBase
         key: "duration",
         type: duration.zod,
         optional: false,
-        description: "How long to mutate the user. " + duration.formatDesc,
+        description: `How long to mutate the user. ${duration.formatDesc}`,
       },
       { key: "reason", optional: true, description: "Optional reason to mutate the user" },
     ],
@@ -48,8 +48,6 @@ _commandsBase
         await msg.delete()
         return
       }
-
-      await context.reply(res.value)
     },
   })
   .createCommand({
@@ -83,8 +81,6 @@ _commandsBase
         await msg.delete()
         return
       }
-
-      await context.reply(res.value)
     },
   })
   .createCommand({
@@ -98,7 +94,7 @@ _commandsBase
     },
     handler: async ({ args, context }) => {
       await context.deleteMessage()
-      const userId = args.username.startsWith("@") ? await getTelegramId(args.username) : parseInt(args.username)
+      const userId = args.username.startsWith("@") ? await getTelegramId(args.username) : parseInt(args.username, 10)
       if (!userId) {
         logger.debug(`unmute: no userId for username ${args.username}`)
         const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
@@ -114,7 +110,5 @@ _commandsBase
         await msg.delete()
         return
       }
-
-      await context.reply(res.value)
     },
   })

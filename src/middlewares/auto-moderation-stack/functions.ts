@@ -1,41 +1,4 @@
-import type { Category, FlaggedCategory, ModerationResult } from "./types"
-
-import { BANNED_DOMAINS, DELETION_THRESHOLDS, POLINETWORK_DISCORD_GUILD_ID } from "./constants"
-
-/**
- * Takes each category, and for the flagged ones takes the score (highest among related results) and
- * confronts it with predefined thresholds
- *
- * @param results The array of results as provided by OpenAI's API
- * @returns An array of {@link FlaggedCategory} containing each category that was flagged by OpenAI
- */
-export function parseFlaggedCategories(results: ModerationResult[]): FlaggedCategory[] {
-  const categories = new Set(
-    results
-      .map((result) => result.categories)
-      .reduce<Category[]>((acc, curr) => {
-        Object.keys(curr).forEach((key) => {
-          const k = key as Category
-          if (curr[k]) acc.push(k)
-        })
-        return acc
-      }, [])
-  )
-  const scores = results
-    .map((result) => result.category_scores)
-    .reduce<Record<Category, number>>((acc, curr) => {
-      Object.keys(curr).forEach((key) => {
-        const k = key as Category
-        acc[k] = Math.max(acc[k], curr[k])
-      })
-      return acc
-    }, results[0].category_scores)
-  return Array.from(categories).map((category) => ({
-    category,
-    score: scores[category],
-    aboveThreshold: DELETION_THRESHOLDS[category] ? scores[category] >= DELETION_THRESHOLDS[category] : false,
-  }))
-}
+import { BANNED_DOMAINS, POLINETWORK_DISCORD_GUILD_ID } from "./constants"
 
 /**
  * checks an array of strings for domains which are not allowed in our groups
@@ -54,8 +17,7 @@ export async function checkForAllowedLinks(links: string[]): Promise<boolean> {
       const code = match[1]
       const isPolinetworkDiscord = await fetch(`https://discordapp.com/api/invites/${code}`)
         .then((res) => res.json())
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        .then((v) => v?.guild?.id === POLINETWORK_DISCORD_GUILD_ID) // opt chaining, wont crash, and even if it did there's a catch clause
+        .then((v) => v?.guild?.id === POLINETWORK_DISCORD_GUILD_ID)
         .catch(() => false)
       if (!isPolinetworkDiscord) return false
     }

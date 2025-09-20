@@ -32,6 +32,7 @@ _commandsBase
         message: repliedTo,
         reason: args.reason,
       })
+
       if (res.isErr()) {
         const msg = await context.reply(res.error)
         await wait(5000)
@@ -75,6 +76,7 @@ _commandsBase
         duration: args.duration,
         reason: args.reason,
       })
+
       if (res.isErr()) {
         const msg = await context.reply(res.error)
         await wait(5000)
@@ -96,7 +98,7 @@ _commandsBase
     },
     handler: async ({ args, context }) => {
       await context.deleteMessage()
-      const userId = args.username.startsWith("@") ? await getTelegramId(args.username) : parseInt(args.username)
+      const userId = args.username.startsWith("@") ? await getTelegramId(args.username) : parseInt(args.username, 10)
       if (!userId) {
         logger.debug(`unban: no userId for username ${args.username}`)
         const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
@@ -112,7 +114,5 @@ _commandsBase
         await msg.delete()
         return
       }
-
-      await context.reply(res.value)
     },
   })

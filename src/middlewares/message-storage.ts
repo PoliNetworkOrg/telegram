@@ -1,9 +1,7 @@
-import type { Context } from "@/lib/managed-commands"
-import type { MiddlewareFn } from "grammy"
-
 import { Cron } from "croner"
-
+import type { MiddlewareFn } from "grammy"
 import { api } from "@/backend"
+import type { Context } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
 
@@ -49,7 +47,7 @@ export class MessageStorage {
     this.memoryStorage = []
   }
 
-  middleware: MiddlewareFn<Context> = async (ctx, next) => {
+  middleware: MiddlewareFn<Context> = (ctx, next) => {
     if (!ctx.from) {
       logger.debug("messageStorage skip: no ctx.from")
       return next()

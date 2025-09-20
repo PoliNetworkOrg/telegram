@@ -1,7 +1,6 @@
 import type { ContextWith } from "@/utils/types"
 import type { Message, User } from "grammy/types"
-
-import { type Result, err, ok } from "neverthrow"
+import { err, ok, type Result } from "neverthrow"
 
 import { api } from "@/backend"
 import { tgLogger } from "@/bot"

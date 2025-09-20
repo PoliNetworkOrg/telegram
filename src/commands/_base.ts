@@ -1,7 +1,7 @@
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 
-import { type Role, api } from "@/backend"
-import { ManagedCommands, isAllowedInGroups } from "@/lib/managed-commands"
+import { api, type Role } from "@/backend"
+import { isAllowedInGroups, ManagedCommands } from "@/lib/managed-commands"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
@@ -26,7 +26,7 @@ export const _commandsBase = new ManagedCommands<Role>({
       const { status: groupRole } = await ctx.getChatMember(ctx.from.id)
 
       if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
-      if (excludedGroupsId && excludedGroupsId.includes(ctx.chatId)) return false
+      if (excludedGroupsId?.includes(ctx.chatId)) return false
       if (allowedGroupAdmins) {
         const isDbAdmin = await api.tg.permissions.checkGroup.query({ userId: ctx.from.id, groupId: ctx.chatId })
         const isTgAdmin = groupRole === "administrator" || groupRole === "creator"
@@ -39,7 +39,7 @@ export const _commandsBase = new ManagedCommands<Role>({
 
     const userRole = role as Role
     if (allowedRoles && !allowedRoles.includes(userRole)) return false
-    if (excludedRoles && excludedRoles.includes(userRole)) return false
+    if (excludedRoles?.includes(userRole)) return false
 
     return true
   },
