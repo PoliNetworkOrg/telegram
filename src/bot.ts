@@ -5,7 +5,7 @@ import { run, sequentialize } from "@grammyjs/runner"
 import { Bot, GrammyError, HttpError } from "grammy"
 import type { Update } from "grammy/types"
 import type { Context } from "@/lib/managed-commands"
-import { MenuGenerator } from "@/lib/menu";
+import { _menuGenerator } from "@/lib/menu"
 import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
@@ -19,6 +19,8 @@ import { MessageStorage } from "./middlewares/message-storage"
 import { UIActionsLogger } from "./middlewares/ui-actions-logger"
 import { redis } from "./redis"
 import { setTelegramId } from "./utils/telegram-id"
+
+export { _menuGenerator as menuGenerator } from "@/lib/menu"
 
 const TEST_CHAT_ID = -1002669533277
 const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
@@ -49,7 +51,6 @@ const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
 
 await apiTestQuery()
 export const messageStorage = new MessageStorage()
-export const menuGenerator = new MenuGenerator()
 
 const bot = new Bot<Context>(env.BOT_TOKEN)
 bot.use(hydrate())
@@ -72,11 +73,11 @@ export const tgLogger = new TgLogger<Context>(bot, -1002685849173, {
   groupManagement: 33,
 })
 
+bot.use(_menuGenerator)
 bot.use(commands)
 bot.use(new BotMembershipHandler())
 bot.use(new AutoModerationStack())
 bot.use(new UIActionsLogger())
-bot.use(menuGenerator)
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
