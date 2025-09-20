@@ -1,15 +1,11 @@
-import type { FlaggedCategory, ModerationCandidate, ModerationResult } from "./types"
 import type { Context } from "@/lib/managed-commands"
-import type { Filter, MiddlewareFn, MiddlewareObj } from "grammy"
+import type { MiddlewareFn, MiddlewareObj } from "grammy"
 import type { Message } from "grammy/types"
-
-import EventEmitter from "events"
 
 import { Composer } from "grammy"
 import ssdeep from "ssdeep.js"
 import { messageStorage, tgLogger } from "@/bot"
 import { mute } from "@/lib/moderation"
-import { logger } from "@/logger"
 import { redis } from "@/redis"
 import { RestrictPermissions, groupMessagesByChat } from "@/utils/chat"
 import { defer } from "@/utils/deferred-middleware"
@@ -20,7 +16,6 @@ import { wait } from "@/utils/wait"
 import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
 import { checkForAllowedLinks } from "./functions"
-import type { MultiChatMsgCollection } from "./types"
 
 /**
  * # Auto-Moderation stack

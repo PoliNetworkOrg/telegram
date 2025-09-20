@@ -18,7 +18,7 @@ export function stripChatId(chatId: number): number {
 
   const str = positive.toString()
   if (str.length < 13) return positive
-  return parseInt(str.slice(1))
+  return parseInt(str.slice(1), 10)
 }
 
 export const RestrictPermissions: Record<string, ChatPermissions> = {
