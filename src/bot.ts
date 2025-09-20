@@ -5,7 +5,7 @@ import { run, sequentialize } from "@grammyjs/runner"
 import { Bot, GrammyError, HttpError } from "grammy"
 import type { Update } from "grammy/types"
 import type { Context } from "@/lib/managed-commands"
-
+import { MenuGenerator } from "@/lib/menu";
 import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
@@ -49,6 +49,7 @@ const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
 
 await apiTestQuery()
 export const messageStorage = new MessageStorage()
+export const menuGenerator = new MenuGenerator()
 
 const bot = new Bot<Context>(env.BOT_TOKEN)
 bot.use(hydrate())
@@ -75,6 +76,7 @@ bot.use(commands)
 bot.use(new BotMembershipHandler())
 bot.use(new AutoModerationStack())
 bot.use(new UIActionsLogger())
+bot.use(menuGenerator)
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
