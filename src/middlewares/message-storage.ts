@@ -1,15 +1,22 @@
 import { Cron } from "croner"
-import type { MiddlewareFn } from "grammy"
+import type { MiddlewareFn, MiddlewareObj } from "grammy"
 import { api } from "@/backend"
-import type { Context } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
 
 export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
 
-export class MessageStorage {
+export class MessageStorage implements MiddlewareObj {
+  private static instance: MessageStorage | null = null
+  static getInstance(): MessageStorage {
+    if (!MessageStorage.instance) {
+      MessageStorage.instance = new MessageStorage()
+    }
+    return MessageStorage.instance
+  }
+
   private memoryStorage: Message[]
-  constructor() {
+  private constructor() {
     this.memoryStorage = []
     new Cron("0 */1 * * * *", () => this.sync())
   }
@@ -47,33 +54,35 @@ export class MessageStorage {
     this.memoryStorage = []
   }
 
-  middleware: MiddlewareFn<Context> = (ctx, next) => {
-    if (!ctx.from) {
-      logger.debug("messageStorage skip: no ctx.from")
-      return next()
-    }
-    if (!ctx.chatId || !ctx.chat) {
-      logger.debug("messageStorage skip: no ctx.chatId")
-      return next()
-    }
-    if (ctx.chat.type === "private") {
-      logger.debug("messageStorage skip: chat type is private")
-      return next()
-    }
-    if (!ctx.message) {
-      logger.debug("messageStorage skip: no message")
-      return next()
-    }
+  middleware(): MiddlewareFn {
+    return (ctx, next) => {
+      if (!ctx.from) {
+        logger.debug("messageStorage skip: no ctx.from")
+        return next()
+      }
+      if (!ctx.chatId || !ctx.chat) {
+        logger.debug("messageStorage skip: no ctx.chatId")
+        return next()
+      }
+      if (ctx.chat.type === "private") {
+        logger.debug("messageStorage skip: chat type is private")
+        return next()
+      }
+      if (!ctx.message) {
+        logger.debug("messageStorage skip: no message")
+        return next()
+      }
 
-    const text = ctx.message.text ?? ctx.message.caption
-    this.memoryStorage.push({
-      authorId: ctx.from.id,
-      chatId: ctx.chatId,
-      messageId: ctx.message.message_id,
-      message: text ?? "[non-textual]",
-      timestamp: new Date(ctx.message.date * 1000),
-    })
+      const text = ctx.message.text ?? ctx.message.caption
+      this.memoryStorage.push({
+        authorId: ctx.from.id,
+        chatId: ctx.chatId,
+        messageId: ctx.message.message_id,
+        message: text ?? "[non-textual]",
+        timestamp: new Date(ctx.message.date * 1000),
+      })
 
-    return next()
+      return next()
+    }
   }
 }

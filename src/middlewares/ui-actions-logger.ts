@@ -1,7 +1,7 @@
 import { Composer, type MiddlewareFn, type MiddlewareObj } from "grammy"
 import { tgLogger } from "@/bot"
-import type { Context } from "@/lib/managed-commands"
 import { duration } from "@/utils/duration"
+import type { Context } from "@/utils/types"
 
 /**
  * Middleware to track administrative actions performed via Telegram UI (not via bot commands).

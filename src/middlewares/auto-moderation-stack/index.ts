@@ -1,8 +1,7 @@
 import type { Filter, MiddlewareFn, MiddlewareObj } from "grammy"
 import { Composer } from "grammy"
 import ssdeep from "ssdeep.js"
-import { messageStorage, tgLogger } from "@/bot"
-import type { Context } from "@/lib/managed-commands"
+import { tgLogger } from "@/bot"
 import { mute } from "@/lib/moderation"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
@@ -11,7 +10,9 @@ import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { getText } from "@/utils/messages"
+import type { Context } from "@/utils/types"
 import { wait } from "@/utils/wait"
+import { MessageStorage } from "../message-storage"
 import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
 import { checkForAllowedLinks } from "./functions"
@@ -205,7 +206,10 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
           .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SPAM.SIMILARITY_THR)
           .map(
             async (v) =>
-              (await messageStorage.get(v.chatId, v.messageId)) ?? { chatId: v.chatId, messageId: v.messageId }
+              (await MessageStorage.getInstance().get(v.chatId, v.messageId)) ?? {
+                chatId: v.chatId,
+                messageId: v.messageId,
+              }
           )
       )
 

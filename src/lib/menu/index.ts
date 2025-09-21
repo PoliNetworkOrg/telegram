@@ -74,7 +74,15 @@ class Menu<T, C extends Context = Context> {
   }
 }
 
-class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
+export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
+  private static instance: MenuGenerator<Context> | null = null
+  static getInstance<C extends Context>(): MenuGenerator<C> {
+    if (!MenuGenerator.instance) {
+      MenuGenerator.instance = new MenuGenerator<Context>()
+    }
+    return MenuGenerator.instance as unknown as MenuGenerator<C>
+  }
+
   static toCallbackId(menuHash: string, row: number, col: number, keyboardId: string): string | null {
     if (menuHash.length !== CONSTANTS.hashLen) return null
     if (row > CONSTANTS.maxRows || col > CONSTANTS.maxCols) {
@@ -112,7 +120,7 @@ class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
   private composer: Composer<C> = new Composer<C>()
   private menus: Map<string, Menu<unknown>> = new Map()
 
-  constructor() {
+  private constructor() {
     this.composer.on("callback_query:data", (ctx, next) => {
       // Handle callback query
       const callbackData = ctx.callbackQuery.data
@@ -177,5 +185,3 @@ class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
     return this.composer.middleware()
   }
 }
-
-export const _menuGenerator = new MenuGenerator()

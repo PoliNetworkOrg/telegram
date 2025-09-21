@@ -1,8 +1,8 @@
-import { menuGenerator } from "@/bot"
+import { MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
 import { _commandsBase } from "../_base"
 
-const generateMenu = menuGenerator.create<{
+const generateMenu = MenuGenerator.getInstance().create<{
   messageId: number
   chatId: number
 }>("test-name", [

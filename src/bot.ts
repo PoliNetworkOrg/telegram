@@ -4,11 +4,10 @@ import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import { run, sequentialize } from "@grammyjs/runner"
 import { Bot, GrammyError, HttpError } from "grammy"
 import type { Update } from "grammy/types"
-import type { Context } from "@/lib/managed-commands"
-import { _menuGenerator } from "@/lib/menu"
 import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
+import { MenuGenerator } from "./lib/menu"
 import { TgLogger } from "./lib/tg-logger"
 import { logger } from "./logger"
 import { AutoModerationStack } from "./middlewares/auto-moderation-stack"
@@ -19,8 +18,7 @@ import { MessageStorage } from "./middlewares/message-storage"
 import { UIActionsLogger } from "./middlewares/ui-actions-logger"
 import { redis } from "./redis"
 import { setTelegramId } from "./utils/telegram-id"
-
-export { _menuGenerator as menuGenerator } from "@/lib/menu"
+import type { Context } from "./utils/types"
 
 const TEST_CHAT_ID = -1002669533277
 const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
@@ -50,7 +48,6 @@ const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
 ]
 
 await apiTestQuery()
-export const messageStorage = new MessageStorage()
 
 const bot = new Bot<Context>(env.BOT_TOKEN)
 bot.use(hydrate())
@@ -73,7 +70,7 @@ export const tgLogger = new TgLogger<Context>(bot, -1002685849173, {
   groupManagement: 33,
 })
 
-bot.use(_menuGenerator)
+bot.use(MenuGenerator.getInstance())
 bot.use(commands)
 bot.use(new BotMembershipHandler())
 bot.use(new AutoModerationStack())
@@ -87,7 +84,7 @@ bot.on("message", async (ctx, next) => {
 })
 
 bot.on("message", messageLink({ channelIds: [TEST_CHAT_ID] })) // now is configured a test group
-bot.on("message", messageStorage.middleware)
+bot.on("message", MessageStorage.getInstance())
 bot.on("message", checkUsername)
 // bot.on("message", async (ctx, next) => { console.log(ctx.message); return await next() })
 
@@ -122,7 +119,7 @@ async function terminate(signal: NodeJS.Signals) {
 
   terminateStarted = true
   logger.warn(`Received ${signal}, shutting down...`)
-  const p1 = messageStorage.sync()
+  const p1 = MessageStorage.getInstance().sync()
   const p2 = redis.quit()
   const p3 = runner.isRunning() && runner.stop()
   await Promise.all([p1, p2, p3])

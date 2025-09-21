@@ -2,8 +2,8 @@ import { Composer, type Filter, InlineKeyboard, type MiddlewareFn, type Middlewa
 import { api } from "@/backend"
 import { tgLogger } from "@/bot"
 import { GroupManagement } from "@/lib/group-management"
-import type { Context } from "@/lib/managed-commands"
 import { logger } from "@/logger"
+import type { Context } from "@/utils/types"
 
 type ChatType = "group" | "supergroup" | "private" | "channel"
 type StatusType = "member" | "administrator" | "creator" | "restricted" | "left" | "kicked"
