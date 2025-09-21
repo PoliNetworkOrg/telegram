@@ -14,13 +14,15 @@ const CONSTANTS = {
   padLen: 3,
 }
 
+type Callback<T> = (data: T) => void | Promise<void>
+
 class Menu<T> {
   private dataStorage: RedisFallbackAdapter<T>
-  private callbacks: Map<string, (data: T) => void> = new Map()
+  private callbacks: Map<string, Callback<T>> = new Map()
 
   constructor(
     private hashedId: string,
-    private items: Array<Array<{ text: string; cb: (data: T) => void }>>
+    private items: Array<Array<{ text: string; cb: Callback<T> }>>
   ) {
     this.dataStorage = new RedisFallbackAdapter({
       redis,
@@ -64,7 +66,8 @@ class Menu<T> {
     const data = await this.dataStorage.read(keyboardId)
     if (!data) throw new Error(`Data in redis not found for buttonId(row,col): ${buttonId}`)
 
-    callback(data)
+    await callback(data)
+    await this.dataStorage.delete(keyboardId)
   }
 }
 
@@ -131,15 +134,7 @@ class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
     })
   }
 
-  create<T>(
-    id: string,
-    items: Array<
-      Array<{
-        text: string
-        cb: (data: T) => void
-      }>
-    >
-  ): (data: T) => Promise<InlineKeyboard> {
+  create<T>(id: string, items: Array<Array<{ text: string; cb: Callback<T> }>>): (data: T) => Promise<InlineKeyboard> {
     const hash = nanohash(id, CONSTANTS.hashLen)
     if (this.menus.has(hash)) {
       // not the best solution, but it works
