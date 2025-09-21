@@ -375,9 +375,7 @@ export class ManagedCommands<
           // Inform the user of restricted access
           const reply = await ctx.reply("You are not allowed to execute this command")
           await ctx.deleteMessage()
-          setTimeout(() => {
-            void ctx.api.deleteMessage(reply.chat.id, reply.message_id)
-          }, 3000)
+          setTimeout(() => void reply.delete(), 3000)
           return
         }
       }
