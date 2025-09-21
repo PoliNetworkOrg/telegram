@@ -1,10 +1,11 @@
-import { Composer, type Context, InlineKeyboard, type MiddlewareObj } from "grammy"
+import { Composer, type Context, type Filter, InlineKeyboard, type MiddlewareObj } from "grammy"
 import { nanoid } from "nanoid"
 
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
 import { nanohash } from "@/utils/crypto"
+import type { MaybePromise } from "@/utils/types"
 
 const CONSTANTS = {
   prefix: "menugen",
@@ -14,19 +15,22 @@ const CONSTANTS = {
   padLen: 3,
 }
 
-type Callback<T> = (data: T) => void | Promise<void>
+// biome-ignore lint/suspicious/noConfusingVoidType: literally a bug in Biome
+type Callback<T> = (data: T) => MaybePromise<string | void>
 
-class Menu<T> {
+class Menu<T, C extends Context = Context> {
   private dataStorage: RedisFallbackAdapter<T>
   private callbacks: Map<string, Callback<T>> = new Map()
 
   constructor(
     private hashedId: string,
-    private items: Array<Array<{ text: string; cb: Callback<T> }>>
+    private items: Array<Array<{ text: string; cb: Callback<T> }>>,
+    public onExpiredButtonPress?: Callback<Filter<C, "callback_query:data">>
   ) {
     this.dataStorage = new RedisFallbackAdapter({
       redis,
       prefix: `menu-data:${this.hashedId}`,
+      ttl: 60 * 60 * 24 * 30, // 30 days
     })
 
     // Initialize menu with type T
@@ -66,8 +70,7 @@ class Menu<T> {
     const data = await this.dataStorage.read(keyboardId)
     if (!data) throw new Error(`Data in redis not found for buttonId(row,col): ${buttonId}`)
 
-    await callback(data)
-    await this.dataStorage.delete(keyboardId)
+    return await callback(data)
   }
 }
 
@@ -124,24 +127,48 @@ class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
 
       return menu
         .call(row, col, keyboardId)
-        .then(() => {
-          ctx.answerCallbackQuery()
+        .then((result) => {
+          return ctx.answerCallbackQuery({ text: result ?? undefined })
         })
-        .catch((err) => {
-          logger.error({ err }, "[MenuGen] Error handling menu callback")
-          return next()
+        .catch(async () => {
+          await ctx.editMessageReplyMarkup().catch(() => {})
+          const feedback = menu.onExpiredButtonPress && (await menu.onExpiredButtonPress(ctx))
+          await ctx.answerCallbackQuery({ text: feedback ?? "This button is no longer available", show_alert: true })
         })
     })
   }
 
-  create<T>(id: string, items: Array<Array<{ text: string; cb: Callback<T> }>>): (data: T) => Promise<InlineKeyboard> {
+  create<T>(
+    id: string,
+    items: Array<
+      Array<{
+        /** The text to be displayed on the button. */
+        text: string
+        /**
+         * The callback function to be executed when the button is pressed.
+         * @param data - The data of type T associated with the menu instance,
+         * passed with the specific keyboard for a single message.
+         * @returns A string if you want to display an alert to the user,
+         * or void if no feedback is needed.
+         */
+        cb: Callback<T>
+      }>
+    >,
+    /**
+     * Optional callback to be executed when a button is pressed but the associated
+     * data is no longer available (e.g., expired or deleted).
+     * @param data - The context of the middleware when the button was pressed.
+     * @returns An optional string if you want to display a specific alert to the user
+     */
+    onExpiredButtonPress?: Callback<Filter<C, "callback_query:data">>
+  ): (data: T) => Promise<InlineKeyboard> {
     const hash = nanohash(id, CONSTANTS.hashLen)
     if (this.menus.has(hash)) {
       // not the best solution, but it works
       throw new Error(`[MenuGen] Menu with id ${id} already exists`)
     }
 
-    const menu = new Menu<T>(hash, items)
+    const menu = new Menu<T, C>(hash, items, onExpiredButtonPress)
     this.menus.set(hash, menu as Menu<unknown>)
     return (data: T) => menu.generateKeyboard(data)
   }

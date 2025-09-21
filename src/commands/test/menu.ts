@@ -1,6 +1,5 @@
 import { menuGenerator } from "@/bot"
 import { logger } from "@/logger"
-import { fmt } from "@/utils/format"
 import { _commandsBase } from "../_base"
 
 const generateMenu = menuGenerator.create<{
@@ -9,9 +8,10 @@ const generateMenu = menuGenerator.create<{
 }>("test-name", [
   [
     {
-      text: fmt(({ b }) => b`🗑 Delete + 🚫 Ban`),
+      text: "🗑 Delete + 🚫 Ban",
       cb: (data) => {
         logger.info({ data }, "TESTSTESTSTSTE")
+        return "Deleted + Banned"
       },
     },
   ],

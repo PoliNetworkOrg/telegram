@@ -9,3 +9,5 @@ export type OptionalPropertyOf<T extends object> = Exclude<
 export type ContextWith<P extends OptionalPropertyOf<Context>> = Exclude<Context, P> & {
   [K in P]: NonNullable<Context[P]>
 }
+
+export type MaybePromise<T> = T | Promise<T>
