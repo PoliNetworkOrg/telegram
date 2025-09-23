@@ -1,11 +1,10 @@
 import { type Bot, type Context, GrammyError, InlineKeyboard } from "grammy"
 import type { Message, User } from "grammy/types"
 import { logger } from "@/logger"
-import { redis } from "@/redis"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { duration } from "@/utils/duration"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
-import { RedisFallbackAdapter } from "../redis-fallback-adapter"
+import { type CallbackCtx, MenuGenerator } from "../menu"
 import type * as Types from "./types"
 
 type Topics = {
@@ -22,27 +21,83 @@ type Report = {
   message: Message
   target: User
   reporter: User
-  reportMsg: Message
   reportText: string
 }
 
-const REPORT_PREFIX = "rep"
-
 export class TgLogger<C extends Context> {
-  private callback_prefix = "tglog" // supposed we have only 1 class instance
-  private reportStorage: RedisFallbackAdapter<Report>
   constructor(
     private bot: Bot<C>,
     private groupId: number,
     private topics: Topics
-  ) {
-    this.reportStorage = new RedisFallbackAdapter({
-      redis,
-      prefix: "tgloggerreport",
-      logger,
-    })
-    this.setupCallbackQuery()
+  ) { }
+
+  private async editReportMessage(report: Report, ctx: CallbackCtx<C>, actionText: string) {
+    if (!ctx.msg) return
+    const msg = ctx.msg
+    await this.bot.api.editMessageText(
+      msg.chat.id,
+      msg.message_id,
+      fmt(
+        ({ b, n, skip }) => [
+          skip`${report.reportText}`,
+          n`--------------------------------`,
+          n`✅ Resolved by ${fmtUser(report.reporter)}`,
+          n`${b`Action:`} ${actionText}`,
+          n`${b`Date:`} ${fmtDate(new Date())}`,
+        ],
+        { sep: "\n" }
+      ),
+
+      { reply_markup: undefined, link_preview_options: { is_disabled: true } }
+    )
   }
+
+  private reportMenu = MenuGenerator.getInstance<C>().create<Report>("report-command", [
+    [
+      {
+        text: "✅ Ignore",
+        cb: async ({ data, ctx }) => {
+          await this.editReportMessage(data, ctx, "✅ Ignore")
+        },
+      },
+      {
+        text: "🗑 Del",
+        cb: async ({ data, ctx }) => {
+          await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
+          await this.editReportMessage(data, ctx, "🗑 Delete")
+        },
+      },
+    ],
+    [
+      {
+        text: "👢 Kick",
+        cb: async ({ data, ctx }) => {
+          await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
+          await ctx.api.banChatMember(data.message.chat.id, data.target.id, {
+            until_date: Math.floor(Date.now() / 1000) + duration.values.m,
+          })
+          await this.editReportMessage(data, ctx, "👢 Kick")
+        },
+      },
+      {
+        text: "🚫 Ban",
+        cb: async ({ data, ctx }) => {
+          await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
+          await ctx.api.banChatMember(data.message.chat.id, data.target.id)
+          await this.editReportMessage(data, ctx, "🚫 Ban")
+        },
+      },
+    ],
+    [
+      {
+        text: "🚨 Start BAN ALL 🚨",
+        cb: async ({ data, ctx }) => {
+          await this.editReportMessage(data, ctx, "🚨 Start BAN ALL(not implemented yet)")
+          return "❌ Not implemented yet"
+        },
+      },
+    ],
+  ])
 
   private async log(
     topicId: number,
@@ -94,18 +149,7 @@ export class TgLogger<C extends Context> {
     if (message.from === undefined) return false // should be impossible
     const target = message.from
 
-    const id = crypto.randomUUID()
-
     const { invite_link } = await this.bot.api.getChat(message.chat.id)
-    const reply_markup = new InlineKeyboard()
-      .text("✅ Ignore", `${this.callback_prefix}:${REPORT_PREFIX}:i:${id}`)
-      .text("🗑 Del", `${this.callback_prefix}:${REPORT_PREFIX}:d:${id}`) // must not exceed 64 bytes
-      .row()
-      .text("👢 Kick", `${this.callback_prefix}:${REPORT_PREFIX}:k:${id}`)
-      .text("🚫 Ban", `${this.callback_prefix}:${REPORT_PREFIX}:b:${id}`)
-      .row()
-      .text("🚨 Start BAN ALL 🚨", `${this.callback_prefix}:${REPORT_PREFIX}:ba:${id}`)
-
     const reportText = fmt(
       ({ n, b }) => [
         b`⚠️ User Report`,
@@ -115,91 +159,17 @@ export class TgLogger<C extends Context> {
       ],
       { sep: "\n" }
     )
+
+    const reply_markup = await this.reportMenu({ message, target, reporter, reportText })
     const reportMsg = await this.log(this.topics.actionRequired, reportText, {
       reply_markup,
       disable_notification: false,
     })
 
     if (!reportMsg) return false
-    await this.reportStorage.write(id, { message, target, reporter, reportMsg, reportText })
 
     await this.forward(this.topics.actionRequired, message.chat.id, [message.message_id])
-
     return true
-  }
-
-  private setupCallbackQuery() {
-    this.bot.on("callback_query:data", async (ctx) => {
-      const cqId = ctx.callbackQuery.id
-      const [prefix, type, action, id] = ctx.callbackQuery.data.split(":")
-      if (prefix !== this.callback_prefix) return
-
-      if (type === REPORT_PREFIX) {
-        await this.handleReportAction(action, id, cqId)
-      } else {
-        await this.bot.api.answerCallbackQuery(cqId, { text: "❌ Unhandled callback query" })
-      }
-    })
-  }
-
-  private async handleReportAction(actionId: string, id: string, cqId: string): Promise<void> {
-    const report = await this.reportStorage.read(id)
-    if (!report) return
-
-    const { message, target, reporter, reportMsg, reportText } = report
-    let action: string
-
-    switch (actionId) {
-      case "d":
-        await this.bot.api.deleteMessage(message.chat.id, message.message_id)
-        action = "🗑 Delete"
-        break
-
-      case "k":
-        await this.bot.api.deleteMessage(message.chat.id, message.message_id)
-        await this.bot.api.banChatMember(message.chat.id, target.id, {
-          until_date: Math.floor(Date.now() / 1000) + duration.values.m,
-        })
-        action = "👢 Kick"
-        break
-
-      case "b":
-        await this.bot.api.deleteMessage(message.chat.id, message.message_id)
-        await this.bot.api.banChatMember(message.chat.id, target.id)
-        action = "🚫 Ban"
-        break
-
-      case "i":
-        action = "✅ Ignore"
-        break
-
-      case "ba":
-        action = "🚨 Start BAN ALL (not implemented yet)"
-        break
-
-      default:
-        await this.bot.api.answerCallbackQuery(cqId, { text: "❌ Unknown action" })
-        return
-    }
-
-    logger.debug({ reportText }, "report text from redis")
-    await this.bot.api.editMessageText(
-      reportMsg.chat.id,
-      reportMsg.message_id,
-      fmt(
-        ({ b, n, skip }) => [
-          reportMsg.text ? skip`${reportText}` : undefined,
-          n`--------------------------------`,
-          n`✅ Resolved by ${fmtUser(reporter)}`,
-          n`${b`Action:`} ${action}`,
-          n`${b`Date:`} ${fmtDate(new Date())}`,
-        ],
-        { sep: "\n" }
-      ),
-
-      { reply_markup: undefined, link_preview_options: { is_disabled: true } }
-    )
-    await this.bot.api.answerCallbackQuery(cqId, { text: actionId === "ba" ? "❌ Not implemented yet" : undefined })
   }
 
   async delete(
