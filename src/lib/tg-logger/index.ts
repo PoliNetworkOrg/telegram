@@ -2,9 +2,8 @@ import { type Bot, type Context, GrammyError, InlineKeyboard } from "grammy"
 import type { Message, User } from "grammy/types"
 import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
-import { duration } from "@/utils/duration"
-import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
-import { type CallbackCtx, MenuGenerator } from "../menu"
+import { fmt, fmtChat, fmtUser } from "@/utils/format"
+import { getReportText, type Report, reportMenu } from "./report"
 import type * as Types from "./types"
 
 type Topics = {
@@ -17,87 +16,12 @@ type Topics = {
   groupManagement: number
 }
 
-type Report = {
-  message: Message
-  target: User
-  reporter: User
-  reportText: string
-}
-
 export class TgLogger<C extends Context> {
   constructor(
     private bot: Bot<C>,
     private groupId: number,
     private topics: Topics
   ) { }
-
-  private async editReportMessage(report: Report, ctx: CallbackCtx<C>, actionText: string) {
-    if (!ctx.msg) return
-    const msg = ctx.msg
-    await this.bot.api.editMessageText(
-      msg.chat.id,
-      msg.message_id,
-      fmt(
-        ({ b, n, skip }) => [
-          skip`${report.reportText}`,
-          n`--------------------------------`,
-          n`✅ Resolved by ${fmtUser(report.reporter)}`,
-          n`${b`Action:`} ${actionText}`,
-          n`${b`Date:`} ${fmtDate(new Date())}`,
-        ],
-        { sep: "\n" }
-      ),
-
-      { reply_markup: undefined, link_preview_options: { is_disabled: true } }
-    )
-  }
-
-  private reportMenu = MenuGenerator.getInstance<C>().create<Report>("report-command", [
-    [
-      {
-        text: "✅ Ignore",
-        cb: async ({ data, ctx }) => {
-          await this.editReportMessage(data, ctx, "✅ Ignore")
-        },
-      },
-      {
-        text: "🗑 Del",
-        cb: async ({ data, ctx }) => {
-          await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
-          await this.editReportMessage(data, ctx, "🗑 Delete")
-        },
-      },
-    ],
-    [
-      {
-        text: "👢 Kick",
-        cb: async ({ data, ctx }) => {
-          await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
-          await ctx.api.banChatMember(data.message.chat.id, data.target.id, {
-            until_date: Math.floor(Date.now() / 1000) + duration.values.m,
-          })
-          await this.editReportMessage(data, ctx, "👢 Kick")
-        },
-      },
-      {
-        text: "🚫 Ban",
-        cb: async ({ data, ctx }) => {
-          await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
-          await ctx.api.banChatMember(data.message.chat.id, data.target.id)
-          await this.editReportMessage(data, ctx, "🚫 Ban")
-        },
-      },
-    ],
-    [
-      {
-        text: "🚨 Start BAN ALL 🚨",
-        cb: async ({ data, ctx }) => {
-          await this.editReportMessage(data, ctx, "🚨 Start BAN ALL(not implemented yet)")
-          return "❌ Not implemented yet"
-        },
-      },
-    ],
-  ])
 
   private async log(
     topicId: number,
@@ -147,20 +71,11 @@ export class TgLogger<C extends Context> {
 
   public async report(message: Message, reporter: User): Promise<boolean> {
     if (message.from === undefined) return false // should be impossible
-    const target = message.from
-
     const { invite_link } = await this.bot.api.getChat(message.chat.id)
-    const reportText = fmt(
-      ({ n, b }) => [
-        b`⚠️ User Report`,
-        n`${b`Group:`} ${fmtChat(message.chat, invite_link)}`,
-        n`${b`Target:`} ${fmtUser(target)}`,
-        n`${b`Reporter:`} ${fmtUser(reporter)}`,
-      ],
-      { sep: "\n" }
-    )
 
-    const reply_markup = await this.reportMenu({ message, target, reporter, reportText })
+    const report: Report = { message, reporter } as Report
+    const reportText = getReportText(report, invite_link)
+    const reply_markup = await reportMenu(report)
     const reportMsg = await this.log(this.topics.actionRequired, reportText, {
       reply_markup,
       disable_notification: false,
