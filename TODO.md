@@ -18,9 +18,7 @@
   - [ ] ban_all
   - [ ] unban_all
   - [x] audit log
-  - [x] @admin (and similar) to allow user to report (/report)
-  - [x] track ban, mute and kick done via telegram UI (not by command)
-  - [ ] @admin (and similar) to allow user to report
+  - [x] /report to allow user to report (@admin is not implemented)
   - [x] track ban, mute and kick done via telegram UI (not by command)
   - [ ] send in-chat action log (deprived of chat ids and stuff)
 - [ ] automatic moderation
