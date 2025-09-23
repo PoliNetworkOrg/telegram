@@ -1,4 +1,4 @@
-import type { Filter, MiddlewareFn, MiddlewareObj } from "grammy"
+import type { Filter, MiddlewareObj } from "grammy"
 import { Composer } from "grammy"
 import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
@@ -238,7 +238,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
     }
   }
 
-  middleware(): MiddlewareFn<C> {
+  middleware() {
     return this.composer.middleware()
   }
 }

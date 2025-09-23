@@ -6,7 +6,7 @@ import type { ConversationData, ConversationStorage } from "@grammyjs/conversati
 import { conversations, createConversation } from "@grammyjs/conversations"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
-import type { CommandContext, Context, MiddlewareFn, MiddlewareObj } from "grammy"
+import type { CommandContext, Context, MiddlewareObj } from "grammy"
 import { Composer, MemorySessionStorage } from "grammy"
 import type { ChatMember, Message } from "grammy/types"
 import type { Result } from "neverthrow"
@@ -412,7 +412,7 @@ export class ManagedCommands<
    * bot.use(commands);
    * @returns The middleware function to be used in the bot
    */
-  middleware: () => MiddlewareFn<C> = () => {
+  middleware() {
     return this.composer.middleware()
   }
 }

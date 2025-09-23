@@ -1,4 +1,4 @@
-import { Composer, type Filter, InlineKeyboard, type MiddlewareFn, type MiddlewareObj } from "grammy"
+import { Composer, type Filter, InlineKeyboard, type MiddlewareObj } from "grammy"
 import { api } from "@/backend"
 import { tgLogger } from "@/bot"
 import { GroupManagement } from "@/lib/group-management"
@@ -57,7 +57,7 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
     })
   }
 
-  middleware(): MiddlewareFn<C> {
+  middleware() {
     return this.composer.middleware()
   }
 

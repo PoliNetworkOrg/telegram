@@ -1,4 +1,4 @@
-import { Composer, type MiddlewareFn, type MiddlewareObj } from "grammy"
+import { Composer, type MiddlewareObj } from "grammy"
 import { tgLogger } from "@/bot"
 import { duration } from "@/utils/duration"
 import type { Context } from "@/utils/types"
@@ -93,7 +93,7 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
     })
   }
 
-  middleware(): MiddlewareFn<C> {
+  middleware() {
     return this.composer.middleware()
   }
 }
