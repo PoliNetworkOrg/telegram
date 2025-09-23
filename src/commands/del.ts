@@ -22,15 +22,7 @@ _commandsBase.createCommand({
       sender: repliedTo.from?.username,
     })
 
-    if (repliedTo.from)
-      await tgLogger.adminAction({
-        type: "DELETE",
-        target: repliedTo.from,
-        from: context.from,
-        message: repliedTo,
-        chat: repliedTo.chat,
-      })
-    await context.deleteMessages([repliedTo.message_id])
-    await context.deleteMessage()
+    await tgLogger.delete([repliedTo], "Command /del", context.from) // actual message to delete
+    await context.deleteMessage() // /del message
   },
 })
