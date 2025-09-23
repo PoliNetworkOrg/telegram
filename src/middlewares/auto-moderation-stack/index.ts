@@ -41,7 +41,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
     this.composer
       .fork() // fork the processing, this stack executes in parallel to the rest of the bot
       .filter(async (ctx) => !(await this.isWhitelisted(ctx))) // skip if the message is whitelisted
-    // register all middlewares
+      // register all middlewares
       .on(
         ["message::url", "message::text_link", "edited_message::url", "edited_message::text_link"],
         defer((ctx) => this.linkHandler(ctx))
