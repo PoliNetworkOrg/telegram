@@ -1,7 +1,7 @@
 import type { Conversation } from "@grammyjs/conversations"
 import type { Context } from "grammy"
 import type { Message } from "grammy/types"
-import type { z } from "zod/v4"
+import type { z } from "zod"
 import type { ConversationContext } from "./context"
 
 interface BaseArgumentOptions {
