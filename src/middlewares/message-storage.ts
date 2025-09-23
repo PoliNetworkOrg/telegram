@@ -1,19 +1,43 @@
-import type { Context } from "@/lib/managed-commands"
-import type { MiddlewareFn } from "grammy"
-
 import { Cron } from "croner"
-
+import { Composer, type Context, type MiddlewareObj } from "grammy"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
 
 export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
 
-export class MessageStorage {
+export class MessageStorage<C extends Context> implements MiddlewareObj<C> {
+  private static instance: MessageStorage<Context> | null = null
+  static getInstance<C extends Context>(): MessageStorage<C> {
+    if (!MessageStorage.instance) {
+      MessageStorage.instance = new MessageStorage<Context>()
+    }
+    return MessageStorage.instance as unknown as MessageStorage<C>
+  }
+
+  private composer: Composer<C> = new Composer<C>()
   private memoryStorage: Message[]
-  constructor() {
+  private constructor() {
     this.memoryStorage = []
     new Cron("0 */1 * * * *", () => this.sync())
+
+    this.composer.on(["message:text", "message:caption"], (ctx, next) => {
+      if (ctx.chat.type === "private") {
+        logger.debug("messageStorage skip: chat type is private")
+        return next()
+      }
+
+      const text = ctx.message.text ?? ctx.message.caption
+      this.memoryStorage.push({
+        authorId: ctx.from.id,
+        chatId: ctx.chatId,
+        messageId: ctx.message.message_id,
+        message: text,
+        timestamp: new Date(ctx.message.date * 1000),
+      })
+
+      return next()
+    })
   }
 
   async get(chatId: number, messageId: number): Promise<Message | null> {
@@ -49,33 +73,7 @@ export class MessageStorage {
     this.memoryStorage = []
   }
 
-  middleware: MiddlewareFn<Context> = async (ctx, next) => {
-    if (!ctx.from) {
-      logger.debug("messageStorage skip: no ctx.from")
-      return next()
-    }
-    if (!ctx.chatId || !ctx.chat) {
-      logger.debug("messageStorage skip: no ctx.chatId")
-      return next()
-    }
-    if (ctx.chat.type === "private") {
-      logger.debug("messageStorage skip: chat type is private")
-      return next()
-    }
-    if (!ctx.message) {
-      logger.debug("messageStorage skip: no message")
-      return next()
-    }
-
-    const text = ctx.message.text ?? ctx.message.caption
-    this.memoryStorage.push({
-      authorId: ctx.from.id,
-      chatId: ctx.chatId,
-      messageId: ctx.message.message_id,
-      message: text ?? "[non-textual]",
-      timestamp: new Date(ctx.message.date * 1000),
-    })
-
-    return next()
+  middleware() {
+    return this.composer.middleware()
   }
 }

@@ -1,11 +1,9 @@
-import type { Context } from "@/lib/managed-commands"
-
-import { Composer, type Filter, InlineKeyboard, type MiddlewareFn, type MiddlewareObj } from "grammy"
-
+import { Composer, type Filter, InlineKeyboard, type MiddlewareObj } from "grammy"
 import { api } from "@/backend"
 import { tgLogger } from "@/bot"
 import { GroupManagement } from "@/lib/group-management"
 import { logger } from "@/logger"
+import type { Context } from "@/utils/types"
 
 type ChatType = "group" | "supergroup" | "private" | "channel"
 type StatusType = "member" | "administrator" | "creator" | "restricted" | "left" | "kicked"
@@ -59,7 +57,7 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
     })
   }
 
-  middleware(): MiddlewareFn<C> {
+  middleware() {
     return this.composer.middleware()
   }
 

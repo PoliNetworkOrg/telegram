@@ -1,13 +1,11 @@
-import type { Context } from "@/lib/managed-commands"
 import type { NextFunction } from "grammy"
-
 import { InlineKeyboard } from "grammy"
-
 import { api } from "@/backend"
-import { messageStorage } from "@/bot"
 import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
 import { fmt, fmtChat } from "@/utils/format"
+import type { Context } from "@/utils/types"
+import { MessageStorage } from "./message-storage"
 
 // --- Configuration ---
 const LINK_REGEX = /https?:\/\/t\.me\/c\/(-?\d+)\/(\d+)(?:\/(\d+))?/gi // Regex with global and case-insensitive flags
@@ -104,7 +102,7 @@ async function makeResponse(
   const inviteLink =
     chat.invite_link ?? (await api.tg.groups.getById.query({ telegramId: chat.id }))[0].link ?? undefined
 
-  const message = await messageStorage.get(chatId, messageId)
+  const message = await MessageStorage.getInstance().get(chatId, messageId)
   if (message === null) {
     return {
       message: fmt(
@@ -118,7 +116,7 @@ async function makeResponse(
   }
 
   const content =
-    message.message.length > CHAR_LIMIT ? message.message.slice(50 * CHAR_LIMIT).trimEnd() + " [...]" : message.message
+    message.message.length > CHAR_LIMIT ? `${message.message.slice(0, CHAR_LIMIT).trimEnd()} [...]` : message.message
   const msgRes = fmt(
     ({ n, b, i }) => [
       n`${b`Timestamp:`} ${message.timestamp.toLocaleDateString("it")} ${message.timestamp.toLocaleTimeString("it", { hour: "2-digit", minute: "2-digit" })}`,

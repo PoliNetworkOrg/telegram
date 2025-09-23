@@ -1,7 +1,19 @@
-export * from "./context"
 export type { CommandScopedContext } from "./command"
 export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
+export * from "./context"
 
+import type { ConversationData, ConversationStorage } from "@grammyjs/conversations"
+import { conversations, createConversation } from "@grammyjs/conversations"
+import { hydrate } from "@grammyjs/hydrate"
+import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
+import type { CommandContext, Context, MiddlewareObj } from "grammy"
+import { Composer, MemorySessionStorage } from "grammy"
+import type { ChatMember, Message } from "grammy/types"
+import type { Result } from "neverthrow"
+import { err, ok } from "neverthrow"
+import type { LogFn } from "pino"
+import { fmt } from "@/utils/format"
+import { wait } from "@/utils/wait"
 import type {
   ArgumentMap,
   ArgumentOptions,
@@ -13,37 +25,22 @@ import type {
   CommandScopedContext,
   RepliedTo,
 } from "./command"
-import type { Context } from "./context"
-import type { ConversationData, ConversationStorage } from "@grammyjs/conversations"
-import type { CommandContext, MiddlewareFn, MiddlewareObj } from "grammy"
-import type { ChatMember, Message } from "grammy/types"
-import type { Result } from "neverthrow"
-import type { LogFn } from "pino"
-
-import { conversations, createConversation } from "@grammyjs/conversations"
-import { hydrate } from "@grammyjs/hydrate"
-import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
-import { Composer, MemorySessionStorage } from "grammy"
-import { err, ok } from "neverthrow"
-
-import { fmt } from "@/utils/format"
-import { wait } from "@/utils/wait"
-
 import { isTypedArgumentOptions } from "./command"
+import type { ManagedCommandsFlavor } from "./context"
 
-export type PermissionHandler<TRole extends string> = (arg: {
-  context: CommandContext<Context>
+export type PermissionHandler<TRole extends string, C extends Context> = (arg: {
+  context: CommandContext<C>
   command: Command<CommandArgs, CommandReplyTo, CommandScope, TRole>
 }) => Promise<boolean>
 
 type DefaultRoles = ChatMember["status"]
-const defaultPermissionHandler: PermissionHandler<string> = async ({ context, command }) => {
+const defaultPermissionHandler: PermissionHandler<string, Context> = async ({ context, command }) => {
   const { allowedRoles, excludedRoles } = command.permissions ?? {}
   if (!context.from) return false
   const member = await context.getChatMember(context.from.id)
 
   if (allowedRoles && !allowedRoles.includes(member.status)) return false
-  if (excludedRoles && excludedRoles.includes(member.status)) return false
+  if (excludedRoles?.includes(member.status)) return false
 
   return true
 }
@@ -84,7 +81,7 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
    * })
    * ```
    */
-  permissionHandler: PermissionHandler<TRole>
+  permissionHandler: PermissionHandler<TRole, C>
 
   /**
    * The logger to use for logging messages, you can pass your pino logger here
@@ -103,12 +100,14 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
   logger: Logger
 }
 
-export class ManagedCommands<TRole extends string = DefaultRoles, C extends Context = Context>
-  implements MiddlewareObj<C>
+export class ManagedCommands<
+  TRole extends string = DefaultRoles,
+  C extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
+> implements MiddlewareObj<C>
 {
   private composer = new Composer<C>()
   private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
-  private permissionHandler: PermissionHandler<TRole>
+  private permissionHandler: PermissionHandler<TRole, C>
   private logger: Logger
   private adapter: ConversationStorage<C, ConversationData>
 
@@ -190,8 +189,8 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
   ): Result<{ args: ArgumentMap; repliedTo: RepliedTo<R> }, string[]> {
     const text = msg.text ?? msg.caption
     if (!text) return err(["Cannot parse arguments"])
-    const args = this.parseArgs(text, cmd)
-    const repliedTo = this.parseReplyTo(msg, cmd)
+    const args = ManagedCommands.parseArgs(text, cmd)
+    const repliedTo = ManagedCommands.parseReplyTo(msg, cmd)
     if (args.isOk() && repliedTo.isOk()) {
       return ok({ args: args.value, repliedTo: repliedTo.value })
     }
@@ -275,7 +274,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     this.adapter = options?.adapter ?? new MemorySessionStorage()
 
     this.composer.use(
-      conversations<Context, CommandScopedContext>({
+      conversations<C, CommandScopedContext>({
         storage: this.adapter,
         plugins: [
           hydrate<CommandScopedContext>(),
@@ -319,9 +318,16 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
       createConversation(
         async (conv: CommandConversation<S>, ctx: CommandScopedContext<S>) => {
           // check for the requirements in the command invocation
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          const requirements = ManagedCommands.parseCommand(ctx.message!, cmd)
+          // biome-ignore lint/style/noNonNullAssertion: conversations cannot start without a message
+          const message = ctx.message!
+          const requirements = ManagedCommands.parseCommand(message, cmd)
           if (requirements.isErr()) {
+            // Command messages that don't meet requirements
+            // AND are sent in a group/supergroup are deleted from here because
+            // they don't reach command handler so they would remain in chat.
+            // In private chats we keep them, we don't care
+            if (message.chat.type !== "private") await ctx.deleteMessage()
+
             const msg = await ctx.reply(
               fmt(({ b, skip }) => [
                 `Error:`,
@@ -406,7 +412,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
    * bot.use(commands);
    * @returns The middleware function to be used in the bot
    */
-  middleware: () => MiddlewareFn<C> = () => {
+  middleware() {
     return this.composer.middleware()
   }
 }

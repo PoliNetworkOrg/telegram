@@ -1,8 +1,7 @@
+import type { ConversationMenuContext } from "@grammyjs/conversations"
+import { api } from "@/backend"
 import type { ConversationContext } from "@/lib/managed-commands"
 import type { CommandConversation } from "@/lib/managed-commands/command"
-import type { ConversationMenuContext } from "@grammyjs/conversations"
-
-import { api } from "@/backend"
 import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
 import { wait } from "@/utils/wait"
