@@ -15,17 +15,18 @@ const CONSTANTS = {
   padLen: 3,
 }
 
+type CallbackCtx<C extends Context> = Filter<C, "callback_query:data">
 // biome-ignore lint/suspicious/noConfusingVoidType: literally a bug in Biome
-type Callback<T> = (data: T) => MaybePromise<string | void>
+type Callback<T, C extends Context> = (params: { data: T; ctx: CallbackCtx<C> }) => MaybePromise<string | void>
 
 class Menu<T, C extends Context = Context> {
   private dataStorage: RedisFallbackAdapter<T>
-  private callbacks: Map<string, Callback<T>> = new Map()
+  private callbacks: Map<string, Callback<T, C>> = new Map()
 
   constructor(
     private hashedId: string,
-    private items: Array<Array<{ text: string; cb: Callback<T> }>>,
-    public onExpiredButtonPress?: Callback<Filter<C, "callback_query:data">>
+    private items: Array<Array<{ text: string; cb: Callback<T, C> }>>,
+    public onExpiredButtonPress?: Callback<null, C>
   ) {
     this.dataStorage = new RedisFallbackAdapter({
       redis,
@@ -62,7 +63,7 @@ class Menu<T, C extends Context = Context> {
     return keyboard
   }
 
-  async call(row: number, col: number, keyboardId: string) {
+  async call(ctx: CallbackCtx<C>, row: number, col: number, keyboardId: string) {
     const buttonId = `${row}:${col}`
     const callback = this.callbacks.get(buttonId)
     if (!callback) throw new Error(`Callback not found for buttonId(row,col): ${buttonId}`)
@@ -70,7 +71,7 @@ class Menu<T, C extends Context = Context> {
     const data = await this.dataStorage.read(keyboardId)
     if (!data) throw new Error(`Data in redis not found for buttonId(row,col): ${buttonId}`)
 
-    return await callback(data)
+    return await callback({ data, ctx })
   }
 }
 
@@ -124,6 +125,7 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
     this.composer.on("callback_query:data", (ctx, next) => {
       // Handle callback query
       const callbackData = ctx.callbackQuery.data
+      ctx.message
       if (!callbackData.startsWith(CONSTANTS.prefix)) return next()
 
       const parsed = MenuGenerator.fromCallbackId(callbackData)
@@ -134,13 +136,13 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
       if (!menu) return next()
 
       return menu
-        .call(row, col, keyboardId)
+        .call(ctx, row, col, keyboardId)
         .then((result) => {
           return ctx.answerCallbackQuery({ text: result ?? undefined })
         })
         .catch(async () => {
           await ctx.editMessageReplyMarkup().catch(() => {})
-          const feedback = menu.onExpiredButtonPress && (await menu.onExpiredButtonPress(ctx))
+          const feedback = menu.onExpiredButtonPress && (await menu.onExpiredButtonPress({ data: null, ctx }))
           await ctx.answerCallbackQuery({ text: feedback ?? "This button is no longer available", show_alert: true })
         })
     })
@@ -159,7 +161,7 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
          * @returns A string if you want to display an alert to the user,
          * or void if no feedback is needed.
          */
-        cb: Callback<T>
+        cb: Callback<T, C>
       }>
     >,
     /**
@@ -168,7 +170,7 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
      * @param data - The context of the middleware when the button was pressed.
      * @returns An optional string if you want to display a specific alert to the user
      */
-    onExpiredButtonPress?: Callback<Filter<C, "callback_query:data">>
+    onExpiredButtonPress?: Callback<null, C>
   ): (data: T) => Promise<InlineKeyboard> {
     const hash = nanohash(id, CONSTANTS.hashLen)
     if (this.menus.has(hash)) {

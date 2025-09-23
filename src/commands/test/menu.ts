@@ -9,7 +9,8 @@ const generateMenu = MenuGenerator.getInstance().create<{
   [
     {
       text: "🗑 Delete + 🚫 Ban",
-      cb: (data) => {
+      cb: async ({ ctx, data }) => {
+        await ctx.editMessageText(`${ctx.msg?.text ?? ""}\nBAN`, { reply_markup: ctx.msg?.reply_markup ?? undefined })
         logger.info({ data }, "TESTSTESTSTSTE")
         return "Deleted + Banned"
       },
