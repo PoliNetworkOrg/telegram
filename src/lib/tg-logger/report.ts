@@ -30,7 +30,7 @@ async function editReportMessage<C extends Context>(report: Report, ctx: Callbac
       ({ b, n, skip }) => [
         skip`${reportText}`,
         n`--------------------------------`,
-        n`✅ Resolved by ${fmtUser(report.reporter)}`,
+        n`✅ Resolved by ${fmtUser(ctx.from)}`,
         n`${b`Action:`} ${actionText}`,
         n`${b`Date:`} ${fmtDate(new Date())}`,
       ],
