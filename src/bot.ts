@@ -68,6 +68,7 @@ export const tgLogger = new TgLogger<Context>(bot, -1002685849173, {
   adminActions: 5,
   actionRequired: 10,
   groupManagement: 33,
+  deletedMessages: 130,
 })
 
 bot.use(MenuGenerator.getInstance())

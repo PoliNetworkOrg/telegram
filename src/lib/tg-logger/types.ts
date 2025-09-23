@@ -1,11 +1,9 @@
 import type { GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"
 import type { z } from "zod/v4"
-import type { MultiChatMsgCollection } from "@/middlewares/auto-moderation-stack/types"
 import type { duration } from "@/utils/duration"
 
 type Duration = z.output<typeof duration.zod>
-
 export type BanAllLog = {
   target: User
   from: User
@@ -38,57 +36,32 @@ export type ExceptionLog =
       error: unknown
     }
 
-export type AutoModeration = {
+export type ModerationAction = {
+  from: User
   target: User
+  chat: Chat
   message?: Message
-  reason?: string
 } & (
   | {
-      action: "DELETE"
-      message: Message
-    }
-  | {
-      action: "MUTE_DELETE"
-      message: Message
+      action: "BAN" | "MUTE"
       duration?: Duration
+      reason?: string
     }
   | {
-      action: "KICK_DELETE"
+      action: "KICK"
+      reason?: string
     }
   | {
-      action: "BAN_DELETE"
-      duration?: Duration
+      action: "UNBAN" | "UNMUTE"
     }
   | {
       action: "MULTI_CHAT_SPAM"
       duration: Duration
-      chatCollections: MultiChatMsgCollection[]
+      messages: Message[]
     }
   | {
       action: "SILENT"
-    }
-)
-
-export type AdminAction = {
-  from: User
-  target: User
-  chat: Chat
-} & (
-  | {
-      type: "BAN" | "MUTE"
-      duration?: Duration
       reason?: string
-    }
-  | {
-      type: "KICK"
-      reason?: string
-    }
-  | {
-      type: "UNBAN" | "UNMUTE"
-    }
-  | {
-      type: "DELETE"
-      message: Message
     }
 )
 
@@ -113,3 +86,8 @@ export type GroupManagement = {
       inviteLink?: string
     }
 )
+
+export type DeleteResult = {
+  count: number
+  link: string
+}
