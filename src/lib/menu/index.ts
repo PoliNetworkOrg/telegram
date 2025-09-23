@@ -148,28 +148,28 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
     })
   }
 
+  /**
+   * Creates an inline keyboard in which buttons have specific callbacks.
+   *
+   * @typeParam T - The type of the data associated with each menu instance.
+   * @param id - A unique identifier for the menu, used to generate a hash for distinguishing different menus.
+   * @param items - A 2D array representing the grid layout of the menu buttons, where
+   *   each inner array is a row of button with an object specifying its text and callback.
+   *   The callback has access to the menu data and to the callbackQuery context, returns
+   *   an optional string to display a specific alert to the user.
+   * @param onExpiredButtonPress - Optional callback executed when a button is pressed but the
+   *   associated data is no longer available (e.g., expired or deleted). Returns an optional
+   *   string if you want to display a specific alert to the user.
+   * @returns A function that, given data of type T, returns a Promise resolving to an InlineKeyboard.
+   */
   create<T>(
     id: string,
     items: Array<
       Array<{
-        /** The text to be displayed on the button. */
         text: string
-        /**
-         * The callback function to be executed when the button is pressed.
-         * @param data - The data of type T associated with the menu instance,
-         * passed with the specific keyboard for a single message.
-         * @returns A string if you want to display an alert to the user,
-         * or void if no feedback is needed.
-         */
         cb: Callback<T, C>
       }>
     >,
-    /**
-     * Optional callback to be executed when a button is pressed but the associated
-     * data is no longer available (e.g., expired or deleted).
-     * @param data - The context of the middleware when the button was pressed.
-     * @returns An optional string if you want to display a specific alert to the user
-     */
     onExpiredButtonPress?: Callback<null, C>
   ): (data: T) => Promise<InlineKeyboard> {
     const hash = nanohash(id, CONSTANTS.hashLen)
