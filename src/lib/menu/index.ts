@@ -141,7 +141,7 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
         })
         .catch(async (e: unknown) => {
           logger.error({ e }, "ERROR WHILE CALLING MENU CB")
-          await ctx.editMessageReplyMarkup().catch(() => { })
+          await ctx.editMessageReplyMarkup().catch(() => {})
           const feedback = menu.onExpiredButtonPress && (await menu.onExpiredButtonPress({ data: null, ctx }))
           await ctx.answerCallbackQuery({ text: feedback ?? "This button is no longer available", show_alert: true })
         })

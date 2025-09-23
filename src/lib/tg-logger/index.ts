@@ -21,7 +21,7 @@ export class TgLogger<C extends Context> {
     private bot: Bot<C>,
     private groupId: number,
     private topics: Topics
-  ) { }
+  ) {}
 
   private async log(
     topicId: number,
