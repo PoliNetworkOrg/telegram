@@ -1,9 +1,8 @@
-import { type Bot, GrammyError, InlineKeyboard } from "grammy"
+import { type Bot, type Context, GrammyError, InlineKeyboard } from "grammy"
 import type { Message, User } from "grammy/types"
 import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
-import type { Context } from "../managed-commands"
 import type * as Types from "./types"
 
 type Topics = {
@@ -249,7 +248,7 @@ export class TgLogger<C extends Context> {
       case "LEAVE_FAIL":
         msg = fmt(
           ({ b, n, i }) => [
-            b`‼️ Cannot Left`,
+            b`‼ Cannot Left`,
             n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Added by:`} ${fmtUser(props.addedBy)}`,
             n`${i`This user does not have enough permissions to add the bot`}`,
@@ -263,7 +262,7 @@ export class TgLogger<C extends Context> {
       case "CREATE":
         msg = fmt(
           ({ b, n }) => [
-            b`✳️ Create`,
+            b`✳ Create`,
             n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Added by:`} ${fmtUser(props.addedBy)}`,
           ],
@@ -277,7 +276,7 @@ export class TgLogger<C extends Context> {
       case "CREATE_FAIL":
         msg = fmt(
           ({ b, n, i }) => [
-            b`⚠️ Cannot Create`,
+            b`! Cannot Create`,
             n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Reason`}: ${props.reason}`,
             i`Check logs for more details`,
@@ -353,7 +352,7 @@ export class TgLogger<C extends Context> {
       case "GENERIC":
         msg = fmt(
           ({ b, n, i, codeblock, skip }) => [
-            b`‼️ Generic Error`,
+            b`‼ Generic Error`,
             n`${props.error.name}`,
             i`${props.error.message}`,
             codeblock`${JSON.stringify(props.error.stack ?? "stack trace not available", null, 2)}`,
@@ -368,7 +367,7 @@ export class TgLogger<C extends Context> {
       case "UNKNOWN":
         msg = fmt(
           ({ b, codeblock, skip }) => [
-            b`‼️ Unknown Error`,
+            b`‼ Unknown Error`,
             codeblock`${JSON.stringify(props.error, null, 2)}`,
             skip`${contextFmt}`,
           ],

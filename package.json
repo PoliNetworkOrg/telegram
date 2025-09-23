@@ -43,6 +43,7 @@
     "@types/ssdeep.js": "^0.0.2",
     "croner": "^9.0.0",
     "grammy": "^1.37.0",
+    "nanoid": "^5.1.5",
     "neverthrow": "^8.2.0",
     "openai": "^4.102.0",
     "pino": "^9.6.0",
@@ -58,6 +59,9 @@
     "node": ">=22.14.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "unrs-resolver"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "unrs-resolver"
+    ]
   }
 }

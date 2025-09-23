@@ -15,13 +15,32 @@ const defaultLogger: Logger = {
   error: console.error,
 }
 
+/**
+ * Options for RedisFallbackAdapter
+ */
 interface RedisFallbackAdapterOptions<T, M extends RedisModules, F extends RedisFunctions, S extends RedisScripts> {
+  /** Redis client instance, or options to create one */
   redis: RedisClientType<M, F, S> | RedisClientOptions<M, F, S>
+  /** Time to live for each entry in seconds, uses redis' EXPIRE command */
+  ttl?: number
+  /**
+   * Prefix for each key stored in redis, to avoid collisions, if not provided a
+   * default one will be used to ensure uniqueness across multiple instances
+   */
   prefix?: string
+  /** Optional zod schema to validate data read from redis */
   zType?: ZodType<T>
+  /** Optional custom logger, compatible with defaults to console */
   logger?: Logger
 }
 
+/**
+ * A storage adapter that uses Redis as primary storage, but falls back to in-memory
+ * storage if Redis is not available, syncing the in-memory data to Redis once
+ * the connection is re-established.
+ *
+ * _Compatible with grammy's StorageAdapter interface_
+ */
 export class RedisFallbackAdapter<
   T,
   M extends RedisModules = RedisModules,
@@ -31,7 +50,9 @@ export class RedisFallbackAdapter<
 {
   private static instanceCount = 0
   private prefix: string
+  // In-memory cache used when Redis is not available
   private memoryCache: Map<string, T> = new Map()
+  // temporary store for keys that need to be deleted once redis is back (used when delete does not find the key in memoryCache)
   private deletions: Set<string> = new Set()
   private redisClient: RedisClientType<M, F, S>
   private logger: Logger = defaultLogger
@@ -80,17 +101,37 @@ export class RedisFallbackAdapter<
     return this.redisClient.isOpen && this.redisClient.isReady
   }
 
+  /**
+   * Flush the in-memory cache to Redis. Called automatically when the Redis
+   * connection is re-established.
+   */
   private async flushMemoryCache() {
+    // write all memoryCache entries to redis
     await Promise.all(this.memoryCache.entries().map(([key, value]) => this._write(key, value)))
     this.memoryCache.clear()
+    // delete all keys that were marked for deletion while redis was down
     await Promise.all(this.deletions.values().map((k) => this._delete(k)))
     this.deletions.clear()
   }
 
+  /**
+   * Writes a value to Redis.
+   *
+   * Sets an expiry if ttl is set in options.
+   * @param key The key to write to.
+   * @param value The value to write.
+   */
   private async _write(key: string, value: T) {
     await this.redisClient.set(this.getKey(key), this.stringify(value))
+    if (this.options.ttl) {
+      await this.redisClient.expire(this.getKey(key), this.options.ttl)
+    }
   }
 
+  /**
+   * Deletes a key from Redis.
+   * @param key The key to delete.
+   */
   private async _delete(key: string) {
     await this.redisClient.del(this.getKey(key))
   }
@@ -116,8 +157,8 @@ export class RedisFallbackAdapter<
     if (this.ready()) {
       await this._delete(key)
     } else {
-      if (this.memoryCache.has(key)) this.memoryCache.delete(key)
-      else this.deletions.add(key)
+      // Try to delete from memory cache, if not found add to deletions set
+      if (!this.memoryCache.delete(key)) this.deletions.add(key)
     }
   }
 

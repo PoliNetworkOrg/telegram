@@ -1,9 +1,8 @@
-import type { Filter, MiddlewareFn, MiddlewareObj } from "grammy"
+import type { Filter, MiddlewareObj } from "grammy"
 import { Composer } from "grammy"
 import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
-import { messageStorage, tgLogger } from "@/bot"
-import type { Context } from "@/lib/managed-commands"
+import { tgLogger } from "@/bot"
 import { mute } from "@/lib/moderation"
 import { redis } from "@/redis"
 import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
@@ -11,7 +10,9 @@ import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { createFakeMessage, getText } from "@/utils/messages"
+import type { Context } from "@/utils/types"
 import { wait } from "@/utils/wait"
+import { MessageStorage } from "../message-storage"
 import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
 import { checkForAllowedLinks } from "./functions"
@@ -205,7 +206,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
           .map(([hash, chatId, messageId]) => ({ hash, chatId: Number(chatId), messageId: Number(messageId) }))
           .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SPAM.SIMILARITY_THR)
           .map(async (v) => {
-            const msg = await messageStorage.get(v.chatId, v.messageId)
+            const msg = await MessageStorage.getInstance().get(v.chatId, v.messageId)
             const message = createFakeMessage(v.chatId, v.messageId, ctx.from, msg?.timestamp)
             return message
           })
@@ -237,7 +238,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
     }
   }
 
-  middleware(): MiddlewareFn<C> {
+  middleware() {
     return this.composer.middleware()
   }
 }
