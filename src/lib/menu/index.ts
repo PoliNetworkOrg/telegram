@@ -125,7 +125,6 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
     this.composer.on("callback_query:data", (ctx, next) => {
       // Handle callback query
       const callbackData = ctx.callbackQuery.data
-      ctx.message
       if (!callbackData.startsWith(CONSTANTS.prefix)) return next()
 
       const parsed = MenuGenerator.fromCallbackId(callbackData)
