@@ -134,7 +134,7 @@ async function makeResponse(
   const isAdmin = author?.status === "creator" || author?.status === "administrator"
   const authorRes = fmt(({ code, i, b, n }) =>
     author
-      ? n`${b`Author:`} @${author.user.username} [${code`${author.user.id}`}] ${isAdmin && b`ADMIN`}`
+      ? n`${b`Author:`} @${author.user.username} [${code`${author.user.id}`}] ${isAdmin ? b`ADMIN` : ""}`
       : n`${b`Author:`} ${i`not available`}`
   )
 
