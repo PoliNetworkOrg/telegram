@@ -1,4 +1,4 @@
 import "./args"
 import "./db"
-import "./name"
+import "./menu"
 import "./format"

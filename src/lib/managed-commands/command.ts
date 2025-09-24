@@ -1,7 +1,8 @@
 import type { Conversation } from "@grammyjs/conversations"
+import type { Context } from "grammy"
 import type { Message } from "grammy/types"
-import type { z } from "zod/v4"
-import type { Context, ConversationContext } from "./context"
+import type { z } from "zod"
+import type { ConversationContext } from "./context"
 
 interface BaseArgumentOptions {
   key: string
@@ -60,7 +61,10 @@ export type CommandScopedContext<S extends CommandScope = CommandScope> = S exte
     ? ConversationContext<"group"> | ConversationContext<"supergroup">
     : ConversationContext<"private"> | ConversationContext<"group"> | ConversationContext<"supergroup">
 
-export type CommandConversation<S extends CommandScope = CommandScope> = Conversation<Context, CommandScopedContext<S>>
+export type CommandConversation<S extends CommandScope = CommandScope, C extends Context = Context> = Conversation<
+  C,
+  CommandScopedContext<S>
+>
 
 export interface Command<
   A extends CommandArgs,

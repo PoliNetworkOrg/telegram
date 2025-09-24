@@ -27,14 +27,14 @@ importers:
         specifier: ^2.0.3
         version: 2.0.3(grammy@1.37.0)
       '@polinetwork/backend':
-        specifier: ^0.9.1
-        version: 0.9.1
+        specifier: ^0.9.2
+        version: 0.9.2
       '@t3-oss/env-core':
         specifier: ^0.13.4
-        version: 0.13.4(arktype@2.1.20)(typescript@5.7.3)(zod@3.25.30)
+        version: 0.13.4(arktype@2.1.20)(typescript@5.7.3)(zod@4.1.11)
       '@trpc/client':
-        specifier: ^11.1.1
-        version: 11.1.1(@trpc/server@11.1.1(typescript@5.7.3))(typescript@5.7.3)
+        specifier: ^11.5.1
+        version: 11.5.1(@trpc/server@11.5.1(typescript@5.7.3))(typescript@5.7.3)
       '@types/ssdeep.js':
         specifier: ^0.0.2
         version: 0.0.2
@@ -44,12 +44,15 @@ importers:
       grammy:
         specifier: ^1.37.0
         version: 1.37.0
+      nanoid:
+        specifier: ^5.1.5
+        version: 5.1.5
       neverthrow:
         specifier: ^8.2.0
         version: 8.2.0
       openai:
         specifier: ^4.102.0
-        version: 4.102.0(zod@3.25.30)
+        version: 4.102.0(zod@4.1.11)
       pino:
         specifier: ^9.6.0
         version: 9.6.0
@@ -66,15 +69,15 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       zod:
-        specifier: ^3.25.30
-        version: 3.25.30
+        specifier: ^4.1.11
+        version: 4.1.11
     devDependencies:
       '@biomejs/biome':
         specifier: 2.2.4
         version: 2.2.4
       '@trpc/server':
-        specifier: 11.1.1
-        version: 11.1.1(typescript@5.7.3)
+        specifier: 11.5.1
+        version: 11.5.1(typescript@5.7.3)
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.1
@@ -383,9 +386,9 @@ packages:
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
 
-  '@polinetwork/backend@0.9.1':
-    resolution: {integrity: sha512-4kOE6WepZ6gLPqo/rXlfCiiGsTxOmvBy80idH98E0iFAseJqYX5PWLevinl3klsavo4et6G7HyYogw1ZRUGpTQ==}
-    engines: {node: '>=22.14.0', npm: '>=10.9.2'}
+  '@polinetwork/backend@0.9.2':
+    resolution: {integrity: sha512-WEjmeMblhLZX3Nc0nn9RcK/rb/l1wea6NM69H69pxJI0/KkaPn7YaqSUUoiE2kjKl58Ngp1YmS/WDSk7oZHqOw==}
+    engines: {node: '>=24.8.0', pnpm: '>=10.17.1'}
 
   '@redis/bloom@1.2.0':
     resolution: {integrity: sha512-HG2DFjYKbpNmVXsa0keLHp/3leGJz1mjh09f2RLGGLQZzSHpkmZWuwJbAvo3QcRY8p80m5+ZdXZdYOSBLlp7Cg==}
@@ -531,14 +534,14 @@ packages:
       zod:
         optional: true
 
-  '@trpc/client@11.1.1':
-    resolution: {integrity: sha512-Beiv56hlt+ARbijtUsCQOvKJw/FkfuVk4W9TzJl285iIJw8iCA3ZTwTG9GjIeSgeR7d2MyOeUbI26LV255n33A==}
+  '@trpc/client@11.5.1':
+    resolution: {integrity: sha512-7I6JJ1I1lxv3S87ht3FAIZi0XxQa7hnQ9K+Oo5BH7cGO8ZtWe9Ftq6ItdkuDfpsnsRPcR2h158AMWbNs/iptqg==}
     peerDependencies:
-      '@trpc/server': 11.1.1
+      '@trpc/server': 11.5.1
       typescript: '>=5.7.2'
 
-  '@trpc/server@11.1.1':
-    resolution: {integrity: sha512-ZjPN3ypBHvGMAlMgeZPrxlRcH/3dn4AK0s5Ph1z+E6uiAvIQVCj7ZoMlXeeBsIy4THGDAk953jHVW2kMnlbb4g==}
+  '@trpc/server@11.5.1':
+    resolution: {integrity: sha512-KIDzHRS5m8U1ncPwjgtOtPWK9lNO0kYL7b+lnvKXRqowSAQIEC/z6y7g/dkt4Aqv3DKI/STLydt2/afrP1QrxQ==}
     peerDependencies:
       typescript: '>=5.7.2'
 
@@ -974,6 +977,11 @@ packages:
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
+
+  nanoid@5.1.5:
+    resolution: {integrity: sha512-Ir/+ZpE9fDsNH0hQ3C68uyThDXzYcim2EqcZ8zn8Chtt1iylPT9xXJB0kPCnqzgcEGikO9RxSrh63MsmVCU7Fw==}
+    engines: {node: ^18 || >=20}
     hasBin: true
 
   neverthrow@8.2.0:
@@ -1419,8 +1427,8 @@ packages:
     resolution: {integrity: sha512-Ux4ygGWsu2c7isFWe8Yu1YluJmqVhxqK2cLXNQA5AcC3QfbGNpM7fu0Y8b/z16pXLnFxZYvWhd3fhBY9DLmC6Q==}
     engines: {node: '>=6'}
 
-  zod@3.25.30:
-    resolution: {integrity: sha512-VolhdEtu6TJr/fzGuHA/SZ5ixvXqA6ADOG9VRcQ3rdOKmF5hkmcJbyaQjUH5BgmpA9gej++zYRX7zjSmdReIwA==}
+  zod@4.1.11:
+    resolution: {integrity: sha512-WPsqwxITS2tzx1bzhIKsEs19ABD5vmCVa4xBo2tq/SrV4RNZtfws1EnCWQXM6yh8bD08a1idvkB5MZSBiZsjwg==}
 
 snapshots:
 
@@ -1609,7 +1617,7 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@polinetwork/backend@0.9.1': {}
+  '@polinetwork/backend@0.9.2': {}
 
   '@redis/bloom@1.2.0(@redis/client@1.6.0)':
     dependencies:
@@ -1697,19 +1705,19 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.37.0':
     optional: true
 
-  '@t3-oss/env-core@0.13.4(arktype@2.1.20)(typescript@5.7.3)(zod@3.25.30)':
+  '@t3-oss/env-core@0.13.4(arktype@2.1.20)(typescript@5.7.3)(zod@4.1.11)':
     dependencies:
       arktype: 2.1.20
     optionalDependencies:
       typescript: 5.7.3
-      zod: 3.25.30
+      zod: 4.1.11
 
-  '@trpc/client@11.1.1(@trpc/server@11.1.1(typescript@5.7.3))(typescript@5.7.3)':
+  '@trpc/client@11.5.1(@trpc/server@11.5.1(typescript@5.7.3))(typescript@5.7.3)':
     dependencies:
-      '@trpc/server': 11.1.1(typescript@5.7.3)
+      '@trpc/server': 11.5.1(typescript@5.7.3)
       typescript: 5.7.3
 
-  '@trpc/server@11.1.1(typescript@5.7.3)':
+  '@trpc/server@11.5.1(typescript@5.7.3)':
     dependencies:
       typescript: 5.7.3
 
@@ -2122,6 +2130,8 @@ snapshots:
 
   nanoid@3.3.11: {}
 
+  nanoid@5.1.5: {}
+
   neverthrow@8.2.0:
     optionalDependencies:
       '@rollup/rollup-linux-x64-gnu': 4.37.0
@@ -2140,7 +2150,7 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  openai@4.102.0(zod@3.25.30):
+  openai@4.102.0(zod@4.1.11):
     dependencies:
       '@types/node': 18.19.103
       '@types/node-fetch': 2.6.12
@@ -2150,7 +2160,7 @@ snapshots:
       formdata-node: 4.4.1
       node-fetch: 2.7.0
     optionalDependencies:
-      zod: 3.25.30
+      zod: 4.1.11
     transitivePeerDependencies:
       - encoding
 
@@ -2566,4 +2576,4 @@ snapshots:
 
   yn@3.1.1: {}
 
-  zod@3.25.30: {}
+  zod@4.1.11: {}

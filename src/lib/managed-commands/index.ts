@@ -6,7 +6,7 @@ import type { ConversationData, ConversationStorage } from "@grammyjs/conversati
 import { conversations, createConversation } from "@grammyjs/conversations"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
-import type { CommandContext, MiddlewareFn, MiddlewareObj } from "grammy"
+import type { CommandContext, Context, MiddlewareObj } from "grammy"
 import { Composer, MemorySessionStorage } from "grammy"
 import type { ChatMember, Message } from "grammy/types"
 import type { Result } from "neverthrow"
@@ -26,15 +26,15 @@ import type {
   RepliedTo,
 } from "./command"
 import { isTypedArgumentOptions } from "./command"
-import type { Context } from "./context"
+import type { ManagedCommandsFlavor } from "./context"
 
-export type PermissionHandler<TRole extends string> = (arg: {
-  context: CommandContext<Context>
+export type PermissionHandler<TRole extends string, C extends Context> = (arg: {
+  context: CommandContext<C>
   command: Command<CommandArgs, CommandReplyTo, CommandScope, TRole>
 }) => Promise<boolean>
 
 type DefaultRoles = ChatMember["status"]
-const defaultPermissionHandler: PermissionHandler<string> = async ({ context, command }) => {
+const defaultPermissionHandler: PermissionHandler<string, Context> = async ({ context, command }) => {
   const { allowedRoles, excludedRoles } = command.permissions ?? {}
   if (!context.from) return false
   const member = await context.getChatMember(context.from.id)
@@ -81,7 +81,7 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
    * })
    * ```
    */
-  permissionHandler: PermissionHandler<TRole>
+  permissionHandler: PermissionHandler<TRole, C>
 
   /**
    * The logger to use for logging messages, you can pass your pino logger here
@@ -100,12 +100,14 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
   logger: Logger
 }
 
-export class ManagedCommands<TRole extends string = DefaultRoles, C extends Context = Context>
-  implements MiddlewareObj<C>
+export class ManagedCommands<
+  TRole extends string = DefaultRoles,
+  C extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
+> implements MiddlewareObj<C>
 {
   private composer = new Composer<C>()
   private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
-  private permissionHandler: PermissionHandler<TRole>
+  private permissionHandler: PermissionHandler<TRole, C>
   private logger: Logger
   private adapter: ConversationStorage<C, ConversationData>
 
@@ -272,7 +274,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
     this.adapter = options?.adapter ?? new MemorySessionStorage()
 
     this.composer.use(
-      conversations<Context, CommandScopedContext>({
+      conversations<C, CommandScopedContext>({
         storage: this.adapter,
         plugins: [
           hydrate<CommandScopedContext>(),
@@ -410,7 +412,7 @@ export class ManagedCommands<TRole extends string = DefaultRoles, C extends Cont
    * bot.use(commands);
    * @returns The middleware function to be used in the bot
    */
-  middleware: () => MiddlewareFn<C> = () => {
+  middleware() {
     return this.composer.middleware()
   }
 }

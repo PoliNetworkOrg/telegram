@@ -14,7 +14,7 @@
     "bracketSpacing": true,
     "expand": "auto",
     "useEditorconfig": true,
-    "includes": ["**", "!**/pnpm-lock.yaml", "!./node_modules", "!./out", "!./dist", "!**/*.md"]
+    "includes": ["**", "!**/pnpm-lock.yaml", "!package.json", "!./node_modules", "!./out", "!./dist", "!**/*.md"]
   },
   "linter": {
     "enabled": true,
