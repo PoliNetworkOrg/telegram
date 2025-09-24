@@ -1,11 +1,11 @@
 import type { NextFunction } from "grammy"
 import { InlineKeyboard } from "grammy"
 import { api } from "@/backend"
-import { messageStorage } from "@/bot"
-import type { Context } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
 import { fmt, fmtChat } from "@/utils/format"
+import type { Context } from "@/utils/types"
+import { MessageStorage } from "./message-storage"
 
 // --- Configuration ---
 const LINK_REGEX = /https?:\/\/t\.me\/c\/(-?\d+)\/(\d+)(?:\/(\d+))?/gi // Regex with global and case-insensitive flags
@@ -102,7 +102,7 @@ async function makeResponse(
   const inviteLink =
     chat.invite_link ?? (await api.tg.groups.getById.query({ telegramId: chat.id }))[0].link ?? undefined
 
-  const message = await messageStorage.get(chatId, messageId)
+  const message = await MessageStorage.getInstance().get(chatId, messageId)
   if (message === null) {
     return {
       message: fmt(
@@ -134,7 +134,7 @@ async function makeResponse(
   const isAdmin = author?.status === "creator" || author?.status === "administrator"
   const authorRes = fmt(({ code, i, b, n }) =>
     author
-      ? n`${b`Author:`} @${author.user.username} [${code`${author.user.id}`}] ${isAdmin && b`ADMIN`}`
+      ? n`${b`Author:`} @${author.user.username} [${code`${author.user.id}`}] ${isAdmin ? b`ADMIN` : ""}`
       : n`${b`Author:`} ${i`not available`}`
   )
 

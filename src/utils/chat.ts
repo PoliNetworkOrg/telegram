@@ -1,4 +1,4 @@
-import type { ChatPermissions } from "grammy/types"
+import type { ChatPermissions, Message } from "grammy/types"
 
 export function padChatId(chatId: number): number {
   if (chatId < 0) return chatId
@@ -10,6 +10,15 @@ export function padChatId(chatId: number): number {
 
   // Prepend the padding to the input string
   return parseInt(`-${padding}${chatId}`, 10)
+}
+
+export function stripChatId(chatId: number): number {
+  if (chatId > 0) return chatId
+  const positive = -chatId
+
+  const str = positive.toString()
+  if (str.length < 13) return positive
+  return parseInt(str.slice(1), 10)
 }
 
 export const RestrictPermissions: Record<string, ChatPermissions> = {
@@ -35,4 +44,15 @@ export const RestrictPermissions: Record<string, ChatPermissions> = {
     can_send_polls: true,
     can_send_other_messages: true,
   },
+}
+
+export function groupMessagesByChat(messages: Message[]): Map<number, number[]> {
+  const chatsMap = new Map<number, number[]>()
+  messages.forEach((msg) => {
+    const ids = chatsMap.get(msg.chat.id) ?? []
+    ids.push(msg.message_id)
+    chatsMap.set(msg.chat.id, ids)
+  })
+
+  return chatsMap
 }

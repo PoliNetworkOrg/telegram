@@ -1,7 +1,7 @@
-import { Composer, type MiddlewareFn, type MiddlewareObj } from "grammy"
+import { Composer, type MiddlewareObj } from "grammy"
 import { tgLogger } from "@/bot"
-import type { Context } from "@/lib/managed-commands"
 import { duration } from "@/utils/duration"
+import type { Context } from "@/utils/types"
 
 /**
  * Middleware to track administrative actions performed via Telegram UI (not via bot commands).
@@ -30,8 +30,8 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       if (prev === "member" && curr === "left") return // skip left event
 
       if (prev === "kicked" && curr === "left") {
-        await tgLogger.adminAction({
-          type: "UNBAN",
+        await tgLogger.moderationAction({
+          action: "UNBAN",
           from: admin,
           target,
           chat,
@@ -40,8 +40,8 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       }
 
       if (prev === "member" && curr === "kicked") {
-        await tgLogger.adminAction({
-          type: "BAN",
+        await tgLogger.moderationAction({
+          action: "BAN",
           from: admin,
           target,
           chat,
@@ -50,8 +50,8 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       }
 
       if (prev === "member" && curr === "restricted" && !new_chat_member.can_send_messages) {
-        await tgLogger.adminAction({
-          type: "MUTE",
+        await tgLogger.moderationAction({
+          action: "MUTE",
           duration: duration.fromUntilDate(new_chat_member.until_date),
           from: admin,
           target,
@@ -63,16 +63,16 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       if (prev === "restricted" && curr === "restricted") {
         if (old_chat_member.can_send_messages && !new_chat_member.can_send_messages) {
           // mute
-          await tgLogger.adminAction({
-            type: "MUTE",
+          await tgLogger.moderationAction({
+            action: "MUTE",
             duration: duration.fromUntilDate(new_chat_member.until_date),
             from: admin,
             target,
             chat,
           })
         } else if (!old_chat_member.can_send_messages && new_chat_member.can_send_messages) {
-          await tgLogger.adminAction({
-            type: "UNMUTE",
+          await tgLogger.moderationAction({
+            action: "UNMUTE",
             from: admin,
             target,
             chat,
@@ -82,8 +82,8 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       }
 
       if (prev === "restricted" && curr === "member") {
-        await tgLogger.adminAction({
-          type: "UNMUTE",
+        await tgLogger.moderationAction({
+          action: "UNMUTE",
           from: admin,
           target,
           chat,
@@ -93,7 +93,7 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
     })
   }
 
-  middleware(): MiddlewareFn<C> {
+  middleware() {
     return this.composer.middleware()
   }
 }

@@ -1,4 +1,6 @@
-import type { Context } from "grammy"
+import type { Context as TContext } from "grammy"
+import type { ApiInput } from "@/backend"
+import type { ManagedCommandsFlavor } from "@/lib/managed-commands"
 
 export type OptionalPropertyOf<T extends object> = Exclude<
   {
@@ -6,6 +8,11 @@ export type OptionalPropertyOf<T extends object> = Exclude<
   }[keyof T],
   undefined
 >
-export type ContextWith<P extends OptionalPropertyOf<Context>> = Exclude<Context, P> & {
-  [K in P]: NonNullable<Context[P]>
+export type ContextWith<P extends OptionalPropertyOf<TContext>> = Exclude<TContext, P> & {
+  [K in P]: NonNullable<TContext[P]>
 }
+
+export type MaybePromise<T> = T | Promise<T>
+
+export type Context = ManagedCommandsFlavor<TContext>
+export type Role = ApiInput["tg"]["permissions"]["setRole"]["role"]
