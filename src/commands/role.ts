@@ -1,11 +1,10 @@
 import { z } from "zod"
 import { api } from "@/backend"
+import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import type { Role } from "@/utils/types"
-
 import { _commandsBase } from "./_base"
-import { logger } from "@/logger"
 
 _commandsBase
   .createCommand({
