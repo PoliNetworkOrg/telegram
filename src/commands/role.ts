@@ -5,6 +5,12 @@ import { getTelegramId } from "@/utils/telegram-id"
 import type { Role } from "@/utils/types"
 import { _commandsBase } from "./_base"
 
+const numberOrString = z.string().transform((s) => {
+  const n = Number(s)
+  if (!Number.isNaN(n) && s.trim() !== "") return n
+  return s
+})
+
 _commandsBase
   .createCommand({
     trigger: "getrole",
@@ -13,11 +19,7 @@ _commandsBase
     args: [
       {
         key: "username",
-        type: z.string().transform((s) => {
-          const n = Number(s)
-          if (!Number.isNaN(n) && s.trim() !== "") return n
-          return s
-        }),
+        type: numberOrString,
         description: "The username or the user id of the user you want to update the role",
       },
     ],
@@ -45,11 +47,7 @@ _commandsBase
     args: [
       {
         key: "username",
-        type: z.string().transform((s) => {
-          const n = Number(s)
-          if (!Number.isNaN(n) && s.trim() !== "") return n
-          return s
-        }),
+        type: numberOrString,
         description: "The username or the user id of the user you want to update the role",
       },
       { key: "role", type: z.enum<Role[]>(["direttivo", "hr", "admin"]) },
