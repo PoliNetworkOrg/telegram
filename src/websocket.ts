@@ -18,16 +18,20 @@ export class WebSocketClient<C extends Context> {
     this.io.on("connect", () => logger.info("[WS] connected"))
     this.io.on("connect_error", (error) => logger.info({ error }, "[WS] error while connecting"))
 
-    this.io.on("ban", async ({ chatId, userId, durationInSeconds }, onSuccess, onError) => {
-      try {
-        await this.bot.api.banChatMember(chatId, userId, {
+    this.io.on("ban", async ({ chatId, userId, durationInSeconds }, cb) => {
+      const error = await this.bot.api
+        .banChatMember(chatId, userId, {
           until_date: durationInSeconds ? duration.zod.parse(`${durationInSeconds}s`).timestamp_s : undefined,
         })
-        logger.info("[WS] Telegram API ban call OK")
-        onSuccess()
-      } catch (error) {
+        .then(() => null)
+        .catch((e) => JSON.stringify(e))
+
+      if (error) {
         logger.error({ error }, "[WS] Telegram API ban call failed")
-        onError(JSON.stringify(error))
+        cb(JSON.stringify(error))
+      } else {
+        logger.info("[WS] Telegram API ban call OK")
+        cb(null)
       }
     })
   }
