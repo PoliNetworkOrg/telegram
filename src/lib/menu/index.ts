@@ -15,7 +15,7 @@ const CONSTANTS = {
   padLen: 3,
 }
 
-type CallbackCtx<C extends Context> = Filter<C, "callback_query:data">
+export type CallbackCtx<C extends Context> = Filter<C, "callback_query:data">
 // biome-ignore lint/suspicious/noConfusingVoidType: literally a bug in Biome
 type Callback<T, C extends Context> = (params: { data: T; ctx: CallbackCtx<C> }) => MaybePromise<string | void>
 
@@ -139,7 +139,8 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
         .then((result) => {
           return ctx.answerCallbackQuery({ text: result ?? undefined })
         })
-        .catch(async () => {
+        .catch(async (e: unknown) => {
+          logger.error({ e }, "ERROR WHILE CALLING MENU CB")
           await ctx.editMessageReplyMarkup().catch(() => {})
           const feedback = menu.onExpiredButtonPress && (await menu.onExpiredButtonPress({ data: null, ctx }))
           await ctx.answerCallbackQuery({ text: feedback ?? "This button is no longer available", show_alert: true })
