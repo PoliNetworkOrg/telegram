@@ -77,7 +77,7 @@ _commandsBase
             ({ b, n }) => [
               b`✅ Role set!`,
               n`${b`Username:`} ${args.username}`,
-              n`${b`Role`}: ${prev} -> ${args.role}`,
+              n`${b`Role:`} ${prev} -> ${args.role}`,
             ],
             { sep: "\n" }
           )
