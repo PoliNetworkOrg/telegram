@@ -1,6 +1,5 @@
 import { z } from "zod"
 import { api } from "@/backend"
-import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import type { Role } from "@/utils/types"
@@ -23,7 +22,6 @@ _commandsBase
       },
     ],
     handler: async ({ context, args }) => {
-      logger.debug({ a: args.username, type: typeof args.username })
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 
