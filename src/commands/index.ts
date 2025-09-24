@@ -8,5 +8,6 @@ import "./search"
 import "./role"
 import "./userid"
 import "./link-admin-dashboard"
+import "./report"
 
 export { _commandsBase as commands } from "./_base"

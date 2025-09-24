@@ -3,6 +3,7 @@ import type { Message, User } from "grammy/types"
 import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
+import { getReportText, type Report, reportMenu } from "./report"
 import type * as Types from "./types"
 
 type Topics = {
@@ -66,6 +67,24 @@ export class TgLogger<C extends Context> {
           await this.exception({ type: "GENERIC", error: e }, "TgLogger.forward")
         }
       })
+  }
+
+  public async report(message: Message, reporter: User): Promise<boolean> {
+    if (message.from === undefined) return false // should be impossible
+    const { invite_link } = await this.bot.api.getChat(message.chat.id)
+
+    const report: Report = { message, reporter } as Report
+    const reportText = getReportText(report, invite_link)
+    const reply_markup = await reportMenu(report)
+    const reportMsg = await this.log(this.topics.actionRequired, reportText, {
+      reply_markup,
+      disable_notification: false,
+    })
+
+    if (!reportMsg) return false
+
+    await this.forward(this.topics.actionRequired, message.chat.id, [message.message_id])
+    return true
   }
 
   async delete(
