@@ -30,8 +30,8 @@
   - [ ] do not delete Direttivo's allowed messages
   - [x] check if user has username
   - [ ] group-specific moderation (eg. #cerco #vendo in polihouse)
-- [ ] role management
-  - [ ] setrole: set role for some username (only Direttivo, maybe HR)
+- [x] role management
+  - [x] setrole: set role for some username (only Direttivo, maybe HR)
   - [x] getrole: get user role
 - [ ] automatic messages in some specific groups (like piano di studi)
 - [ ] manage channel for associations
