@@ -19,6 +19,7 @@ import { UIActionsLogger } from "./middlewares/ui-actions-logger"
 import { redis } from "./redis"
 import { setTelegramId } from "./utils/telegram-id"
 import type { Context } from "./utils/types"
+import { WebSocketClient } from "./websocket"
 
 const TEST_CHAT_ID = -1002669533277
 const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
@@ -105,6 +106,8 @@ bot.catch(async (err) => {
   delete e.ctx.api // LEAKS API TOKEN IN LOGS!!
   logger.error(e)
 })
+
+new WebSocketClient(bot)
 
 const runner = run(bot, {
   runner: {
