@@ -30,7 +30,7 @@ export class WebSocketClient<C extends Context> {
         logger.error({ error }, "[WS] Telegram API ban call failed")
         cb(JSON.stringify(error))
       } else {
-        logger.info("[WS] Telegram API ban call OK")
+        logger.debug("[WS] Telegram API ban call OK")
         cb(null)
       }
     })
