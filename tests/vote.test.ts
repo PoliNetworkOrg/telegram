@@ -65,6 +65,7 @@ describe("voting utility", () => {
   })
 
   it("everyone voted, different combinations", () => {
+    expect(makeTest("abstained", 1, 0, 1, 0)).toBe<Outcome>("approved")
     expect(makeTest("abstained", 4, 2, 0, 0)).toBe<Outcome>("approved")
     expect(makeTest("inFavor", 3, 3, 0, 0)).toBe<Outcome>("approved")
     expect(makeTest("against", 4, 2, 0, 0)).toBe<Outcome>("approved")
