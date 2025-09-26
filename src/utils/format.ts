@@ -138,7 +138,7 @@ export function fmt(cb: (formatters: Formatters) => string | (string | undefined
   )
 }
 
-export function fmtUser(user: User): string {
+export function fmtUser(user: Pick<User, "id" | "first_name" | "last_name">): string {
   const fullname = user.last_name ? `${user.first_name} ${user.last_name}` : user.first_name
   return formatters.n`${formatters.link(fullname, `tg://user?id=${user.id}`)} [${formatters.code`${user.id}`}]`
 }
