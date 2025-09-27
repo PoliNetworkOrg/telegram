@@ -15,4 +15,4 @@ export type ContextWith<P extends OptionalPropertyOf<TContext>> = Exclude<TConte
 export type MaybePromise<T> = T | Promise<T>
 
 export type Context = ManagedCommandsFlavor<TContext>
-export type Role = ApiInput["tg"]["permissions"]["setRole"]["role"]
+export type Role = ApiInput["tg"]["permissions"]["addRole"]["role"]

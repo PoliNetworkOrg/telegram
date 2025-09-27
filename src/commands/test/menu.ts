@@ -12,7 +12,7 @@ const generateMenu = MenuGenerator.getInstance().create<{
       cb: async ({ ctx, data }) => {
         await ctx.editMessageText(`${ctx.msg?.text ?? ""}\nBAN`, { reply_markup: ctx.msg?.reply_markup ?? undefined })
         logger.info({ data }, "TESTSTESTSTSTE")
-        return "Deleted + Banned"
+        return { feedback: "Deleted + Banned" }
       },
     },
   ],
@@ -21,12 +21,14 @@ const generateMenu = MenuGenerator.getInstance().create<{
       text: "TEST 1",
       cb: () => {
         logger.info("TEST 1")
+        return null
       },
     },
     {
       text: "TEST 2",
       cb: () => {
         logger.info("TEST 2")
+        return null
       },
     },
   ],

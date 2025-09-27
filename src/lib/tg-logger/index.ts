@@ -3,6 +3,7 @@ import type { Message, User } from "grammy/types"
 import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
+import { type BanAll, banAllMenu, getBanAllText } from "./ban-all"
 import { getReportText, type Report, reportMenu } from "./report"
 import type * as Types from "./types"
 
@@ -133,33 +134,11 @@ export class TgLogger<C extends Context> {
     }
   }
 
-  public async banAll(props: Types.BanAllLog): Promise<string> {
-    let msg: string
-    if (props.type === "BAN") {
-      msg = fmt(
-        ({ b, n }) => [
-          b`🚫 Ban ALL`,
-          n`${b`Target:`} ${fmtUser(props.target)}`,
-          n`${b`Admin:`} ${fmtUser(props.from)}`,
-          props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-        ],
-        { sep: "\n" }
-      )
-    } else {
-      msg = fmt(
-        ({ b, n }) => [
-          b`✅ Unban ALL`,
-          n`${b`Target:`} ${fmtUser(props.target)}`,
-          n`${b`Admin:`} ${fmtUser(props.from)}`,
-        ],
-        {
-          sep: "\n",
-        }
-      )
-    }
-
-    await this.log(this.topics.banAll, msg)
-    return msg
+  // public async banAll(props: Types.BanAllLog): Promise<string> {
+  public async banAll(banAll: BanAll): Promise<void> {
+    const menu = await banAllMenu(banAll)
+    await this.log(this.topics.banAll, "———————————————")
+    await this.log(this.topics.banAll, getBanAllText(banAll), { reply_markup: menu })
   }
 
   public async moderationAction(props: Types.ModerationAction): Promise<string> {

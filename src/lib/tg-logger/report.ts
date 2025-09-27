@@ -74,6 +74,7 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
       text: "✅ Ignore",
       cb: async ({ data, ctx }) => {
         await editReportMessage(data, ctx, "✅ Ignore")
+        return null
       },
     },
     {
@@ -81,6 +82,7 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
       cb: async ({ data, ctx }) => {
         await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
         await editReportMessage(data, ctx, "🗑 Delete")
+        return null
       },
     },
   ],
@@ -94,6 +96,7 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
           until_date: Math.floor(Date.now() / 1000) + duration.values.m,
         })
         await editReportMessage(data, ctx, "👢 Kick")
+        return null
       },
     },
     {
@@ -102,6 +105,7 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
         await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
         await ctx.api.banChatMember(data.message.chat.id, data.message.from.id)
         await editReportMessage(data, ctx, "🚫 Ban")
+        return null
       },
     },
   ],
@@ -111,7 +115,7 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
       cb: async ({ data, ctx }) => {
         // TODO: connect ban all when implemented
         await editReportMessage(data, ctx, "🚨 Start BAN ALL (not implemented yet)")
-        return "❌ Not implemented yet"
+        return { feedback: "❌ Not implemented yet" }
       },
     },
   ],
