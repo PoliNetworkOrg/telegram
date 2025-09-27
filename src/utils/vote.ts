@@ -4,7 +4,7 @@ import { logger } from "@/logger"
 export type Vote = "inFavor" | "against" | "abstained"
 export type Outcome = "approved" | "denied" | "waiting"
 export type Voter = {
-  user: Pick<User, "id" | "first_name" | "last_name">
+  user: Partial<Pick<User, "id" | "first_name" | "last_name">> & { id: number }
   isPresident: boolean
   vote?: Vote
 }

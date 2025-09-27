@@ -33,24 +33,24 @@ _commandsBase
       }
 
       try {
-        const { role } = await api.tg.permissions.getRole.query({ userId })
-        await context.reply(fmt(({ b }) => [`Role:`, b`${role}`]))
+        const { roles } = await api.tg.permissions.getRoles.query({ userId })
+        await context.reply(fmt(({ b }) => (roles ? [`Roles:`, b`${roles.join(" ")}`] : "This user has no roles")))
       } catch (err) {
         await context.reply(`There was an error: \n${String(err)}`)
       }
     },
   })
   .createCommand({
-    trigger: "setrole",
+    trigger: "addrole",
     scope: "private",
-    description: "Set role of username",
+    description: "Add role to user",
     args: [
       {
         key: "username",
         type: numberOrString,
         description: "The username or the user id of the user you want to update the role",
       },
-      { key: "role", type: z.enum<Role[]>(["direttivo", "hr", "admin"]) },
+      { key: "role", type: z.enum<Role[]>(["owner", "president", "direttivo", "hr", "admin"]) },
     ],
     permissions: {
       allowedRoles: ["owner", "direttivo"],
@@ -65,14 +65,18 @@ _commandsBase
       }
 
       try {
-        const { role: prev } = await api.tg.permissions.getRole.query({ userId })
-        await api.tg.permissions.setRole.query({ userId, adderId: context.from.id, role: args.role })
+        const { roles } = await api.tg.permissions.getRoles.query({ userId })
+        const { error } = await api.tg.permissions.addRole.mutate({ userId, adderId: context.from.id, role: args.role })
+        if (error) {
+          await context.reply(fmt(({ n }) => n`There was an error: ${error}`))
+          return
+        }
         await context.reply(
           fmt(
-            ({ b, n }) => [
+            ({ b, n, u }) => [
               b`✅ Role set!`,
               n`${b`Username:`} ${args.username}`,
-              n`${b`Role:`} ${prev} -> ${args.role}`,
+              n`${b`Roles:`} ${u`${args.role}`} ${roles ? roles.join(" ") : ""}`,
             ],
             { sep: "\n" }
           )

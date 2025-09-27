@@ -1,6 +1,8 @@
 import { tgLogger } from "@/bot"
 import type { BanAll } from "@/lib/tg-logger/ban-all"
 import { _commandsBase } from "../_base"
+import { api } from "@/backend"
+import { fmt } from "@/utils/format"
 
 _commandsBase
   .createCommand({
@@ -11,6 +13,19 @@ _commandsBase
       allowedRoles: ["owner"],
     },
     handler: async ({ context }) => {
+      await context.deleteMessage()
+      const direttivo = await api.tg.permissions.getDirettivo.query()
+      if (direttivo.error) {
+        await context.reply(fmt(({ n }) => n`${direttivo.error}`))
+        return
+      }
+
+      const voters = direttivo.members.map((m) => ({
+        user: { id: m.userId },
+        isPresident: m.isPresident,
+        vote: undefined,
+      }))
+
       const banAllTest: BanAll = {
         type: "BAN",
         outcome: "waiting",
@@ -23,37 +38,9 @@ _commandsBase
           is_bot: false,
           username: "policreator3",
         },
-        voters: [
-          {
-            user: {
-              first_name: "PoliCreator1",
-              id: 349275135,
-            },
-            isPresident: true,
-            vote: undefined,
-          },
-          {
-            user: {
-              first_name: "Lorenzo",
-              last_name: "Corallo",
-              id: 186407195,
-            },
-            isPresident: false,
-            vote: undefined,
-          },
-          {
-            user: {
-              first_name: "PoliCreator",
-              last_name: "5",
-              id: 1699796816,
-            },
-            isPresident: false,
-            vote: undefined,
-          },
-        ],
+        voters,
       }
 
-      await context.deleteMessage()
       await tgLogger.banAll(banAllTest)
     },
   })
@@ -65,6 +52,19 @@ _commandsBase
       allowedRoles: ["owner"],
     },
     handler: async ({ context }) => {
+      await context.deleteMessage()
+      const direttivo = await api.tg.permissions.getDirettivo.query()
+      if (direttivo.error) {
+        await context.reply(fmt(({ n }) => n`${direttivo.error}`))
+        return
+      }
+
+      const voters = direttivo.members.map((m) => ({
+        user: { id: m.userId },
+        isPresident: m.isPresident,
+        vote: undefined,
+      }))
+
       const banAllTest: BanAll = {
         type: "UNBAN",
         outcome: "waiting",
@@ -77,37 +77,9 @@ _commandsBase
           is_bot: false,
           username: "policreator3",
         },
-        voters: [
-          {
-            user: {
-              first_name: "PoliCreator1",
-              id: 349275135,
-            },
-            isPresident: true,
-            vote: undefined,
-          },
-          {
-            user: {
-              first_name: "Lorenzo",
-              last_name: "Corallo",
-              id: 186407195,
-            },
-            isPresident: false,
-            vote: undefined,
-          },
-          {
-            user: {
-              first_name: "PoliCreator",
-              last_name: "5",
-              id: 1699796816,
-            },
-            isPresident: false,
-            vote: undefined,
-          },
-        ],
+        voters,
       }
 
-      await context.deleteMessage()
       await tgLogger.banAll(banAllTest)
     },
   })
