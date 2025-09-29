@@ -1,8 +1,8 @@
+import { api } from "@/backend"
 import { tgLogger } from "@/bot"
 import type { BanAll } from "@/lib/tg-logger/ban-all"
-import { _commandsBase } from "../_base"
-import { api } from "@/backend"
 import { fmt } from "@/utils/format"
+import { _commandsBase } from "../_base"
 
 _commandsBase
   .createCommand({
@@ -25,6 +25,15 @@ _commandsBase
         isPresident: m.isPresident,
         vote: undefined,
       }))
+
+      if (!voters.some((v) => v.isPresident)) {
+        await context.reply(
+          fmt(({ n, b }) => [b`No member is President!`, n`${b`Members:`} ${voters.map((v) => v.user.id).join(" ")}`], {
+            sep: "\n",
+          })
+        )
+        return
+      }
 
       const banAllTest: BanAll = {
         type: "BAN",
@@ -64,6 +73,15 @@ _commandsBase
         isPresident: m.isPresident,
         vote: undefined,
       }))
+
+      if (!voters.some((v) => v.isPresident)) {
+        await context.reply(
+          fmt(({ n, b }) => [b`No member is President!`, n`${b`Members:`} ${voters.map((v) => v.user.id).join(" ")}`], {
+            sep: "\n",
+          })
+        )
+        return
+      }
 
       const banAllTest: BanAll = {
         type: "UNBAN",
