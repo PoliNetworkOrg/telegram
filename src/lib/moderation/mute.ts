@@ -2,7 +2,7 @@ import type { Message, User } from "grammy/types"
 import { err, ok, type Result } from "neverthrow"
 import type { z } from "zod"
 import { api } from "@/backend"
-import { tgLogger } from "@/bot"
+import { modules } from "@/modules"
 import { RestrictPermissions } from "@/utils/chat"
 import type { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
@@ -47,7 +47,7 @@ export async function mute({
     type: "mute",
   })
 
-  const res = await tgLogger.moderationAction({
+  const res = await modules.get("tgLogger").moderationAction({
     action: "MUTE",
     chat: ctx.chat,
     from,
@@ -77,5 +77,7 @@ export async function unmute({ ctx, targetId, from }: UnmuteProps): Promise<Resu
     return err(fmt(({ b }) => b`@${from.username} this user is not muted`))
 
   await ctx.restrictChatMember(target.user.id, RestrictPermissions.unmute)
-  return ok(await tgLogger.moderationAction({ action: "UNMUTE", from, target: target.user, chat: ctx.chat }))
+  return ok(
+    await modules.get("tgLogger").moderationAction({ action: "UNMUTE", from, target: target.user, chat: ctx.chat })
+  )
 }

@@ -2,8 +2,8 @@ import type { Filter, MiddlewareObj } from "grammy"
 import { Composer } from "grammy"
 import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
-import { tgLogger } from "@/bot"
 import { mute } from "@/lib/moderation"
+import { modules } from "@/modules"
 import { redis } from "@/redis"
 import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { defer } from "@/utils/deferred-middleware"
@@ -145,7 +145,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         await msg.delete()
       } else {
         // no flagged category is above the threshold, still log it for manual review
-        await tgLogger.moderationAction({
+        await modules.get("tgLogger").moderationAction({
           action: "SILENT",
           from: ctx.me,
           chat: ctx.chat,
@@ -226,7 +226,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
           )
       )
 
-      await tgLogger.moderationAction({
+      await modules.get("tgLogger").moderationAction({
         action: "MULTI_CHAT_SPAM",
         from: ctx.me,
         chat: ctx.chat,

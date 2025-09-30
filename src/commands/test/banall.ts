@@ -1,6 +1,6 @@
 import { api } from "@/backend"
-import { tgLogger } from "@/bot"
 import type { BanAll } from "@/lib/tg-logger/ban-all"
+import { modules } from "@/modules"
 import { fmt } from "@/utils/format"
 import { _commandsBase } from "../_base"
 
@@ -50,7 +50,7 @@ _commandsBase
         voters,
       }
 
-      await tgLogger.banAll(banAllTest)
+      await modules.get("tgLogger").banAll(banAllTest)
     },
   })
   .createCommand({
@@ -98,6 +98,6 @@ _commandsBase
         voters,
       }
 
-      await tgLogger.banAll(banAllTest)
+      await modules.get("tgLogger").banAll(banAllTest)
     },
   })
