@@ -41,8 +41,8 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
 
       if (this.isJoin(ctx)) {
         // joined event
-        await this.checkAdderPermission(ctx)
-        return next()
+        // go next, if adder has no permission
+        if (!(await this.checkAdderPermission(ctx))) return next()
       }
 
       if (newStatus === "administrator") {
@@ -109,10 +109,18 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
   private async createGroup(ctx: MemberContext<C>): Promise<void> {
     const chat = await ctx.getChat()
     const res = await GroupManagement.create(chat)
+    const logChat = {
+      id: chat.id,
+      title: chat.title,
+      is_forum: chat.is_forum,
+      type: chat.type,
+      invite_link: chat.invite_link,
+    }
+
     await res.match(
       async (g) => {
         await modules.get("tgLogger").groupManagement({ type: "CREATE", chat, inviteLink: g.link, addedBy: ctx.from })
-        logger.info({ chat }, `[BCE] Created a new group`)
+        logger.info({ chat: logChat }, `[BCE] Created a new group`)
       },
       async (e) => {
         const ik = new InlineKeyboard()
@@ -120,7 +128,7 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
         await modules
           .get("tgLogger")
           .groupManagement({ type: "CREATE_FAIL", chat, inviteLink: chat.invite_link, reason: e })
-        logger.error({ chat }, `[BCE] Cannot create group into DB. Reason: ${e}`)
+        logger.error({ chat: logChat }, `[BCE] Cannot create group into DB. Reason: ${e}`)
       }
     )
   }
