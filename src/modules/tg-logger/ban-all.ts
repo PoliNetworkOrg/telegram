@@ -1,9 +1,30 @@
 import type { Context } from "grammy"
 import type { User } from "grammy/types"
+import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
 import { fmt, fmtUser } from "@/utils/format"
+import { unicodeProgressBar } from "@/utils/progress"
 import { calculateOutcome, type Outcome, type Vote, type Voter } from "@/utils/vote"
-import { type CallbackCtx, MenuGenerator } from "../menu"
+import { modules } from ".."
+
+export type BanAllState = {
+  jobCount: number
+  successCount: number
+  failedCount: number
+}
+
+export function isBanAllState(obj: unknown): obj is BanAllState {
+  return !!(
+    obj &&
+    typeof obj === "object" &&
+    "jobCount" in obj &&
+    "successCount" in obj &&
+    "failedCount" in obj &&
+    typeof obj.jobCount === "number" &&
+    typeof obj.successCount === "number" &&
+    typeof obj.failedCount === "number"
+  )
+}
 
 export type BanAll = {
   type: "BAN" | "UNBAN"
@@ -12,6 +33,7 @@ export type BanAll = {
   reason: string
   outcome: Outcome
   voters: Voter[]
+  state: BanAllState
 }
 
 const VOTE_EMOJI: Record<Vote, string> = {
@@ -26,6 +48,24 @@ const OUTCOME_STR: Record<Outcome, string> = {
   denied: "❌ DENIED",
 }
 
+export const getProgressText = (state: BanAll["state"]): string => {
+  if (state.jobCount === 0) return fmt(({ i }) => i`\nFetching groups...`)
+
+  const progress = (state.successCount + state.failedCount) / state.jobCount
+  const percent = (progress * 100).toFixed(1)
+
+  return fmt(
+    ({ n, b }) => [
+      b`\nProgress - ${state.jobCount} groups`,
+      n`\t🟢 ${state.successCount}`,
+      n`\t🔴 ${state.failedCount}`,
+      n`\t⏸️ ${state.jobCount - state.successCount - state.failedCount}`,
+      n`${unicodeProgressBar(progress, 20)} ${percent}%`,
+    ],
+    { sep: "\n" }
+  )
+}
+
 /**
  * Generate the message text of the BanAll case, based on current voting situation.
  *
@@ -34,20 +74,21 @@ const OUTCOME_STR: Record<Outcome, string> = {
  */
 export const getBanAllText = (data: BanAll) =>
   fmt(
-    ({ n, b, strikethrough }) => [
-      data.type === "BAN" ? b`🚨 BAN ALL 🚨` : b`🟢 UN-BAN ALL 🟢`,
+    ({ n, b, skip, strikethrough }) => [
+      data.type === "BAN" ? b`🚨 BAN ALL 🚨` : b`🟢 UN - BAN ALL 🟢`,
       "",
-      n`${b`🎯 Target:`} ${fmtUser(data.target)}`,
-      n`${b`📣 Reporter:`} ${fmtUser(data.reporter)}`,
-      n`${b`📋 Reason:`} ${data.reason}`,
+      n`${b`🎯 Target:`} ${fmtUser(data.target)} `,
+      n`${b`📣 Reporter:`} ${fmtUser(data.reporter)} `,
+      n`${b`📋 Reason:`} ${data.reason} `,
       "",
-      b`${OUTCOME_STR[data.outcome]}`,
+      b`${OUTCOME_STR[data.outcome]} `,
+      data.outcome === "approved" ? skip`${getProgressText(data.state)}` : undefined,
       "",
       b`Voters`,
       ...data.voters.map((v) =>
         data.outcome !== "waiting" && !v.vote
-          ? strikethrough`➖ ${fmtUser(v.user)} ${v.isPresident ? b`PRES` : ""}`
-          : n`${v.vote ? VOTE_EMOJI[v.vote] : "⏳"} ${fmtUser(v.user)} ${v.isPresident ? b`PRES` : ""}`
+          ? strikethrough`➖ ${fmtUser(v.user)} ${v.isPresident ? b`PRES` : ""} `
+          : n`${v.vote ? VOTE_EMOJI[v.vote] : "⏳"} ${fmtUser(v.user)} ${v.isPresident ? b`PRES` : ""} `
       ),
     ],
     { sep: "\n" }
@@ -79,6 +120,12 @@ async function vote<C extends Context>(
     }
   }
   data.outcome = outcome
+
+  const messageId = ctx.callbackQuery.message?.message_id
+
+  if (outcome === "approved" && messageId) {
+    await modules.get("banAll").initiateBanAll(data, messageId)
+  }
 
   // remove buttons if there is an outcome (not waiting)
   const reply_markup = outcome === "waiting" ? ctx.msg?.reply_markup : undefined

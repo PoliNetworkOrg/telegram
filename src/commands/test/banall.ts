@@ -1,6 +1,6 @@
 import { api } from "@/backend"
-import { tgLogger } from "@/bot"
-import type { BanAll } from "@/lib/tg-logger/ban-all"
+import { modules } from "@/modules"
+import type { BanAll } from "@/modules/tg-logger/ban-all"
 import { fmt } from "@/utils/format"
 import { _commandsBase } from "../_base"
 
@@ -48,9 +48,14 @@ _commandsBase
           username: "policreator3",
         },
         voters,
+        state: {
+          successCount: 0,
+          failedCount: 0,
+          jobCount: 0,
+        },
       }
 
-      await tgLogger.banAll(banAllTest)
+      await modules.get("tgLogger").banAll(banAllTest)
     },
   })
   .createCommand({
@@ -96,8 +101,13 @@ _commandsBase
           username: "policreator3",
         },
         voters,
+        state: {
+          failedCount: 0,
+          successCount: 0,
+          jobCount: 0,
+        },
       }
 
-      await tgLogger.banAll(banAllTest)
+      await modules.get("tgLogger").banAll(banAllTest)
     },
   })

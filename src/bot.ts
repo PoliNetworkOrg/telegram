@@ -8,7 +8,6 @@ import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
 import { MenuGenerator } from "./lib/menu"
-import { TgLogger } from "./lib/tg-logger"
 import { logger } from "./logger"
 import { AutoModerationStack } from "./middlewares/auto-moderation-stack"
 import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
@@ -16,10 +15,10 @@ import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
 import { MessageStorage } from "./middlewares/message-storage"
 import { UIActionsLogger } from "./middlewares/ui-actions-logger"
+import { modules, sharedDataInit } from "./modules"
 import { redis } from "./redis"
 import { setTelegramId } from "./utils/telegram-id"
-import type { Context } from "./utils/types"
-import { WebSocketClient } from "./websocket"
+import type { Context, ModuleShared } from "./utils/types"
 
 const TEST_CHAT_ID = -1002669533277
 const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
@@ -62,15 +61,15 @@ bot.use(
   })
 )
 
-export const tgLogger = new TgLogger<Context>(bot, -1002685849173, {
-  banAll: 13,
-  exceptions: 3,
-  autoModeration: 7,
-  adminActions: 5,
-  actionRequired: 10,
-  groupManagement: 33,
-  deletedMessages: 130,
+bot.init().then(() => {
+  const sharedData: ModuleShared = {
+    api: bot.api,
+    botInfo: bot.botInfo,
+  }
+  sharedDataInit.resolve(sharedData)
 })
+
+const tgLogger = modules.get("tgLogger")
 
 bot.use(MenuGenerator.getInstance())
 bot.use(commands)
@@ -107,8 +106,6 @@ bot.catch(async (err) => {
   logger.error(e)
 })
 
-new WebSocketClient(bot)
-
 const runner = run(bot, {
   runner: {
     fetch: {
@@ -126,7 +123,8 @@ async function terminate(signal: NodeJS.Signals) {
   const p1 = MessageStorage.getInstance().sync()
   const p2 = redis.quit()
   const p3 = runner.isRunning() && runner.stop()
-  await Promise.all([p1, p2, p3])
+  const p4 = modules.stop()
+  await Promise.all([p1, p2, p3, p4])
   logger.info("Bot stopped!")
   process.exit(0)
 }

@@ -1,8 +1,10 @@
-import { type Bot, type Context, GrammyError, InlineKeyboard } from "grammy"
+import { GrammyError, InlineKeyboard } from "grammy"
 import type { Message, User } from "grammy/types"
+import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
+import type { ModuleShared } from "@/utils/types"
 import { type BanAll, banAllMenu, getBanAllText } from "./ban-all"
 import { getReportText, type Report, reportMenu } from "./report"
 import type * as Types from "./types"
@@ -17,19 +19,20 @@ type Topics = {
   groupManagement: number
 }
 
-export class TgLogger<C extends Context> {
+export class TgLogger extends Module<ModuleShared> {
   constructor(
-    private bot: Bot<C>,
     private groupId: number,
     private topics: Topics
-  ) {}
+  ) {
+    super()
+  }
 
   private async log(
     topicId: number,
     fmtString: string,
-    opts?: Parameters<typeof this.bot.api.sendMessage>[2]
+    opts?: Parameters<typeof this.shared.api.sendMessage>[2]
   ): Promise<Message | null> {
-    return await this.bot.api
+    return await this.shared.api
       .sendMessage(this.groupId, fmtString, {
         message_thread_id: topicId,
         disable_notification: true,
@@ -46,7 +49,7 @@ export class TgLogger<C extends Context> {
   }
 
   private async forward(topicId: number, chatId: number, messageIds: number[]): Promise<void> {
-    await this.bot.api
+    await this.shared.api
       .forwardMessages(this.groupId, chatId, messageIds, {
         message_thread_id: topicId,
         disable_notification: true,
@@ -72,7 +75,7 @@ export class TgLogger<C extends Context> {
 
   public async report(message: Message, reporter: User): Promise<boolean> {
     if (message.from === undefined) return false // should be impossible
-    const { invite_link } = await this.bot.api.getChat(message.chat.id)
+    const { invite_link } = await this.shared.api.getChat(message.chat.id)
 
     const report: Report = { message, reporter } as Report
     const reportText = getReportText(report, invite_link)
@@ -91,7 +94,7 @@ export class TgLogger<C extends Context> {
   async delete(
     messages: Message[],
     reason: string,
-    deleter: User = this.bot.botInfo
+    deleter: User = this.shared.botInfo
   ): Promise<Types.DeleteResult | null> {
     if (!messages.length) return null
     const sendersMap = new Map<number, User>()
@@ -113,7 +116,7 @@ export class TgLogger<C extends Context> {
             ? n`${b`Senders:`} \n - ${senders.map(fmtUser).join("\n - ")}`
             : n`${b`Sender:`} ${fmtUser(senders[0])}`,
 
-          deleter.id === this.bot.botInfo.id ? i`Automatic deletion by BOT` : n`${b`Deleter:`} ${fmtUser(deleter)}`,
+          deleter.id === this.shared.botInfo.id ? i`Automatic deletion by BOT` : n`${b`Deleter:`} ${fmtUser(deleter)}`,
           n`${b`Count:`} ${code`${messages.length}`}`,
 
           reason ? n`${b`Reason:`} ${reason}` : undefined,
@@ -125,7 +128,7 @@ export class TgLogger<C extends Context> {
 
     for (const [chatId, mIds] of groupMessagesByChat(messages)) {
       await this.forward(this.topics.deletedMessages, chatId, mIds)
-      await this.bot.api.deleteMessages(chatId, mIds)
+      await this.shared.api.deleteMessages(chatId, mIds)
     }
 
     return {
@@ -141,13 +144,20 @@ export class TgLogger<C extends Context> {
     await this.log(this.topics.banAll, getBanAllText(banAll), { reply_markup: menu })
   }
 
+  public async banAllProgress(banAll: BanAll, messageId: number): Promise<void> {
+    await this.shared.api.editMessageText(this.groupId, messageId, getBanAllText(banAll), {
+      reply_markup: undefined,
+      link_preview_options: { is_disabled: true },
+    })
+  }
+
   public async moderationAction(props: Types.ModerationAction): Promise<string> {
-    const isAutoModeration = props.from.id === this.bot.botInfo.id
+    const isAutoModeration = props.from.id === this.shared.botInfo.id
 
     let title: string
     const others: string[] = []
     let deleteRes: Types.DeleteResult | null = null
-    const { invite_link } = await this.bot.api.getChat(props.chat.id)
+    const { invite_link } = await this.shared.api.getChat(props.chat.id)
 
     const delReason = `${props.action}${"reason" in props && props.reason ? ` -- ${props.reason}` : ""}`
     switch (props.action) {
@@ -172,11 +182,11 @@ export class TgLogger<C extends Context> {
         const groupByChat = groupMessagesByChat(props.messages)
         others.push(fmt(({ b }) => b`\nChats involved:`))
         for (const [chatId, mIds] of groupByChat) {
-          const chat = await this.bot.api.getChat(chatId)
+          const chat = await this.shared.api.getChat(chatId)
           others.push(fmt(({ n, i }) => n`${fmtChat(chat, chat.invite_link)} \n${i`Messages: ${mIds.length}`}`))
         }
 
-        deleteRes = await this.delete(props.messages, delReason, this.bot.botInfo)
+        deleteRes = await this.delete(props.messages, delReason, this.shared.botInfo)
         break
       }
 

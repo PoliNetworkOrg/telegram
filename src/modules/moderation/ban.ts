@@ -2,7 +2,7 @@ import type { Message, User } from "grammy/types"
 import { err, ok, type Result } from "neverthrow"
 import type { z } from "zod"
 import { api } from "@/backend"
-import { tgLogger } from "@/bot"
+import { modules } from "@/modules"
 import type { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import type { ContextWith } from "@/utils/types"
@@ -33,7 +33,11 @@ export async function ban({ ctx, target, from, reason, duration, message }: BanP
     reason,
     type: "ban",
   })
-  return ok(await tgLogger.moderationAction({ action: "BAN", from, message, target, duration, reason, chat: ctx.chat }))
+  return ok(
+    await modules
+      .get("tgLogger")
+      .moderationAction({ action: "BAN", from, message, target, duration, reason, chat: ctx.chat })
+  )
 }
 
 interface UnbanProps {
@@ -51,5 +55,7 @@ export async function unban({ ctx, targetId, from }: UnbanProps): Promise<Result
     return err(fmt(({ b }) => b`@${from.username} this user is not banned in this chat`))
 
   await ctx.unbanChatMember(target.user.id)
-  return ok(await tgLogger.moderationAction({ action: "UNBAN", from: from, target: target.user, chat: ctx.chat }))
+  return ok(
+    await modules.get("tgLogger").moderationAction({ action: "UNBAN", from: from, target: target.user, chat: ctx.chat })
+  )
 }
