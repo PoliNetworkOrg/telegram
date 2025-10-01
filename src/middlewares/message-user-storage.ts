@@ -7,13 +7,13 @@ import { padChatId } from "@/utils/chat"
 
 export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
 
-export class MessageStorage<C extends Context> implements MiddlewareObj<C> {
-  private static instance: MessageStorage<Context> | null = null
-  static getInstance<C extends Context>(): MessageStorage<C> {
-    if (!MessageStorage.instance) {
-      MessageStorage.instance = new MessageStorage<Context>()
+export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
+  private static instance: MessageUserStorage<Context> | null = null
+  static getInstance<C extends Context>(): MessageUserStorage<C> {
+    if (!MessageUserStorage.instance) {
+      MessageUserStorage.instance = new MessageUserStorage<Context>()
     }
-    return MessageStorage.instance as unknown as MessageStorage<C>
+    return MessageUserStorage.instance as unknown as MessageUserStorage<C>
   }
 
   private composer: Composer<C> = new Composer<C>()
