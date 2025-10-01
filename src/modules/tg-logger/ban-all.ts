@@ -3,6 +3,7 @@ import type { User } from "grammy/types"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
 import { fmt, fmtUser } from "@/utils/format"
+import { unicodeProgressBar } from "@/utils/progress"
 import { calculateOutcome, type Outcome, type Vote, type Voter } from "@/utils/vote"
 
 export type BanAll = {
@@ -31,18 +32,23 @@ const OUTCOME_STR: Record<Outcome, string> = {
   denied: "❌ DENIED",
 }
 
-export const getProgressText = (state: BanAll["state"]): string =>
-  state.jobCount === 0
-    ? fmt(({ i }) => [i`\nFetching groups...`], { sep: "\n" })
-    : fmt(
-        ({ n, b }) => [
-          b`\nProgress - ${state.jobCount} groups`,
-          n`\t🟢 ${state.successCount}`,
-          n`\t🔴 ${state.failedCount}`,
-          n`\t⏸️ ${state.jobCount - state.successCount - state.failedCount}`,
-        ],
-        { sep: "\n" }
-      )
+export const getProgressText = (state: BanAll["state"]): string => {
+  if (state.jobCount === 0) return fmt(({ i }) => i`\nFetching groups...`)
+
+  const progress = (state.successCount + state.failedCount) / state.jobCount
+  const percent = (progress * 100).toFixed(1)
+
+  return fmt(
+    ({ n, b }) => [
+      b`\nProgress - ${state.jobCount} groups`,
+      n`\t🟢 ${state.successCount}`,
+      n`\t🔴 ${state.failedCount}`,
+      n`\t⏸️ ${state.jobCount - state.successCount - state.failedCount}`,
+      n`${unicodeProgressBar(progress, 20)} ${percent}%`,
+    ],
+    { sep: "\n" }
+  )
+}
 
 /**
  * Generate the message text of the BanAll case, based on current voting situation.
