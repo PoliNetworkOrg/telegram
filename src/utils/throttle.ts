@@ -11,7 +11,7 @@
  */
 export function throttle<A extends unknown[]>(func: (...args: A) => void, limit: number): (...args: A) => void {
   let timeout: NodeJS.Timeout | null = null
-  let again = false
+  let again: boolean = false
 
   return (...args: A): void => {
     if (timeout === null) {
