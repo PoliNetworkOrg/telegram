@@ -22,7 +22,18 @@
       "recommended": true,
       "suspicious": {
         "noVar": "error"
+      },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
+      },
+      "correctness": {
+        "useJsonImportAttributes": "warn",
+        "noPrivateImports": "error"
       }
+    },
+    "domains": {
+      "project": "recommended"
     }
   },
   "javascript": {
