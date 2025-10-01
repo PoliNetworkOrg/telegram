@@ -1,6 +1,6 @@
 import { api } from "@/backend"
-import type { BanAll } from "@/lib/tg-logger/ban-all"
 import { modules } from "@/modules"
+import type { BanAll } from "@/modules/tg-logger/ban-all"
 import { fmt } from "@/utils/format"
 import { _commandsBase } from "../_base"
 

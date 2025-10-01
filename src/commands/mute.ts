@@ -1,5 +1,5 @@
-import { mute, unmute } from "@/lib/moderation"
 import { logger } from "@/logger"
+import { mute, unmute } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"

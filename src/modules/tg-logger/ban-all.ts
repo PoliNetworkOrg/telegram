@@ -1,9 +1,9 @@
 import type { Context } from "grammy"
 import type { User } from "grammy/types"
+import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
 import { fmt, fmtUser } from "@/utils/format"
 import { calculateOutcome, type Outcome, type Vote, type Voter } from "@/utils/vote"
-import { type CallbackCtx, MenuGenerator } from "../menu"
 
 export type BanAll = {
   type: "BAN" | "UNBAN"

@@ -20,7 +20,6 @@ import { redis } from "./redis"
 import { setTelegramId } from "./utils/telegram-id"
 import type { Context, ModuleShared } from "./utils/types"
 import { Awaiter } from "./utils/wait"
-import { WebSocketClient } from "./websocket"
 
 const TEST_CHAT_ID = -1002669533277
 const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
@@ -111,8 +110,6 @@ bot.catch(async (err) => {
   logger.error(e)
 })
 
-new WebSocketClient(bot)
-
 const runner = run(bot, {
   runner: {
     fetch: {
@@ -130,7 +127,8 @@ async function terminate(signal: NodeJS.Signals) {
   const p1 = MessageStorage.getInstance().sync()
   const p2 = redis.quit()
   const p3 = runner.isRunning() && runner.stop()
-  await Promise.all([p1, p2, p3])
+  const p4 = modules.stop()
+  await Promise.all([p1, p2, p3, p4])
   logger.info("Bot stopped!")
   process.exit(0)
 }

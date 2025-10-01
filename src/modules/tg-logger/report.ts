@@ -1,8 +1,8 @@
 import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
+import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { duration } from "@/utils/duration"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
-import { type CallbackCtx, MenuGenerator } from "../menu"
 
 export type Report = {
   message: Message & { from: User }

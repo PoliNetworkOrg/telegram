@@ -101,7 +101,7 @@ export class ModuleCoordinator<TShared, ModuleMap extends Record<string, Module<
     return this.sharedValue
   }
 
-  public get(module: keyof ModuleMap): ModuleMap[typeof module] {
+  public get<K extends keyof ModuleMap>(module: K): ModuleMap[K] {
     return this.modules[module]
   }
 

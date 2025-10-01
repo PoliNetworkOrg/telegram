@@ -1,6 +1,8 @@
-import { sharedDataInit } from "./bot"
-import { ModuleCoordinator } from "./lib/modules"
-import { TgLogger } from "./lib/tg-logger"
+import { sharedDataInit } from "@/bot"
+import { ModuleCoordinator } from "@/lib/modules"
+import { WebSocketClient } from "@/websocket"
+// import { BanAllQueue } from "./moderation/ban_all"
+import { TgLogger } from "./tg-logger"
 
 export const modules = new ModuleCoordinator(
   {
@@ -13,6 +15,8 @@ export const modules = new ModuleCoordinator(
       groupManagement: 33,
       deletedMessages: 130,
     }),
+    webSocket: new WebSocketClient(),
+    // banAll: new BanAllQueue(),
   },
   async () => {
     return await sharedDataInit
