@@ -6,6 +6,7 @@ import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
 
 export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
+type DBUsers = ApiInput["tg"]["users"]["add"]["users"]
 
 export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
   private static instance: MessageUserStorage<Context> | null = null
@@ -81,7 +82,7 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
 
   private async syncUsers(): Promise<void> {
     if (this.userStorage.size === 0) return
-    const users: ApiInput["tg"]["users"]["add"]["users"] = this.userStorage
+    const users: DBUsers = this.userStorage
       .values()
       .toArray()
       .map((u) => ({
