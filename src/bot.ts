@@ -14,7 +14,7 @@ import { AutoModerationStack } from "./middlewares/auto-moderation-stack"
 import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
-import { MessageStorage } from "./middlewares/message-storage"
+import { MessageUserStorage } from "./middlewares/message-user-storage"
 import { UIActionsLogger } from "./middlewares/ui-actions-logger"
 import { redis } from "./redis"
 import { once } from "./utils/once"
@@ -87,7 +87,7 @@ bot.on("message", async (ctx, next) => {
 })
 
 bot.on("message", messageLink({ channelIds: [TEST_CHAT_ID] })) // now is configured a test group
-bot.on("message", MessageStorage.getInstance())
+bot.on("message", MessageUserStorage.getInstance())
 bot.on("message", checkUsername)
 // bot.on("message", async (ctx, next) => { console.log(ctx.message); return await next() })
 
@@ -120,7 +120,7 @@ const runner = run(bot, {
 
 const terminate = once(async (signal: NodeJS.Signals) => {
   logger.warn(`Received ${signal}, shutting down...`)
-  const p1 = MessageStorage.getInstance().sync()
+  const p1 = MessageUserStorage.getInstance().sync()
   const p2 = redis.quit()
   const p3 = runner.isRunning() && runner.stop()
   await Promise.all([p1, p2, p3])
