@@ -16,8 +16,10 @@ export class WebSocketClient extends Module<ModuleShared> {
 
   constructor() {
     super()
-
     this.io = io(`http://${env.BACKEND_URL}`, { path: WS_PATH, query: { type: "telegram" } })
+  }
+
+  override async start() {
     this.io.on("connect", () => logger.info("[WS] connected"))
     this.io.on("connect_error", (error) => logger.info({ error }, "[WS] error while connecting"))
 
@@ -37,5 +39,10 @@ export class WebSocketClient extends Module<ModuleShared> {
         cb(null)
       }
     })
+  }
+
+  override async stop() {
+    this.io.close()
+    logger.info("[WS] disconnected")
   }
 }
