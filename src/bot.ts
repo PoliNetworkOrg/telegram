@@ -15,11 +15,10 @@ import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
 import { MessageStorage } from "./middlewares/message-storage"
 import { UIActionsLogger } from "./middlewares/ui-actions-logger"
-import { modules } from "./modules"
+import { modules, sharedDataInit } from "./modules"
 import { redis } from "./redis"
 import { setTelegramId } from "./utils/telegram-id"
 import type { Context, ModuleShared } from "./utils/types"
-import { Awaiter } from "./utils/wait"
 
 const TEST_CHAT_ID = -1002669533277
 const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
@@ -62,9 +61,6 @@ bot.use(
   })
 )
 
-// SOMETHING needs to be exported from this file, or we won't be able to do anything that depends on the state of the bot
-// TODO: maybe restore an index.ts that is the real entrypoint, without needing to export anything?
-export const sharedDataInit = new Awaiter<ModuleShared>()
 bot.init().then(() => {
   const sharedData: ModuleShared = {
     api: bot.api,

@@ -1,8 +1,11 @@
-import { sharedDataInit } from "@/bot"
 import { ModuleCoordinator } from "@/lib/modules"
+import type { ModuleShared } from "@/utils/types"
+import { Awaiter } from "@/utils/wait"
 import { WebSocketClient } from "@/websocket"
 // import { BanAllQueue } from "./moderation/ban_all"
 import { TgLogger } from "./tg-logger"
+
+export const sharedDataInit = new Awaiter<ModuleShared>()
 
 export const modules = new ModuleCoordinator(
   {

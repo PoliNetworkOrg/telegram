@@ -69,13 +69,13 @@ export class ModuleCoordinator<TShared, ModuleMap extends Record<string, Module<
 
   constructor(
     private readonly modules: ModuleMap,
-    sharedValue: MaybePromise<TShared>
+    sharedValue: () => MaybePromise<TShared>
   ) {
     void this.init(sharedValue)
   }
 
-  private async init(sharedValue: MaybePromise<TShared>) {
-    const resolved = await sharedValue
+  private async init(sharedValue: () => MaybePromise<TShared>) {
+    const resolved = await sharedValue()
     this.sharedValue = Object.freeze(resolved) // make it immutable
 
     // Bind the internal getter to each module. Because SHARED_GETTER is a symbol
