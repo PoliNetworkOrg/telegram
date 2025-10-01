@@ -17,6 +17,7 @@ import { MessageStorage } from "./middlewares/message-storage"
 import { UIActionsLogger } from "./middlewares/ui-actions-logger"
 import { modules, sharedDataInit } from "./modules"
 import { redis } from "./redis"
+import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
 import type { Context, ModuleShared } from "./utils/types"
 
@@ -114,11 +115,7 @@ const runner = run(bot, {
   },
 })
 
-let terminateStarted = false // this ensure that it's called only once. otherwise strange behaviours
-async function terminate(signal: NodeJS.Signals) {
-  if (terminateStarted) return
-
-  terminateStarted = true
+const terminate = once(async (signal: NodeJS.Signals) => {
   logger.warn(`Received ${signal}, shutting down...`)
   const p1 = MessageStorage.getInstance().sync()
   const p2 = redis.quit()
@@ -127,9 +124,10 @@ async function terminate(signal: NodeJS.Signals) {
   await Promise.all([p1, p2, p3, p4])
   logger.info("Bot stopped!")
   process.exit(0)
-}
-process.on("SIGINT", () => void terminate("SIGINT"))
-process.on("SIGTERM", () => void terminate("SIGTERM"))
+})
+
+process.on("SIGINT", () => terminate("SIGINT"))
+process.on("SIGTERM", () => terminate("SIGTERM"))
 
 process.on("unhandledRejection", (reason: Error, promise) => {
   logger.fatal({ reason, promise }, "UNHANDLED PROMISE REJECTION")
