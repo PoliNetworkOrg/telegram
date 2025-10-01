@@ -12,6 +12,11 @@ export type BanAll = {
   reason: string
   outcome: Outcome
   voters: Voter[]
+  state: {
+    jobCount: number
+    successCount: number
+    failedCount: number
+  }
 }
 
 const VOTE_EMOJI: Record<Vote, string> = {
@@ -26,6 +31,19 @@ const OUTCOME_STR: Record<Outcome, string> = {
   denied: "❌ DENIED",
 }
 
+export const getProgressText = (state: BanAll["state"]): string =>
+  state.jobCount === 0
+    ? fmt(({ i }) => [i`\nFetching groups...`], { sep: "\n" })
+    : fmt(
+        ({ n, b }) => [
+          b`\nProgress - ${state.jobCount} groups`,
+          n`\t🟢 ${state.successCount}`,
+          n`\t🔴 ${state.failedCount}`,
+          n`\t⏸️ ${state.jobCount - state.successCount - state.failedCount}`,
+        ],
+        { sep: "\n" }
+      )
+
 /**
  * Generate the message text of the BanAll case, based on current voting situation.
  *
@@ -34,20 +52,21 @@ const OUTCOME_STR: Record<Outcome, string> = {
  */
 export const getBanAllText = (data: BanAll) =>
   fmt(
-    ({ n, b, strikethrough }) => [
-      data.type === "BAN" ? b`🚨 BAN ALL 🚨` : b`🟢 UN-BAN ALL 🟢`,
+    ({ n, b, skip, strikethrough }) => [
+      data.type === "BAN" ? b`🚨 BAN ALL 🚨` : b`🟢 UN - BAN ALL 🟢`,
       "",
-      n`${b`🎯 Target:`} ${fmtUser(data.target)}`,
-      n`${b`📣 Reporter:`} ${fmtUser(data.reporter)}`,
-      n`${b`📋 Reason:`} ${data.reason}`,
+      n`${b`🎯 Target:`} ${fmtUser(data.target)} `,
+      n`${b`📣 Reporter:`} ${fmtUser(data.reporter)} `,
+      n`${b`📋 Reason:`} ${data.reason} `,
       "",
-      b`${OUTCOME_STR[data.outcome]}`,
+      b`${OUTCOME_STR[data.outcome]} `,
+      data.outcome === "approved" ? skip`${getProgressText(data.state)}` : undefined,
       "",
       b`Voters`,
       ...data.voters.map((v) =>
         data.outcome !== "waiting" && !v.vote
-          ? strikethrough`➖ ${fmtUser(v.user)} ${v.isPresident ? b`PRES` : ""}`
-          : n`${v.vote ? VOTE_EMOJI[v.vote] : "⏳"} ${fmtUser(v.user)} ${v.isPresident ? b`PRES` : ""}`
+          ? strikethrough`➖ ${fmtUser(v.user)} ${v.isPresident ? b`PRES` : ""} `
+          : n`${v.vote ? VOTE_EMOJI[v.vote] : "⏳"} ${fmtUser(v.user)} ${v.isPresident ? b`PRES` : ""} `
       ),
     ],
     { sep: "\n" }
@@ -79,6 +98,11 @@ async function vote<C extends Context>(
     }
   }
   data.outcome = outcome
+
+  if (outcome === "approved") {
+    // start ban
+    // BanAllQueue(banAll: BanAll)
+  }
 
   // remove buttons if there is an outcome (not waiting)
   const reply_markup = outcome === "waiting" ? ctx.msg?.reply_markup : undefined

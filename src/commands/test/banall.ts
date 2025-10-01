@@ -48,6 +48,11 @@ _commandsBase
           username: "policreator3",
         },
         voters,
+        state: {
+          successCount: 0,
+          failedCount: 0,
+          jobCount: 0,
+        },
       }
 
       await modules.get("tgLogger").banAll(banAllTest)
@@ -96,6 +101,11 @@ _commandsBase
           username: "policreator3",
         },
         voters,
+        state: {
+          failedCount: 0,
+          successCount: 0,
+          jobCount: 0,
+        },
       }
 
       await modules.get("tgLogger").banAll(banAllTest)
