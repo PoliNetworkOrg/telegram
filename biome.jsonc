@@ -26,7 +26,8 @@
       "nursery": {
         "noFloatingPromises": "error",
         "noMisusedPromises": "error",
-        "noUnnecessaryConditions": "error"
+        "noUnnecessaryConditions": "error",
+        "noImportCycles": "warn"
       },
       "correctness": {
         "useJsonImportAttributes": "warn",
