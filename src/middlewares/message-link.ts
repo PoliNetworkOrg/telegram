@@ -5,7 +5,7 @@ import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
 import { fmt, fmtChat } from "@/utils/format"
 import type { Context } from "@/utils/types"
-import { MessageStorage } from "./message-storage"
+import { MessageUserStorage } from "./message-user-storage"
 
 // --- Configuration ---
 const LINK_REGEX = /https?:\/\/t\.me\/c\/(-?\d+)\/(\d+)(?:\/(\d+))?/gi // Regex with global and case-insensitive flags
@@ -102,7 +102,7 @@ async function makeResponse(
   const inviteLink =
     chat.invite_link ?? (await api.tg.groups.getById.query({ telegramId: chat.id }))[0].link ?? undefined
 
-  const message = await MessageStorage.getInstance().get(chatId, messageId)
+  const message = await MessageUserStorage.getInstance().get(chatId, messageId)
   if (message === null) {
     return {
       message: fmt(

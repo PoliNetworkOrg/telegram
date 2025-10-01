@@ -36,10 +36,11 @@ export const _commandsBase = new ManagedCommands<Role>({
     }
 
     const { roles } = await api.tg.permissions.getRoles.query({ userId: ctx.from.id })
-    if (!roles) return false // TODO: maybe we should do this differently
+    if (!roles) return false
 
-    if (allowedRoles && !roles.some((r) => allowedRoles.includes(r))) return false
-    if (roles.some((r) => excludedRoles?.includes(r))) return false
+    // blacklist is stronger than whitelist
+    if (allowedRoles?.every((r) => !roles.includes(r))) return false
+    if (excludedRoles?.some((r) => roles.includes(r))) return false
 
     return true
   },
