@@ -144,6 +144,13 @@ export class TgLogger extends Module<ModuleShared> {
     await this.log(this.topics.banAll, getBanAllText(banAll), { reply_markup: menu })
   }
 
+  public async banAllProgress(banAll: BanAll, messageId: number): Promise<void> {
+    await this.shared.api.editMessageText(this.groupId, messageId, getBanAllText(banAll), {
+      reply_markup: undefined,
+      link_preview_options: { is_disabled: true },
+    })
+  }
+
   public async moderationAction(props: Types.ModerationAction): Promise<string> {
     const isAutoModeration = props.from.id === this.shared.botInfo.id
 

@@ -5,6 +5,26 @@ import { logger } from "@/logger"
 import { fmt, fmtUser } from "@/utils/format"
 import { unicodeProgressBar } from "@/utils/progress"
 import { calculateOutcome, type Outcome, type Vote, type Voter } from "@/utils/vote"
+import { modules } from ".."
+
+export type BanAllState = {
+  jobCount: number
+  successCount: number
+  failedCount: number
+}
+
+export function isBanAllState(obj: unknown): obj is BanAllState {
+  return !!(
+    obj &&
+    typeof obj === "object" &&
+    "jobCount" in obj &&
+    "successCount" in obj &&
+    "failedCount" in obj &&
+    typeof obj.jobCount === "number" &&
+    typeof obj.successCount === "number" &&
+    typeof obj.failedCount === "number"
+  )
+}
 
 export type BanAll = {
   type: "BAN" | "UNBAN"
@@ -13,11 +33,7 @@ export type BanAll = {
   reason: string
   outcome: Outcome
   voters: Voter[]
-  state: {
-    jobCount: number
-    successCount: number
-    failedCount: number
-  }
+  state: BanAllState
 }
 
 const VOTE_EMOJI: Record<Vote, string> = {
@@ -105,9 +121,10 @@ async function vote<C extends Context>(
   }
   data.outcome = outcome
 
-  if (outcome === "approved") {
-    // start ban
-    // BanAllQueue(banAll: BanAll)
+  const messageId = ctx.callbackQuery.message?.message_id
+
+  if (outcome === "approved" && messageId) {
+    await modules.get("banAll").initiateBanAll(data, messageId)
   }
 
   // remove buttons if there is an outcome (not waiting)
