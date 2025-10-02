@@ -3,7 +3,8 @@
  *
  * The function will get called at most once every `limit` milliseconds.
  * If the function is called again before the `limit` has passed,
- * the call will be ignored and the last result will be returned.
+ * the call will be ignored, but a new call will be scheduled at the end of the
+ * limit period, with the last arguments provided.
  *
  * @param func The function to throttle
  * @param limit The time limit in milliseconds
