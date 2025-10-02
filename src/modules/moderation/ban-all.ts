@@ -11,6 +11,7 @@ import { type BanAll, type BanAllState, isBanAllState } from "../tg-logger/ban-a
 const CONFIG = {
   ORCHESTRATOR_QUEUE: "[ban_all.orchestrator]",
   EXECUTOR_QUEUE: "[ban_all.exec]",
+  UPDATE_MESSAGE_THROTTLE_MS: 5000,
 }
 
 type BanJobData = {
@@ -166,7 +167,7 @@ export class BanAllQueue extends Module<ModuleShared> {
         .catch(() => {
           logger.warn("[BanAllQueue] Failed to update ban all progress message")
         })
-    }, 5000)
+    }, CONFIG.UPDATE_MESSAGE_THROTTLE_MS)
 
     this.orchestrateQueue.on("progress", async (job, progress) => {
       if (!isBanAllState(progress)) return
