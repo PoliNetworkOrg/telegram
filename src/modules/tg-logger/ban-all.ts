@@ -13,6 +13,8 @@ export type BanAllState = {
   failedCount: number
 }
 
+const spaces = (n: number) => new Array(n).fill(" ").join("")
+
 export function isBanAllState(obj: unknown): obj is BanAllState {
   return !!(
     obj &&
@@ -53,13 +55,14 @@ export const getProgressText = (state: BanAll["state"]): string => {
 
   const progress = (state.successCount + state.failedCount) / state.jobCount
   const percent = (progress * 100).toFixed(1)
+  const barLength = 20
 
+  const stateEmoji = `🟢 ${state.successCount}${spaces(10)}🔴 ${state.failedCount}${spaces(10)}⏸️ ${state.jobCount - state.successCount - state.failedCount}`
+  const stateEmojiSpaces = spaces(barLength * 2 + 3 - stateEmoji.length)
   return fmt(
-    ({ n, b }) => [
-      b`\nProgress - ${state.jobCount} groups`,
-      n`\t🟢 ${state.successCount}`,
-      n`\t🔴 ${state.failedCount}`,
-      n`\t⏸️ ${state.jobCount - state.successCount - state.failedCount}`,
+    ({ n, b, i }) => [
+      b`\nProgress`,
+      n`${stateEmoji} ${stateEmojiSpaces} ${i`${`${state.jobCount} groups`}`}`,
       n`${unicodeProgressBar(progress, 20)} ${percent}%`,
     ],
     { sep: "\n" }
