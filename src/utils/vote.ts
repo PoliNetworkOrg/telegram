@@ -93,7 +93,7 @@ export function calculateOutcome(voters: Voter[]): Outcome | null {
     if (results.inFavor < results.against && presVote.vote === "against") return "denied"
   }
 
-  // we have not reach enoguh votes to determine the outcome
+  // we have not reached enough votes to determine the outcome
   // we wait for the remaining votes
   return "waiting"
 }
