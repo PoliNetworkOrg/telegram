@@ -13,7 +13,7 @@ export type BanAllState = {
   failedCount: number
 }
 
-const spaces = (n: number) => new Array(n).fill(" ").join("")
+const spaces = (n: number) => " ".repeat(n)
 
 export function isBanAllState(obj: unknown): obj is BanAllState {
   return !!(
