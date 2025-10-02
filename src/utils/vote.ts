@@ -12,7 +12,7 @@ export type Voter = {
 /**
  * WARNING: This function is specific to Direttivo voting, do NOT use it for generic voting.
  *
- * This function calculate the voting outcome based on the votes collected so far.
+ * This function calculates the voting outcome based on the votes collected so far.
  * To determine the outcome, we refer to Article 13.8 of the Statute:
  * > Le riunioni del Direttivo sono valide quando è presente la maggioranza assoluta
  * > dei componenti. Il Direttivo delibera a maggioranza dei voti dei presenti.
