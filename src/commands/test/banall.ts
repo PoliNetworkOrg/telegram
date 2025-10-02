@@ -1,113 +1,56 @@
+import type { User } from "grammy/types"
+import z from "zod"
 import { api } from "@/backend"
 import { modules } from "@/modules"
-import type { BanAll } from "@/modules/tg-logger/ban-all"
-import { fmt } from "@/utils/format"
+import { getTelegramId } from "@/utils/telegram-id"
 import { _commandsBase } from "../_base"
 
-_commandsBase
-  .createCommand({
-    trigger: "test_banall",
-    description: "TEST - PREMA BAN a user from all the Network's groups",
-    scope: "private",
-    permissions: {
-      allowedRoles: ["owner"],
+const numberOrString = z.string().transform((s) => {
+  const n = Number(s)
+  if (!Number.isNaN(n) && s.trim() !== "") return n
+  return s
+})
+
+_commandsBase.createCommand({
+  trigger: "test_banall",
+  description: "TEST - PREMA BAN a user from all the Network's groups",
+  scope: "private",
+  permissions: {
+    allowedRoles: ["owner"],
+  },
+  args: [
+    {
+      key: "username",
+      type: numberOrString,
+      description: "The username or the user id of the user you want to update the role",
     },
-    handler: async ({ context }) => {
-      await context.deleteMessage()
-      const direttivo = await api.tg.permissions.getDirettivo.query()
-      if (direttivo.error) {
-        await context.reply(fmt(({ n }) => n`${direttivo.error}`))
-        return
-      }
+  ],
+  handler: async ({ args, context }) => {
+    await context.deleteMessage()
 
-      const voters = direttivo.members.map((m) => ({
-        user: { id: m.userId },
-        isPresident: m.isPresident,
-        vote: undefined,
-      }))
+    const userId: number | null =
+      typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 
-      if (!voters.some((v) => v.isPresident)) {
-        await context.reply(
-          fmt(({ n, b }) => [b`No member is President!`, n`${b`Members:`} ${voters.map((v) => v.user.id).join(" ")}`], {
-            sep: "\n",
-          })
-        )
-        return
-      }
+    if (userId === null) {
+      await context.reply("Not a valid userId or username not in our cache")
+      return
+    }
 
-      const banAllTest: BanAll = {
-        type: "BAN",
-        outcome: "waiting",
-        reporter: context.from,
-        reason: "Testing ban all voting system",
-        target: {
-          first_name: "PoliCreator",
-          last_name: "3",
-          id: 728441822, // policreator3 - unused
-          is_bot: false,
-          username: "policreator3",
-        },
-        voters,
-        state: {
-          successCount: 0,
-          failedCount: 0,
-          jobCount: 0,
-        },
-      }
+    const dbUser = await api.tg.users.get.query({ userId })
+    if (!dbUser || dbUser.error) {
+      await context.reply("This user is not in our cache, we cannot proceed.")
+      return
+    }
 
-      await modules.get("tgLogger").banAll(banAllTest)
-    },
-  })
-  .createCommand({
-    trigger: "test_unbanall",
-    description: "TEST - UNBAN a user from the network",
-    scope: "private",
-    permissions: {
-      allowedRoles: ["owner"],
-    },
-    handler: async ({ context }) => {
-      await context.deleteMessage()
-      const direttivo = await api.tg.permissions.getDirettivo.query()
-      if (direttivo.error) {
-        await context.reply(fmt(({ n }) => n`${direttivo.error}`))
-        return
-      }
+    const target: User = {
+      id: userId,
+      first_name: dbUser.user.firstName,
+      last_name: dbUser.user.lastName,
+      username: dbUser.user.username,
+      is_bot: dbUser.user.isBot,
+      language_code: dbUser.user.langCode,
+    }
 
-      const voters = direttivo.members.map((m) => ({
-        user: { id: m.userId },
-        isPresident: m.isPresident,
-        vote: undefined,
-      }))
-
-      if (!voters.some((v) => v.isPresident)) {
-        await context.reply(
-          fmt(({ n, b }) => [b`No member is President!`, n`${b`Members:`} ${voters.map((v) => v.user.id).join(" ")}`], {
-            sep: "\n",
-          })
-        )
-        return
-      }
-
-      const banAllTest: BanAll = {
-        type: "UNBAN",
-        outcome: "waiting",
-        reporter: context.from,
-        reason: "Testing ban all voting system",
-        target: {
-          first_name: "PoliCreator",
-          last_name: "3",
-          id: 728441822, // policreator3 - unused
-          is_bot: false,
-          username: "policreator3",
-        },
-        voters,
-        state: {
-          failedCount: 0,
-          successCount: 0,
-          jobCount: 0,
-        },
-      }
-
-      await modules.get("tgLogger").banAll(banAllTest)
-    },
-  })
+    await modules.get("tgLogger").banAll(target, context.from, "BAN", "Testing")
+  },
+})
