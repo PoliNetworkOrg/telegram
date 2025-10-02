@@ -1,9 +1,10 @@
 import { type TelegramSocket, WS_PATH } from "@polinetwork/backend"
-import type { Bot, Context } from "grammy"
 import { io } from "socket.io-client"
 import { env } from "./env"
+import { Module } from "./lib/modules"
 import { logger } from "./logger"
 import { duration } from "./utils/duration"
+import type { ModuleShared } from "./utils/types"
 
 type SocketError = {
   name: string
@@ -30,16 +31,20 @@ type SocketError = {
  *
  * @param bot - The telegram bot instance
  */
-export class WebSocketClient<C extends Context> {
+export class WebSocketClient extends Module<ModuleShared> {
   private io: TelegramSocket
   private lastErrorCode: string | null = null
 
-  constructor(private bot: Bot<C>) {
+  constructor() {
+    super()
     this.io = io(`http://${env.BACKEND_URL}`, { path: WS_PATH, query: { type: "telegram" } })
+  }
+  override async start() {
     this.io.on("connect", () => {
       logger.info("[WS] connected")
       this.lastErrorCode = null
     })
+
     this.io.on("connect_error", (error: Error) => {
       if (WebSocketClient.isSocketError(error)) {
         const code = error.context.statusText.code
@@ -56,7 +61,7 @@ export class WebSocketClient<C extends Context> {
     })
 
     this.io.on("ban", async ({ chatId, userId, durationInSeconds }, cb) => {
-      const error = await this.bot.api
+      const error = await this.shared.api
         .banChatMember(chatId, userId, {
           until_date: durationInSeconds ? duration.zod.parse(`${durationInSeconds}s`).timestamp_s : undefined,
         })
@@ -71,6 +76,11 @@ export class WebSocketClient<C extends Context> {
         cb(null)
       }
     })
+  }
+
+  override async stop() {
+    this.io.close()
+    logger.info("[WS] disconnected")
   }
 
   static isSocketError(e: Error): e is SocketError {

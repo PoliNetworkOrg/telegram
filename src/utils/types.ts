@@ -1,4 +1,5 @@
-import type { Context as TContext } from "grammy"
+import type { Api, Context as TContext } from "grammy"
+import type { UserFromGetMe } from "grammy/types"
 import type { ApiInput } from "@/backend"
 import type { ManagedCommandsFlavor } from "@/lib/managed-commands"
 
@@ -16,3 +17,8 @@ export type MaybePromise<T> = T | Promise<T>
 
 export type Context = ManagedCommandsFlavor<TContext>
 export type Role = ApiInput["tg"]["permissions"]["addRole"]["role"]
+
+export type ModuleShared = {
+  api: Api
+  botInfo: UserFromGetMe
+}

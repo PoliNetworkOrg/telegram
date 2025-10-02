@@ -1,7 +1,6 @@
-import { tgLogger } from "@/bot"
 import { logger } from "@/logger"
+import { modules } from "@/modules"
 import { getText } from "@/utils/messages"
-
 import { _commandsBase } from "./_base"
 
 _commandsBase.createCommand({
@@ -22,7 +21,7 @@ _commandsBase.createCommand({
       sender: repliedTo.from?.username,
     })
 
-    await tgLogger.delete([repliedTo], "Command /del", context.from) // actual message to delete
+    await modules.get("tgLogger").delete([repliedTo], "Command /del", context.from) // actual message to delete
     await context.deleteMessage() // /del message
   },
 })

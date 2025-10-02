@@ -15,9 +15,9 @@
   - [x] delete group from backend when the bot leaves a group
   - [x] search
 - [ ] advanced moderation
-  - [ ] ban_all
-  - [ ] unban_all
-  - [x] audit log
+  - [x] ban_all
+  - [x] unban_all
+  - [ ] audit log (implemented, need to audit every mod action)
   - [x] /report to allow user to report (@admin is not implemented)
   - [x] track ban, mute and kick done via telegram UI (not by command)
   - [ ] send in-chat action log (deprived of chat ids and stuff)
