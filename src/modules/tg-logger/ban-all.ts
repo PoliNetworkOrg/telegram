@@ -30,7 +30,7 @@ export type BanAll = {
   type: "BAN" | "UNBAN"
   target: User
   reporter: User
-  reason: string
+  reason?: string
   outcome: Outcome
   voters: Voter[]
   state: BanAllState
@@ -74,12 +74,12 @@ export const getProgressText = (state: BanAll["state"]): string => {
  */
 export const getBanAllText = (data: BanAll) =>
   fmt(
-    ({ n, b, skip, strikethrough }) => [
-      data.type === "BAN" ? b`🚨 BAN ALL 🚨` : b`🟢 UN - BAN ALL 🟢`,
+    ({ n, b, skip, strikethrough, i }) => [
+      data.type === "BAN" ? b`🚨 BAN ALL 🚨` : b`🟢 UN-BAN ALL 🟢`,
       "",
       n`${b`🎯 Target:`} ${fmtUser(data.target)} `,
       n`${b`📣 Reporter:`} ${fmtUser(data.reporter)} `,
-      n`${b`📋 Reason:`} ${data.reason} `,
+      data.type === "BAN" ? n`${b`📋 Reason:`} ${data.reason ? data.reason : i`N/A`}` : undefined,
       "",
       b`${OUTCOME_STR[data.outcome]} `,
       data.outcome === "approved" ? skip`${getProgressText(data.state)}` : undefined,

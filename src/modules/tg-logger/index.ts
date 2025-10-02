@@ -138,7 +138,7 @@ export class TgLogger extends Module<ModuleShared> {
     }
   }
 
-  public async banAll(target: User, reporter: User, type: "BAN" | "UNBAN", reason: string): Promise<string | null> {
+  public async banAll(target: User, reporter: User, type: "BAN" | "UNBAN", reason?: string): Promise<string | null> {
     const direttivo = await api.tg.permissions.getDirettivo.query()
 
     switch (direttivo.error) {
@@ -161,13 +161,13 @@ export class TgLogger extends Module<ModuleShared> {
     const voters = direttivo.members.map((m) => ({
       user: m.user
         ? {
-          id: m.userId,
-          first_name: m.user.firstName,
-          last_name: m.user.lastName,
-          username: m.user.username,
-          is_bot: m.user.isBot,
-          language_code: m.user.langCode,
-        }
+            id: m.userId,
+            first_name: m.user.firstName,
+            last_name: m.user.lastName,
+            username: m.user.username,
+            is_bot: m.user.isBot,
+            language_code: m.user.langCode,
+          }
         : { id: m.userId },
       isPresident: m.isPresident,
       vote: undefined,
