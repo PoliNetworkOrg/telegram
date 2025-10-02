@@ -11,16 +11,18 @@
  */
 export function throttle<A extends unknown[]>(func: (...args: A) => void, limit: number): (...args: A) => void {
   let timeout: NodeJS.Timeout | null = null
+  let lastArgs: A
   let again: boolean = false
 
   return (...args: A): void => {
+    lastArgs = args
     if (timeout === null) {
       // first call
       const handler = () => {
         if (again) {
           // if called again during the timeout, schedule another call
           timeout = setTimeout(handler, limit)
-          func(...args)
+          func(...lastArgs)
         } else timeout = null // if not called again, clear the timeout
         again = false // reset the again flag
       }
