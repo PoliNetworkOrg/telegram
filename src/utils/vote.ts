@@ -27,7 +27,7 @@ export type Voter = {
  * - 4 inFavor, 4 against. President inFavor => ✅ Approved
  * - 3 inFavor, 5 against. President inFavor => ❌ Denied
  * - 5 inFavor, 3 against. President against => ✅ Approved
- * - 2 inFavor, 2 against, 3 absteined, President absteined => TIE => ❌ Denied
+ * - 2 inFavor, 2 against, 3 abstained, President absteined => TIE => ❌ Denied
  *   (this is an unregulated case, for the sake of banall this should
  *   not ever happen, so we consider it denied anyway)
  * Note: the same mechanisms apply to a Direttivo composed of an odd number of members
@@ -36,7 +36,7 @@ export type Voter = {
  * 1) absolute majority of members:
  *   8-9 => 5 voters  ||  6-7 => 4 voters  ||  4-5 => 3 voters ||  3 => 2 voters
  * 2) in case of TIE, the President's vote counts twice
- * 3) in case of TIE where the President is abstaineded, we consider the votation denied.
+ * 3) in case of TIE where the President is abstained, we consider the voting denied.
  *
  * This function is unit-tested to ensure correct handling of edge-cases.
  */
@@ -77,7 +77,7 @@ export function calculateOutcome(voters: Voter[]): Outcome | null {
   // in the following cases we don't have a majority
   if (votes.length === membersCount) {
     if (!presVote) return null // we already checked above, but TS wants it again
-    if (results.abstained === membersCount) return "denied" // everyone abstaineded (crazy)
+    if (results.abstained === membersCount) return "denied" // everyone abstained (crazy)
     if (results.inFavor > results.against) return "approved"
     if (results.against > results.inFavor) return "denied"
 
