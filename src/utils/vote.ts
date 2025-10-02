@@ -42,7 +42,7 @@ export type Voter = {
  */
 export function calculateOutcome(voters: Voter[]): Outcome | null {
   if (voters.length < 3 || voters.length > 9) {
-    logger.error({ length: voters.length }, "[VOTE] recieved a voters array with invalid length (must be 3<=l<=9)")
+    logger.error({ length: voters.length }, "[VOTE] received a voters array with invalid length (must be 3<=l<=9)")
     return null
   }
 
