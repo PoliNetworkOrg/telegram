@@ -124,10 +124,14 @@ async function vote<C extends Context>(
   }
   data.outcome = outcome
 
-  const messageId = ctx.callbackQuery.message?.message_id
-
-  if (outcome === "approved" && messageId) {
-    await modules.get("banAll").initiateBanAll(data, messageId)
+  if (outcome === "approved") {
+    if (ctx.msgId) await modules.get("banAll").initiateBanAll(data, ctx.msgId)
+    else {
+      logger.error(
+        { callbackQuery: ctx.callbackQuery },
+        "Message ID is undefined, cannot initiate ban all. How did this happen?"
+      )
+    }
   }
 
   // remove buttons if there is an outcome (not waiting)
