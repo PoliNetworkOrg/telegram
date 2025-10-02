@@ -55,15 +55,14 @@ export const getProgressText = (state: BanAll["state"]): string => {
 
   const progress = (state.successCount + state.failedCount) / state.jobCount
   const percent = (progress * 100).toFixed(1)
-  const barLength = 20
+  const barLength = 18
 
   const stateEmoji = `🟢 ${state.successCount}${spaces(10)}🔴 ${state.failedCount}${spaces(10)}⏸️ ${state.jobCount - state.successCount - state.failedCount}`
-  const stateEmojiSpaces = spaces(barLength * 2 + 3 - stateEmoji.length)
   return fmt(
     ({ n, b, i }) => [
-      b`\nProgress`,
-      n`${stateEmoji} ${stateEmojiSpaces} ${i`${`${state.jobCount} groups`}`}`,
-      n`${unicodeProgressBar(progress, 20)} ${percent}%`,
+      n`\n${b`Progress`} ${i`(${state.jobCount} groups)`}`,
+      n`${unicodeProgressBar(progress, barLength)} ${percent}% `,
+      n`${stateEmoji}`,
     ],
     { sep: "\n" }
   )
@@ -78,7 +77,7 @@ export const getProgressText = (state: BanAll["state"]): string => {
 export const getBanAllText = (data: BanAll) =>
   fmt(
     ({ n, b, skip, strikethrough, i }) => [
-      data.type === "BAN" ? b`🚨 BAN ALL 🚨` : b`🟢 UN-BAN ALL 🟢`,
+      data.type === "BAN" ? b`🚨 BAN ALL 🚨` : b`🕊 UN-BAN ALL 🕊`,
       "",
       n`${b`🎯 Target:`} ${fmtUser(data.target)} `,
       n`${b`📣 Reporter:`} ${fmtUser(data.reporter)} `,
