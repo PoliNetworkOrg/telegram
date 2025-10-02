@@ -3,6 +3,7 @@ import type { Message, User } from "grammy/types"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { duration } from "@/utils/duration"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
+import { modules } from ".."
 
 export type Report = {
   message: Message & { from: User }
@@ -113,9 +114,16 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "🚨 Start BAN ALL 🚨",
       cb: async ({ data, ctx }) => {
-        // TODO: connect ban all when implemented
-        await editReportMessage(data, ctx, "🚨 Start BAN ALL (not implemented yet)")
-        return { feedback: "❌ Not implemented yet" }
+        modules
+          .get("tgLogger")
+          .banAll(
+            data.message.from,
+            ctx.from,
+            "BAN",
+            `Started after report by ${data.reporter.username ?? data.reporter.id}`
+          )
+        await editReportMessage(data, ctx, "🚨 Start BAN ALL")
+        return null
       },
     },
   ],

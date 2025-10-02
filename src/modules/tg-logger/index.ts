@@ -161,13 +161,13 @@ export class TgLogger extends Module<ModuleShared> {
     const voters = direttivo.members.map((m) => ({
       user: m.user
         ? {
-            id: m.userId,
-            first_name: m.user.firstName,
-            last_name: m.user.lastName,
-            username: m.user.username,
-            is_bot: m.user.isBot,
-            language_code: m.user.langCode,
-          }
+          id: m.userId,
+          first_name: m.user.firstName,
+          last_name: m.user.lastName,
+          username: m.user.username,
+          is_bot: m.user.isBot,
+          language_code: m.user.langCode,
+        }
         : { id: m.userId },
       isPresident: m.isPresident,
       vote: undefined,
