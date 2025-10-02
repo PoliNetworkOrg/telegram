@@ -125,12 +125,18 @@ async function vote<C extends Context>(
   data.outcome = outcome
 
   if (outcome === "approved") {
-    if (ctx.msgId) await modules.get("banAll").initiateBanAll(data, ctx.msgId)
-    else {
-      logger.error(
-        { callbackQuery: ctx.callbackQuery },
-        "Message ID is undefined, cannot initiate ban all. How did this happen?"
-      )
+    try {
+      if (ctx.msgId) await modules.get("banAll").initiateBanAll(data, ctx.msgId)
+      else {
+        logger.error(
+          { callbackQuery: ctx.callbackQuery },
+          "Message ID is undefined, cannot initiate ban all. How did this happen?"
+        )
+      }
+    } catch (error) {
+      await modules
+        .get("tgLogger")
+        .exception({ error, type: "UNKNOWN" }, "There was an error while initializing BanAll queue, check logs")
     }
   }
 
