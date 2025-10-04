@@ -2,8 +2,8 @@ import type { Filter, MiddlewareObj } from "grammy"
 import { Composer } from "grammy"
 import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
-import { tgLogger } from "@/bot"
-import { mute } from "@/lib/moderation"
+import { modules } from "@/modules"
+import { mute } from "@/modules/moderation"
 import { redis } from "@/redis"
 import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { defer } from "@/utils/deferred-middleware"
@@ -12,7 +12,7 @@ import { fmt, fmtUser } from "@/utils/format"
 import { createFakeMessage, getText } from "@/utils/messages"
 import type { Context } from "@/utils/types"
 import { wait } from "@/utils/wait"
-import { MessageStorage } from "../message-storage"
+import { MessageUserStorage } from "../message-user-storage"
 import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
 import { checkForAllowedLinks } from "./functions"
@@ -145,7 +145,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         await msg.delete()
       } else {
         // no flagged category is above the threshold, still log it for manual review
-        await tgLogger.moderationAction({
+        await modules.get("tgLogger").moderationAction({
           action: "SILENT",
           from: ctx.me,
           chat: ctx.chat,
@@ -206,7 +206,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
           .map(([hash, chatId, messageId]) => ({ hash, chatId: Number(chatId), messageId: Number(messageId) }))
           .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SPAM.SIMILARITY_THR)
           .map(async (v) => {
-            const msg = await MessageStorage.getInstance().get(v.chatId, v.messageId)
+            const msg = await MessageUserStorage.getInstance().get(v.chatId, v.messageId)
             const message = createFakeMessage(v.chatId, v.messageId, ctx.from, msg?.timestamp)
             return message
           })
@@ -226,7 +226,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
           )
       )
 
-      await tgLogger.moderationAction({
+      await modules.get("tgLogger").moderationAction({
         action: "MULTI_CHAT_SPAM",
         from: ctx.me,
         chat: ctx.chat,

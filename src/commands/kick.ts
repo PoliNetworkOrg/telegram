@@ -1,5 +1,5 @@
-import { kick } from "@/lib/moderation"
 import { logger } from "@/logger"
+import { kick } from "@/modules/moderation"
 import { wait } from "@/utils/wait"
 
 import { _commandsBase } from "./_base"

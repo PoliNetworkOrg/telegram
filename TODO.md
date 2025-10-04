@@ -15,9 +15,9 @@
   - [x] delete group from backend when the bot leaves a group
   - [x] search
 - [ ] advanced moderation
-  - [ ] ban_all
-  - [ ] unban_all
-  - [x] audit log
+  - [x] ban_all
+  - [x] unban_all
+  - [ ] audit log (implemented, need to audit every mod action)
   - [x] /report to allow user to report (@admin is not implemented)
   - [x] track ban, mute and kick done via telegram UI (not by command)
   - [ ] send in-chat action log (deprived of chat ids and stuff)
@@ -30,8 +30,8 @@
   - [ ] do not delete Direttivo's allowed messages
   - [x] check if user has username
   - [ ] group-specific moderation (eg. #cerco #vendo in polihouse)
-- [ ] role management
-  - [ ] setrole: set role for some username (only Direttivo, maybe HR)
+- [x] role management
+  - [x] setrole: set role for some username (only Direttivo, maybe HR)
   - [x] getrole: get user role
 - [ ] automatic messages in some specific groups (like piano di studi)
 - [ ] manage channel for associations

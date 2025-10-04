@@ -3,7 +3,7 @@ import { createClient, SocketClosedUnexpectedlyError } from "redis"
 import { env } from "@/env"
 import { logger } from "@/logger"
 
-let openSuccess = false
+let openSuccess: boolean = false
 const client = createClient({
   socket: {
     host: env.REDIS_HOST,
@@ -37,7 +37,7 @@ client.on("end", () => {
   logger.info("[REDIS] client disconnected")
 })
 
-export async function ready(): Promise<boolean> {
+async function ready(): Promise<boolean> {
   if (client.isOpen) return true
   if (client.isReady) return true
 
@@ -51,13 +51,5 @@ export async function ready(): Promise<boolean> {
   }
 }
 void ready()
-
-// type WithRedisCallback<T> = (props: { client: typeof client }) => Promise<T>
-// export function withRedis<T>(callback: WithRedisCallback<T>): Promise<T | null> {
-//   if (client.isReady) return callback({ client })
-//   return new Promise((res) => {
-//     res(null)
-//   })
-// }
 
 export const redis = client

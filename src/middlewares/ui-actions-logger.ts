@@ -1,5 +1,5 @@
 import { Composer, type MiddlewareObj } from "grammy"
-import { tgLogger } from "@/bot"
+import { modules } from "@/modules"
 import { duration } from "@/utils/duration"
 import type { Context } from "@/utils/types"
 
@@ -30,7 +30,7 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       if (prev === "member" && curr === "left") return // skip left event
 
       if (prev === "kicked" && curr === "left") {
-        await tgLogger.moderationAction({
+        await modules.get("tgLogger").moderationAction({
           action: "UNBAN",
           from: admin,
           target,
@@ -40,7 +40,7 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       }
 
       if (prev === "member" && curr === "kicked") {
-        await tgLogger.moderationAction({
+        await modules.get("tgLogger").moderationAction({
           action: "BAN",
           from: admin,
           target,
@@ -50,7 +50,7 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       }
 
       if (prev === "member" && curr === "restricted" && !new_chat_member.can_send_messages) {
-        await tgLogger.moderationAction({
+        await modules.get("tgLogger").moderationAction({
           action: "MUTE",
           duration: duration.fromUntilDate(new_chat_member.until_date),
           from: admin,
@@ -63,7 +63,7 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       if (prev === "restricted" && curr === "restricted") {
         if (old_chat_member.can_send_messages && !new_chat_member.can_send_messages) {
           // mute
-          await tgLogger.moderationAction({
+          await modules.get("tgLogger").moderationAction({
             action: "MUTE",
             duration: duration.fromUntilDate(new_chat_member.until_date),
             from: admin,
@@ -71,7 +71,7 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
             chat,
           })
         } else if (!old_chat_member.can_send_messages && new_chat_member.can_send_messages) {
-          await tgLogger.moderationAction({
+          await modules.get("tgLogger").moderationAction({
             action: "UNMUTE",
             from: admin,
             target,
@@ -82,7 +82,7 @@ export class UIActionsLogger<C extends Context> implements MiddlewareObj<C> {
       }
 
       if (prev === "restricted" && curr === "member") {
-        await tgLogger.moderationAction({
+        await modules.get("tgLogger").moderationAction({
           action: "UNMUTE",
           from: admin,
           target,

@@ -1,8 +1,8 @@
 import { Composer, type Filter, InlineKeyboard, type MiddlewareObj } from "grammy"
 import { api } from "@/backend"
-import { tgLogger } from "@/bot"
 import { GroupManagement } from "@/lib/group-management"
 import { logger } from "@/logger"
+import { modules } from "@/modules"
 import type { Context } from "@/utils/types"
 
 type ChatType = "group" | "supergroup" | "private" | "channel"
@@ -41,8 +41,8 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
 
       if (this.isJoin(ctx)) {
         // joined event
-        await this.checkAdderPermission(ctx)
-        return next()
+        // go next, if adder has no permission
+        if (!(await this.checkAdderPermission(ctx))) return next()
       }
 
       if (newStatus === "administrator") {
@@ -73,10 +73,12 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
     if (!allowed) {
       const left = await ctx.leaveChat().catch(() => false)
       if (left) {
-        await tgLogger.groupManagement({ type: "LEAVE", chat: ctx.myChatMember.chat, addedBy: ctx.myChatMember.from })
+        await modules
+          .get("tgLogger")
+          .groupManagement({ type: "LEAVE", chat: ctx.myChatMember.chat, addedBy: ctx.myChatMember.from })
         logger.info({ chat: ctx.myChatMember.chat, from: ctx.myChatMember.from }, `[BCE] Left unauthorized group`)
       } else {
-        await tgLogger.groupManagement({
+        await modules.get("tgLogger").groupManagement({
           type: "LEAVE_FAIL",
           chat: ctx.myChatMember.chat,
           addedBy: ctx.myChatMember.from,
@@ -95,7 +97,7 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
     const res = await GroupManagement.delete(chat)
     await res.match(
       async () => {
-        await tgLogger.groupManagement({ type: "DELETE", chat })
+        await modules.get("tgLogger").groupManagement({ type: "DELETE", chat })
         logger.info({ chat }, `[BCE] Deleted a group`)
       },
       (e) => {
@@ -107,16 +109,26 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
   private async createGroup(ctx: MemberContext<C>): Promise<void> {
     const chat = await ctx.getChat()
     const res = await GroupManagement.create(chat)
+    const logChat = {
+      id: chat.id,
+      title: chat.title,
+      is_forum: chat.is_forum,
+      type: chat.type,
+      invite_link: chat.invite_link,
+    }
+
     await res.match(
       async (g) => {
-        await tgLogger.groupManagement({ type: "CREATE", chat, inviteLink: g.link, addedBy: ctx.from })
-        logger.info({ chat }, `[BCE] Created a new group`)
+        await modules.get("tgLogger").groupManagement({ type: "CREATE", chat, inviteLink: g.link, addedBy: ctx.from })
+        logger.info({ chat: logChat }, `[BCE] Created a new group`)
       },
       async (e) => {
         const ik = new InlineKeyboard()
         if (chat.invite_link) ik.url("Join Group", chat.invite_link)
-        await tgLogger.groupManagement({ type: "CREATE_FAIL", chat, inviteLink: chat.invite_link, reason: e })
-        logger.error({ chat }, `[BCE] Cannot create group into DB. Reason: ${e}`)
+        await modules
+          .get("tgLogger")
+          .groupManagement({ type: "CREATE_FAIL", chat, inviteLink: chat.invite_link, reason: e })
+        logger.error({ chat: logChat }, `[BCE] Cannot create group into DB. Reason: ${e}`)
       }
     )
   }

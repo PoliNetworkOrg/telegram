@@ -1,7 +1,7 @@
 import type { Message, User } from "grammy/types"
 import { err, ok, type Result } from "neverthrow"
 import { api } from "@/backend"
-import { tgLogger } from "@/bot"
+import { modules } from "@/modules"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import type { ContextWith } from "@/utils/types"
@@ -32,5 +32,7 @@ export async function kick({ ctx, target, from, reason, message }: KickProps): P
     reason,
     type: "kick",
   })
-  return ok(await tgLogger.moderationAction({ action: "KICK", from, target, reason, message, chat: ctx.chat }))
+  return ok(
+    await modules.get("tgLogger").moderationAction({ action: "KICK", from, target, reason, message, chat: ctx.chat })
+  )
 }

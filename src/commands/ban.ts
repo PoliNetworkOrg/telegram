@@ -1,5 +1,5 @@
-import { ban, unban } from "@/lib/moderation"
 import { logger } from "@/logger"
+import { ban, unban } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"

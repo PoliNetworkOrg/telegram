@@ -16,8 +16,10 @@ const CONSTANTS = {
 }
 
 export type CallbackCtx<C extends Context> = Filter<C, "callback_query:data">
-// biome-ignore lint/suspicious/noConfusingVoidType: literally a bug in Biome
-type Callback<T, C extends Context> = (params: { data: T; ctx: CallbackCtx<C> }) => MaybePromise<string | void>
+type Callback<T, C extends Context> = (params: {
+  data: T
+  ctx: CallbackCtx<C>
+}) => MaybePromise<{ feedback?: string; newData?: T } | null>
 
 class Menu<T, C extends Context = Context> {
   private dataStorage: RedisFallbackAdapter<T>
@@ -61,6 +63,10 @@ class Menu<T, C extends Context = Context> {
       if (rowIndex < this.items.length - 1) keyboard.row()
     })
     return keyboard
+  }
+
+  async updateData(keyboardId: string, data: T): Promise<void> {
+    await this.dataStorage.write(keyboardId, data)
   }
 
   async call(ctx: CallbackCtx<C>, row: number, col: number, keyboardId: string) {
@@ -136,14 +142,18 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
 
       return menu
         .call(ctx, row, col, keyboardId)
-        .then((result) => {
-          return ctx.answerCallbackQuery({ text: result ?? undefined })
+        .then(async (result) => {
+          if (result?.newData) await menu.updateData(keyboardId, result.newData)
+          return ctx.answerCallbackQuery({ text: result?.feedback })
         })
         .catch(async (e: unknown) => {
           logger.error({ e }, "ERROR WHILE CALLING MENU CB")
           await ctx.editMessageReplyMarkup().catch(() => {})
-          const feedback = menu.onExpiredButtonPress && (await menu.onExpiredButtonPress({ data: null, ctx }))
-          await ctx.answerCallbackQuery({ text: feedback ?? "This button is no longer available", show_alert: true })
+          const result = await menu.onExpiredButtonPress?.({ data: null, ctx })
+          await ctx.answerCallbackQuery({
+            text: result?.feedback ?? "This button is no longer available",
+            show_alert: true,
+          })
         })
     })
   }

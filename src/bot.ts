@@ -8,17 +8,18 @@ import { apiTestQuery } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
 import { MenuGenerator } from "./lib/menu"
-import { TgLogger } from "./lib/tg-logger"
 import { logger } from "./logger"
 import { AutoModerationStack } from "./middlewares/auto-moderation-stack"
 import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
 import { messageLink } from "./middlewares/message-link"
-import { MessageStorage } from "./middlewares/message-storage"
+import { MessageUserStorage } from "./middlewares/message-user-storage"
 import { UIActionsLogger } from "./middlewares/ui-actions-logger"
+import { modules, sharedDataInit } from "./modules"
 import { redis } from "./redis"
+import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
-import type { Context } from "./utils/types"
+import type { Context, ModuleShared } from "./utils/types"
 
 const TEST_CHAT_ID = -1002669533277
 const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
@@ -61,15 +62,15 @@ bot.use(
   })
 )
 
-export const tgLogger = new TgLogger<Context>(bot, -1002685849173, {
-  banAll: 13,
-  exceptions: 3,
-  autoModeration: 7,
-  adminActions: 5,
-  actionRequired: 10,
-  groupManagement: 33,
-  deletedMessages: 130,
+bot.init().then(() => {
+  const sharedData: ModuleShared = {
+    api: bot.api,
+    botInfo: bot.botInfo,
+  }
+  sharedDataInit.resolve(sharedData)
 })
+
+const tgLogger = modules.get("tgLogger")
 
 bot.use(MenuGenerator.getInstance())
 bot.use(commands)
@@ -85,7 +86,7 @@ bot.on("message", async (ctx, next) => {
 })
 
 bot.on("message", messageLink({ channelIds: [TEST_CHAT_ID] })) // now is configured a test group
-bot.on("message", MessageStorage.getInstance())
+bot.on("message", MessageUserStorage.getInstance())
 bot.on("message", checkUsername)
 // bot.on("message", async (ctx, next) => { console.log(ctx.message); return await next() })
 
@@ -114,21 +115,19 @@ const runner = run(bot, {
   },
 })
 
-let terminateStarted = false // this ensure that it's called only once. otherwise strange behaviours
-async function terminate(signal: NodeJS.Signals) {
-  if (terminateStarted) return
-
-  terminateStarted = true
+const terminate = once(async (signal: NodeJS.Signals) => {
   logger.warn(`Received ${signal}, shutting down...`)
-  const p1 = MessageStorage.getInstance().sync()
+  const p1 = MessageUserStorage.getInstance().sync()
   const p2 = redis.quit()
   const p3 = runner.isRunning() && runner.stop()
-  await Promise.all([p1, p2, p3])
+  const p4 = modules.stop()
+  await Promise.all([p1, p2, p3, p4])
   logger.info("Bot stopped!")
   process.exit(0)
-}
-process.on("SIGINT", () => void terminate("SIGINT"))
-process.on("SIGTERM", () => void terminate("SIGTERM"))
+})
+
+process.on("SIGINT", () => terminate("SIGINT"))
+process.on("SIGTERM", () => terminate("SIGTERM"))
 
 process.on("unhandledRejection", (reason: Error, promise) => {
   logger.fatal({ reason, promise }, "UNHANDLED PROMISE REJECTION")

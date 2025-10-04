@@ -1,6 +1,5 @@
-import { tgLogger } from "@/bot"
 import { logger } from "@/logger"
-
+import { modules } from "@/modules"
 import { _commandsBase } from "./_base"
 
 _commandsBase.createCommand({
@@ -15,6 +14,6 @@ _commandsBase.createCommand({
       return
     }
 
-    await tgLogger.report(repliedTo, context.from)
+    await modules.get("tgLogger").report(repliedTo, context.from)
   },
 })

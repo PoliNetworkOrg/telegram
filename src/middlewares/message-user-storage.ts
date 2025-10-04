@@ -1,24 +1,26 @@
 import { Cron } from "croner"
 import { Composer, type Context, type MiddlewareObj } from "grammy"
-import { api } from "@/backend"
+import type { User } from "grammy/types"
+import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
 
 export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
+type DBUsers = ApiInput["tg"]["users"]["add"]["users"]
 
-export class MessageStorage<C extends Context> implements MiddlewareObj<C> {
-  private static instance: MessageStorage<Context> | null = null
-  static getInstance<C extends Context>(): MessageStorage<C> {
-    if (!MessageStorage.instance) {
-      MessageStorage.instance = new MessageStorage<Context>()
+export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
+  private static instance: MessageUserStorage<Context> | null = null
+  static getInstance<C extends Context>(): MessageUserStorage<C> {
+    if (!MessageUserStorage.instance) {
+      MessageUserStorage.instance = new MessageUserStorage<Context>()
     }
-    return MessageStorage.instance as unknown as MessageStorage<C>
+    return MessageUserStorage.instance as unknown as MessageUserStorage<C>
   }
 
   private composer: Composer<C> = new Composer<C>()
-  private memoryStorage: Message[]
+  private memoryStorage: Message[] = []
+  private userStorage: Map<number, User> = new Map()
   private constructor() {
-    this.memoryStorage = []
     new Cron("0 */1 * * * *", () => this.sync())
 
     this.composer.on(["message:text", "message:caption"], (ctx, next) => {
@@ -36,6 +38,7 @@ export class MessageStorage<C extends Context> implements MiddlewareObj<C> {
         timestamp: new Date(ctx.message.date * 1000),
       })
 
+      this.userStorage.set(ctx.from.id, ctx.from)
       return next()
     })
   }
@@ -60,6 +63,10 @@ export class MessageStorage<C extends Context> implements MiddlewareObj<C> {
   }
 
   async sync(): Promise<void> {
+    await Promise.all([this.syncMessages(), this.syncUsers()])
+  }
+
+  private async syncMessages(): Promise<void> {
     if (this.memoryStorage.length === 0) return
     const { error } = await api.tg.messages.add.mutate({ messages: this.memoryStorage })
     if (error) {
@@ -71,6 +78,34 @@ export class MessageStorage<C extends Context> implements MiddlewareObj<C> {
 
     logger.debug(`memoryStorage: ${this.memoryStorage.length} messages written to the database`)
     this.memoryStorage = []
+  }
+
+  private async syncUsers(): Promise<void> {
+    if (this.userStorage.size === 0) return
+    const users: DBUsers = this.userStorage
+      .values()
+      .toArray()
+      .map((u) => ({
+        id: u.id,
+        firstName: u.first_name,
+        lastName: u.last_name,
+        username: u.username,
+        isBot: u.is_bot,
+        langCode: u.language_code,
+      }))
+
+    this.userStorage.clear()
+
+    const { error } = await api.tg.users.add.mutate({ users })
+    if (error === "ENCRYPT_ERROR") {
+      logger.error("userStorage: There was an error while encrypting users in the backend, users voided")
+      return
+    } else if (error === "INTERNAL_SERVER_ERROR") {
+      logger.error("userStorage: There was an UNEXPECTED error while saving users in backend, users voided")
+      return
+    }
+
+    logger.debug(`userStorage: ${users.length} users upserted in the database`)
   }
 
   middleware() {
