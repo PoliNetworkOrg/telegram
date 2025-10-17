@@ -13,12 +13,14 @@ const TARGET_GROUPS: Record<string, number> = {
   books: -1001164044303,
 } as const
 
+const TARGET_GROUP_IDS_SET = new Set(Object.values(TARGET_GROUPS));
+
 export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C> {
   private composer = new Composer<C>()
 
   constructor() {
     this.composer
-      .filter((ctx) => !!ctx.chatId && Object.values(TARGET_GROUPS).includes(ctx.chatId))
+      .filter((ctx) => !!ctx.chatId && TARGET_GROUP_IDS_SET.has(ctx.chatId))
       .on("message", async (ctx, next) => {
         if (ctx.from.id === ctx.me.id) return next() // skip if bot
         const { roles } = await api.tg.permissions.getRoles.query({ userId: ctx.from.id })
