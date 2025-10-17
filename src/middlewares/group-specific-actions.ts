@@ -1,5 +1,6 @@
 import { Composer, type Filter, type MiddlewareObj } from "grammy"
 import { err, ok, type Result } from "neverthrow"
+import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { fmt, fmtUser } from "@/utils/format"
@@ -19,6 +20,13 @@ export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C>
     this.composer
       .filter((ctx) => !!ctx.chatId && Object.values(TARGET_GROUPS).includes(ctx.chatId))
       .on("message", async (ctx, next) => {
+        if (ctx.from.id === ctx.me.id) return next() // skip if bot
+        const { roles } = await api.tg.permissions.getRoles.query({ userId: ctx.from.id })
+        if (roles && roles.length > 0) return next() // skip if admin or other roles
+
+        const chatMember = await ctx.getChatMember(ctx.from.id)
+        if (chatMember.status === "administrator" || chatMember.status === "creator") return next() // skip if group-admin
+
         let check: Result<void, string>
         switch (ctx.chatId) {
           case TARGET_GROUPS.alloggi:
