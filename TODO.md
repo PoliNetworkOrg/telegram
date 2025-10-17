@@ -29,7 +29,7 @@
   - [ ] exception to send our whatsapp links?
   - [ ] do not delete Direttivo's allowed messages
   - [x] check if user has username
-  - [ ] group-specific moderation (eg. #cerco #vendo in polihouse)
+  - [ ] group-specific moderation (eg. #cerco #vendo in polihouse) see [here](https://github.com/PoliNetworkOrg/PoliNetworkBot_CSharp/blob/03c7434f06323ffdec301cb105d1d3b2c1ed4a95/PoliNetworkBot_CSharp/Code/Bots/Moderation/Blacklist/Blacklist.cs#L84)
 - [x] role management
   - [x] setrole: set role for some username (only Direttivo, maybe HR)
   - [x] getrole: get user role
