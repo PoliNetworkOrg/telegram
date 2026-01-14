@@ -34,7 +34,7 @@ importers:
         version: 0.13.4(arktype@2.1.20)(typescript@5.7.3)(zod@4.1.11)
       '@trpc/client':
         specifier: ^11.5.1
-        version: 11.5.1(@trpc/server@11.5.1(typescript@5.7.3))(typescript@5.7.3)
+        version: 11.5.1(@trpc/server@11.8.0(typescript@5.7.3))(typescript@5.7.3)
       '@types/ssdeep.js':
         specifier: ^0.0.2
         version: 0.0.2
@@ -82,8 +82,8 @@ importers:
         specifier: 2.2.4
         version: 2.2.4
       '@trpc/server':
-        specifier: 11.5.1
-        version: 11.5.1(typescript@5.7.3)
+        specifier: 11.8.0
+        version: 11.8.0(typescript@5.7.3)
       '@types/node':
         specifier: ^22.13.1
         version: 22.13.1
@@ -582,8 +582,8 @@ packages:
       '@trpc/server': 11.5.1
       typescript: '>=5.7.2'
 
-  '@trpc/server@11.5.1':
-    resolution: {integrity: sha512-KIDzHRS5m8U1ncPwjgtOtPWK9lNO0kYL7b+lnvKXRqowSAQIEC/z6y7g/dkt4Aqv3DKI/STLydt2/afrP1QrxQ==}
+  '@trpc/server@11.8.0':
+    resolution: {integrity: sha512-DphyQnLuyX2nwJCQGWQ9zYz4hZGvRhSBqDhQ0SH3tDhQ3PU4u68xofA0pJ741Ir4InEAFD+TtJVLAQy+wVOkiQ==}
     peerDependencies:
       typescript: '>=5.7.2'
 
@@ -940,8 +940,8 @@ packages:
   get-tsconfig@4.10.0:
     resolution: {integrity: sha512-kGzZ3LWWQcGIAmg6iWvXn0ei6WDtV26wzHRMwDSzmAbcXrTEXxHy6IehI6/4eT6VRKyMP1eF1VqwrVUmE/LR7A==}
 
-  glob@10.4.5:
-    resolution: {integrity: sha512-7Bv8RF0k6xjo7d4A/PxYLbUCfb6c+Vpd2/mB2yRDlew7Jb5hEXiCD9ibfO7wpk8i4sevK6DFny9h7EYbM3/sHg==}
+  glob@10.5.0:
+    resolution: {integrity: sha512-DfXN8DfhJ7NH3Oe7cFmu3NCu1wKbkReJ8TorzSAFbSKrlNaQSKfIzqYqVY8zlbs2NLBbWpRiU52GX2PbaBVNkg==}
     hasBin: true
 
   globals@15.14.0:
@@ -1882,12 +1882,12 @@ snapshots:
       typescript: 5.7.3
       zod: 4.1.11
 
-  '@trpc/client@11.5.1(@trpc/server@11.5.1(typescript@5.7.3))(typescript@5.7.3)':
+  '@trpc/client@11.5.1(@trpc/server@11.8.0(typescript@5.7.3))(typescript@5.7.3)':
     dependencies:
-      '@trpc/server': 11.5.1(typescript@5.7.3)
+      '@trpc/server': 11.8.0(typescript@5.7.3)
       typescript: 5.7.3
 
-  '@trpc/server@11.5.1(typescript@5.7.3)':
+  '@trpc/server@11.8.0(typescript@5.7.3)':
     dependencies:
       typescript: 5.7.3
 
@@ -2242,7 +2242,7 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  glob@10.4.5:
+  glob@10.5.0:
     dependencies:
       foreground-child: 3.3.1
       jackspeak: 3.4.3
@@ -2628,7 +2628,7 @@ snapshots:
     dependencies:
       '@jridgewell/gen-mapping': 0.3.8
       commander: 4.1.1
-      glob: 10.4.5
+      glob: 10.5.0
       lines-and-columns: 1.2.4
       mz: 2.7.0
       pirates: 4.0.7
