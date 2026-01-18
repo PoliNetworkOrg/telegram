@@ -3,14 +3,8 @@ import z from "zod"
 import { api } from "@/backend"
 import { modules } from "@/modules"
 import { getTelegramId } from "@/utils/telegram-id"
-import type { Role } from "@/utils/types"
+import { numberOrString, type Role } from "@/utils/types"
 import { _commandsBase } from "./_base"
-
-const numberOrString = z.string().transform((s) => {
-  const n = Number(s)
-  if (!Number.isNaN(n) && s.trim() !== "") return n
-  return s
-})
 
 const BYPASS_ROLES: Role[] = ["president", "owner", "direttivo"]
 
@@ -26,7 +20,7 @@ _commandsBase
       {
         key: "username",
         type: numberOrString,
-        description: "The username or the user id of the user you want to update the role",
+        description: "The username or the user id of the user you want to ban from all groups",
       },
       {
         key: "reason",
