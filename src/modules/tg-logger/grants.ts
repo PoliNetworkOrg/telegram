@@ -58,7 +58,7 @@ async function handleDelete(ctx: CallbackCtx<Context>, data: GrantedMessage): Pr
 /**
  * Interactive menu for interacting with granted message.
  *
- * @param data - {link @GrantedMessage} grant info
+ * @param data - {@link GrantedMessage} grant info
  */
 export const grantMessageMenu = MenuGenerator.getInstance<Context>().create<GrantedMessage>("grants-message", [
   [
@@ -92,7 +92,7 @@ export const grantMessageMenu = MenuGenerator.getInstance<Context>().create<Gran
 /**
  * Interactive menu for interacting with newly created grant.
  *
- * @param data - {link @GrantedMessage} grant info
+ * @param data - {@link User} granted grammy's User
  */
 export const grantCreatedMenu = MenuGenerator.getInstance<Context>().create<User>("grants-create", [
   [
