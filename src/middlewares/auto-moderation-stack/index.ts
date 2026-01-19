@@ -172,12 +172,13 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       if (flaggedCategories.some((cat) => cat.aboveThreshold)) {
         if (ctx.whitelisted) {
           // log the action but do not mute
-          if (ctx.whitelisted.role === "user") await modules.get("tgLogger").grants({
-            action: "USAGE",
-            from: ctx.from,
-            chat: ctx.chat,
-            message,
-          })
+          if (ctx.whitelisted.role === "user")
+            await modules.get("tgLogger").grants({
+              action: "USAGE",
+              from: ctx.from,
+              chat: ctx.chat,
+              message,
+            })
         } else {
           // above threshold, mute user and delete the message
           await mute({

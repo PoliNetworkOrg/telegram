@@ -163,13 +163,13 @@ export class TgLogger extends Module<ModuleShared> {
     const voters = direttivo.members.map((m) => ({
       user: m.user
         ? {
-          id: m.userId,
-          first_name: m.user.firstName,
-          last_name: m.user.lastName,
-          username: m.user.username,
-          is_bot: m.user.isBot,
-          language_code: m.user.langCode,
-        }
+            id: m.userId,
+            first_name: m.user.firstName,
+            last_name: m.user.lastName,
+            username: m.user.username,
+            is_bot: m.user.isBot,
+            language_code: m.user.langCode,
+          }
         : { id: m.userId },
       isPresident: m.isPresident,
       vote: undefined,
@@ -372,11 +372,14 @@ export class TgLogger extends Module<ModuleShared> {
     switch (props.action) {
       case "USAGE": {
         const { invite_link } = await this.shared.api.getChat(props.chat.id)
-        msg = fmt(({ n, b }) => [
-          b`💬 Spam-message detected`,
-          n`${b`From:`} ${fmtUser(props.from)}`,
-          n`${b`Chat:`} ${fmtChat(props.chat, invite_link)}`,
-        ], { sep: "\n" })
+        msg = fmt(
+          ({ n, b }) => [
+            b`💬 Spam-message detected`,
+            n`${b`From:`} ${fmtUser(props.from)}`,
+            n`${b`Chat:`} ${fmtChat(props.chat, invite_link)}`,
+          ],
+          { sep: "\n" }
+        )
         const usageMenu = await grantMessageMenu({
           target: props.from,
           interrupted: false,
@@ -390,14 +393,17 @@ export class TgLogger extends Module<ModuleShared> {
       }
 
       case "CREATE": {
-        msg = fmt(({ n, b }) => [
-          b`✳ New Grant`,
-          n`${b`Target:`} ${fmtUser(props.target)}`,
-          n`${b`By:`} ${fmtUser(props.by)}`,
-          props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-          n`\n${b`Valid since:`} ${fmtDate(props.since)}`,
-          n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`,
-        ], { sep: "\n" })
+        msg = fmt(
+          ({ n, b }) => [
+            b`✳ New Grant`,
+            n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`By:`} ${fmtUser(props.by)}`,
+            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
+            n`\n${b`Valid since:`} ${fmtDate(props.since)}`,
+            n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`,
+          ],
+          { sep: "\n" }
+        )
 
         const createMenu = await grantCreatedMenu(props.target)
         await this.log(this.topics.grants, msg, { reply_markup: createMenu, disable_notification: false })
@@ -405,11 +411,14 @@ export class TgLogger extends Module<ModuleShared> {
       }
 
       case "INTERRUPT":
-        msg = fmt(({ n, b }) => [
-          b`🛑 Grant Interruption`,
-          n`${b`Target:`} ${fmtUser(props.target)}`,
-          n`${b`By:`} ${fmtUser(props.by)}`,
-        ], { sep: "\n" })
+        msg = fmt(
+          ({ n, b }) => [
+            b`🛑 Grant Interruption`,
+            n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`By:`} ${fmtUser(props.by)}`,
+          ],
+          { sep: "\n" }
+        )
 
         await this.log(this.topics.grants, msg, { reply_markup: undefined, disable_notification: false })
         return msg

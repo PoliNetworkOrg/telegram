@@ -2,8 +2,8 @@ import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
 import { type ApiOutput, api } from "@/backend"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
-import { modules } from ".."
 import { logger } from "@/logger"
+import { modules } from ".."
 
 type GrantedMessage = {
   message: Message
@@ -69,7 +69,7 @@ export const grantMessageMenu = MenuGenerator.getInstance<Context>().create<Gran
       cb: async ({ ctx, data }) => {
         if (data.deleted) return { feedback: "☑️ Message already deleted" }
         const { error } = await handleDelete(ctx, data)
-        if (!error && data.interrupted) await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => { })
+        if (!error && data.interrupted) await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {})
         return {
           feedback: getFeedback(error) ?? "✅ Message deleted",
           newData: !error ? { ...data, deleted: true } : undefined,
@@ -82,7 +82,7 @@ export const grantMessageMenu = MenuGenerator.getInstance<Context>().create<Gran
         if (data.interrupted) return { feedback: "☑️ Grant already interrupted" }
         const { error } = await handleInterrupt(ctx, data.target)
         const noError = !error || error === "NOT_FOUND"
-        if (noError && data.deleted) await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => { })
+        if (noError && data.deleted) await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {})
         return {
           feedback: getFeedback(error) ?? "✅ Grant Interrupted",
           newData: noError ? { ...data, interrupted: true } : undefined,
@@ -105,7 +105,7 @@ export const grantCreatedMenu = MenuGenerator.getInstance<Context>().create<User
         const { error } = await handleInterrupt(ctx, data)
         logger.info({ error }, "handleInterrupt error output in created menu")
         if (!error || error === "NOT_FOUND")
-          await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => { })
+          await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {})
         return {
           feedback: getFeedback(error) ?? "✅ Grant Interrupted",
         }

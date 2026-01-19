@@ -1,16 +1,16 @@
-import type { Message, User } from "grammy/types"
+import type { ConversationMenuContext } from "@grammyjs/conversations"
+import type { User } from "grammy/types"
 import z from "zod"
 import { api } from "@/backend"
+import type { ConversationContext } from "@/lib/managed-commands"
+import { logger } from "@/logger"
+import { modules } from "@/modules"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString } from "@/utils/types"
 import { wait } from "@/utils/wait"
 import { _commandsBase } from "./_base"
-import { modules } from "@/modules"
-import { logger } from "@/logger"
-import { ConversationMenuContext, conversations } from "@grammyjs/conversations"
-import { ConversationContext } from "@/lib/managed-commands"
 
 const dateFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -18,13 +18,13 @@ const dateFormat = new Intl.DateTimeFormat(undefined, {
 
 const timeFormat = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
-  hour12: false
+  hour12: false,
 })
 
 const datetimeFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
-  hour12: false
+  hour12: false,
 })
 
 const getDateWithDelta = (date: Date, deltaDay: number) => {
@@ -41,8 +41,9 @@ const mainMsg = (user: User, startTime: Date, endTime: Date, duration: string, r
       n`${b`Start Time:`} ${datetimeFormat.format(startTime)}`,
       n`${b`End Time:`} ${datetimeFormat.format(endTime)} (${duration})`,
       reason ? n`${b`Reason:`} ${reason}` : undefined,
-      endTime.getTime() < Date.now() ? b`\n${u`INVALID:`} END datetime is in the past, change start date or duration.` : undefined,
-
+      endTime.getTime() < Date.now()
+        ? b`\n${u`INVALID:`} END datetime is in the past, change start date or duration.`
+        : undefined,
     ],
     { sep: "\n" }
   )
@@ -101,14 +102,7 @@ _commandsBase.createCommand({
       const startDate = new Date(await conversation.now())
       let grantDuration = duration.zod.parse("2h")
       const endDate = () => new Date(startDate.getTime() + grantDuration.secondsFromNow * 1000)
-      const baseMsg = () =>
-        mainMsg(
-          target,
-          startDate,
-          endDate(),
-          grantDuration.raw,
-          args.reason
-        )
+      const baseMsg = () => mainMsg(target, startDate, endDate(), grantDuration.raw, args.reason)
 
       async function changeDuration(ctx: ConversationMenuContext<ConversationContext<"private">>, durationStr: string) {
         grantDuration = duration.zod.parse(durationStr)
@@ -172,7 +166,10 @@ _commandsBase.createCommand({
 
       const _startTimeMenu = conversation
         .menu("grants-start-time", { parent: "grants-main" })
-        .text(() => `Now: ${timeFormat.format(new Date())}`, (ctx) => changeStartTime(ctx, new Date().getHours(), new Date().getMinutes()))
+        .text(
+          () => `Now: ${timeFormat.format(new Date())}`,
+          (ctx) => changeStartTime(ctx, new Date().getHours(), new Date().getMinutes())
+        )
         .row()
         .text("8:00", (ctx) => changeStartTime(ctx, 8, 0))
         .text("9:00", (ctx) => changeStartTime(ctx, 9, 0))
@@ -192,13 +189,17 @@ _commandsBase.createCommand({
         .text("21:00", (ctx) => changeStartTime(ctx, 21, 0))
         .text("22:00", (ctx) => changeStartTime(ctx, 22, 0))
         .row()
-        .back(() => `⚪️ Keep current time ${timeFormat.format(startDate)}`, (ctx) =>
-          ctx.editMessageText(baseMsg(), { reply_markup: ctx.msg?.reply_markup })
+        .back(
+          () => `⚪️ Keep current time ${timeFormat.format(startDate)}`,
+          (ctx) => ctx.editMessageText(baseMsg(), { reply_markup: ctx.msg?.reply_markup })
         )
 
       const startDateMenu = conversation
         .menu("grants-start-date", { parent: "grants-main" })
-        .text(() => `Today ${dateFormat.format(today)}`, (ctx) => changeStartDate(ctx, 0))
+        .text(
+          () => `Today ${dateFormat.format(today)}`,
+          (ctx) => changeStartDate(ctx, 0)
+        )
         .row()
         .text(dateFormat.format(getDateWithDelta(today, 1)), (ctx) => changeStartDate(ctx, 1))
         .text(dateFormat.format(getDateWithDelta(today, 2)), (ctx) => changeStartDate(ctx, 2))
