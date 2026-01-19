@@ -82,8 +82,8 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * Checks if the message should be ignored by the moderation stack.
    *
    * TODO: implement a proper whitelist system
-   * - [ ] check if the user is privileged (admin, mod, etc)
-   * - [ ] check if the message is explicitly allowed by Direttivo (e.g. via a command)
+   * - [x] check if the user is privileged (admin, mod, etc)
+   * - [x] check if the message is explicitly allowed by Direttivo (e.g. via a command)
    * - [ ] check if the chat allows specific types of content (?)
    *
    * @param ctx The context of the message
@@ -114,39 +114,48 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       "message::url" | "message::text_link" | "edited_message::url" | "edited_message::text_link"
     >
   ) {
-    // check both messages sent and edited
-    const message = ctx.message ?? ctx.editedMessage
+    const message = ctx.msg
     // extract all links from the message, might be inside entities, or inside the message text body
     const links = ctx
       .entities("text_link")
       .map((e) => e.url)
       .concat([getText(message).text])
-    const allowed = await checkForAllowedLinks(links)
 
-    if (!allowed) {
-      if (ctx.whitelisted) {
-        // log the action but do not mute
-      } else {
-        await mute({
-          ctx,
-          from: ctx.me,
-          target: ctx.from,
-          reason: "Shared link not allowed",
-          duration: duration.zod.parse("1m"), // 1 minute
+    const allowed = await checkForAllowedLinks(links)
+    if (allowed) return
+
+    if (ctx.whitelisted) {
+      // no mod action
+      if (ctx.whitelisted.role === "user") {
+        // log the grant usage
+        await modules.get("tgLogger").grants({
+          action: "USAGE",
+          from: ctx.from,
+          chat: ctx.chat,
           message,
         })
-        const msg = await ctx.reply(
-          fmt(({ b }) => [
-            b`${fmtUser(ctx.from)}`,
-            "The link you shared is not allowed.",
-            "Please refrain from sharing links that could be considered spam",
-          ])
-        )
-        await wait(5000)
-        await msg.delete()
-        return
       }
+      return
     }
+
+    await mute({
+      ctx,
+      from: ctx.me,
+      target: ctx.from,
+      reason: "Shared link not allowed",
+      duration: duration.zod.parse("1m"), // 1 minute
+      message,
+    })
+    const msg = await ctx.reply(
+      fmt(({ b }) => [
+        b`${fmtUser(ctx.from)}`,
+        "The link you shared is not allowed.",
+        "Please refrain from sharing links that could be considered spam",
+      ])
+    )
+    await wait(5000)
+    await msg.delete()
+    return
   }
 
   /**
@@ -162,7 +171,13 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
 
       if (flaggedCategories.some((cat) => cat.aboveThreshold)) {
         if (ctx.whitelisted) {
-          // TODO: check for temporary grant
+          // log the action but do not mute
+          if (ctx.whitelisted.role === "user") await modules.get("tgLogger").grants({
+            action: "USAGE",
+            from: ctx.from,
+            chat: ctx.chat,
+            message,
+          })
         } else {
           // above threshold, mute user and delete the message
           await mute({
@@ -228,7 +243,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * Handles messages sent to multiple chats with similar content.
    */
   private async multichatSpamHandler(ctx: Filter<ModerationContext<C>, "message:text" | "message:media">) {
-    if (ctx.from.is_bot) return
+    if (ctx.from.is_bot || ctx.whitelisted) return
     const { text } = getText(ctx.message)
     if (text === null) return
     if (text.length < MULTI_CHAT_SPAM.LENGTH_THR) return // skip because too short
