@@ -211,28 +211,34 @@ _commandsBase.createCommand({
       const mainMenu = conversation
         .menu("grants-main")
         .text("✅ Confirm", async (ctx) => {
-          await api.tg.grants.create.mutate({
-            userId: target.id,
-            adderId: context.from.id,
-            reason: args.reason,
-            since: startDate,
-            until: endDate(),
-          })
-
-          await ctx.editMessageText(
-            fmt(({ b, skip }) => [skip`${baseMsg()}`, b`✅ Special Permissions Granted`], { sep: "\n\n" })
-          )
-
-          await modules.get("tgLogger").grants({
-            action: "CREATE",
-            target,
-            by: context.from,
-            since: startDate,
-            reason: args.reason,
-            duration: grantDuration,
-          })
-
           ctx.menu.close()
+          const { success, error } = await api.tg.grants.create
+            .mutate({
+              userId: target.id,
+              adderId: context.from.id,
+              reason: args.reason,
+              since: startDate,
+              until: endDate(),
+            })
+            .catch(() => ({ success: false, error: "API_CALL_ERROR" }))
+
+          if (success) {
+            await ctx.editMessageText(
+              fmt(({ b, skip }) => [skip`${baseMsg()}`, b`✅ Special Permissions Granted`], { sep: "\n\n" })
+            )
+
+            await modules.get("tgLogger").grants({
+              action: "CREATE",
+              target,
+              by: context.from,
+              since: startDate,
+              reason: args.reason,
+              duration: grantDuration,
+            })
+          } else {
+            await ctx.editMessageText(fmt(({ b, skip }) => [skip`${baseMsg()}`, b`⁉️ Error: ${error}`], { sep: "\n\n" }))
+          }
+
           await conversation.halt()
         })
         .row()
