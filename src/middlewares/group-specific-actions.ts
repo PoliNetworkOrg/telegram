@@ -13,7 +13,20 @@ const TARGET_GROUPS: Record<string, number> = {
   books: -1001164044303,
 } as const
 
-const TARGET_GROUP_IDS_SET = new Set(Object.values(TARGET_GROUPS));
+const TARGET_GROUP_IDS_SET = new Set(Object.values(TARGET_GROUPS))
+
+function groupSpecificHashtags(groupId: number): string[] {
+  switch (groupId) {
+    case TARGET_GROUPS.alloggi:
+      return ["#cerco", "#searching", "#search", "#offro", "#offering", "#offer"]
+    case TARGET_GROUPS.ripetizioni:
+      return ["#richiesta", "#offerta", "#request", "#offer"]
+    case TARGET_GROUPS.books:
+      return ["#cerco", "#vendo"]
+    default:
+      return []
+  }
+}
 
 export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C> {
   private composer = new Composer<C>()
@@ -69,47 +82,23 @@ export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C>
   }
 
   checkAlloggi(ctx: Filter<C, "message">): Result<void, string> {
-    const hashtags = ctx.entities("hashtag").map((e) => e.text.toLowerCase())
-
-    if (
-      !hashtags.includes("#cerco") &&
-      !hashtags.includes("#searching") &&
-      !hashtags.includes("#search") &&
-      !hashtags.includes("#offro") &&
-      !hashtags.includes("#offering") &&
-      !hashtags.includes("#offer")
-    )
-      return err(
-        "You must include one of the following hashtags in your message:\n #cerco #searching #offro #offering \nCheck rules for more info."
-      )
-
-    return ok()
+    return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
   checkRipetizioni(ctx: Filter<C, "message">): Result<void, string> {
-    const hashtags = ctx.entities("hashtag").map((e) => e.text.toLowerCase())
-
-    if (
-      !hashtags.includes("#richiesta") &&
-      !hashtags.includes("#offerta") &&
-      !hashtags.includes("#request") &&
-      !hashtags.includes("#offer")
-    )
-      return err(
-        "You must include one of the following hashtags in your message:\n #richiesta #request #offerta #offer \nCheck rules for more info."
-      )
-
-    return ok()
+    return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
   checkBooks(ctx: Filter<C, "message">): Result<void, string> {
+    return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
+  }
+
+  checkHashtags(ctx: Filter<C, "message">, requiredHashtags: string[]): Result<void, string> {
     const hashtags = ctx.entities("hashtag").map((e) => e.text.toLowerCase())
-
-    if (!hashtags.includes("#cerco") && !hashtags.includes("#vendo"))
-      return err(
-        "Devi includere uno di questi hashtags nel tuo messaggio:\n #cerco #vendo \nControlla le regole per maggiori indicazioni."
-      )
-
+    const hasRequired = requiredHashtags.some((tag) => hashtags.includes(tag.toLowerCase()))
+    if (!hasRequired) {
+      return err(`You must include one of the following hashtags in your message: ${requiredHashtags.join(", ")}`)
+    }
     return ok()
   }
 
