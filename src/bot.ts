@@ -12,6 +12,7 @@ import { logger } from "./logger"
 import { AutoModerationStack } from "./middlewares/auto-moderation-stack"
 import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
+import { GroupSpecificActions } from "./middlewares/group-specific-actions"
 import { messageLink } from "./middlewares/message-link"
 import { MessageUserStorage } from "./middlewares/message-user-storage"
 import { UIActionsLogger } from "./middlewares/ui-actions-logger"
@@ -76,6 +77,7 @@ bot.use(MenuGenerator.getInstance())
 bot.use(commands)
 bot.use(new BotMembershipHandler())
 bot.use(new AutoModerationStack())
+bot.use(new GroupSpecificActions())
 bot.use(new UIActionsLogger())
 
 bot.on("message", async (ctx, next) => {

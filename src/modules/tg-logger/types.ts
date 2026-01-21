@@ -91,3 +91,25 @@ export type DeleteResult = {
   count: number
   link: string
 }
+
+export type GrantLog = {} & (
+  | {
+      action: "USAGE"
+      from: User
+      message: Message
+      chat: Chat
+    }
+  | {
+      action: "CREATE"
+      target: User
+      by: User
+      since: Date
+      duration: Duration
+      reason?: string
+    }
+  | {
+      action: "INTERRUPT"
+      target: User
+      by: User
+    }
+)

@@ -2,6 +2,8 @@ import type { Filter, MiddlewareObj } from "grammy"
 import { Composer } from "grammy"
 import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
+import { api } from "@/backend"
+import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { mute } from "@/modules/moderation"
 import { redis } from "@/redis"
@@ -10,12 +12,25 @@ import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { createFakeMessage, getText } from "@/utils/messages"
+import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
 import { wait } from "@/utils/wait"
 import { MessageUserStorage } from "../message-user-storage"
 import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
 import { checkForAllowedLinks } from "./functions"
+
+export type WhitelistType = {
+  role: "creator" | "admin" | "user"
+}
+
+type ModerationContext<C extends Context> = Filter<C, "message" | "edited_message"> & {
+  whitelisted?: WhitelistType
+}
+
+const debouncedError = throttle((error: unknown, msg: string) => {
+  logger.error({ error }, msg)
+}, 1000 * 60)
 
 /**
  * # Auto-Moderation stack
@@ -33,14 +48,24 @@ import { checkForAllowedLinks } from "./functions"
  */
 export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> {
   // the composer that holds all middlewares
-  private composer = new Composer<C>()
+  private composer = new Composer<ModerationContext<C>>()
   // AI moderation instance
   private aiModeration: AIModeration<C> = new AIModeration<C>()
 
   constructor() {
     this.composer
+      .on(["message", "edited_message"])
       .fork() // fork the processing, this stack executes in parallel to the rest of the bot
-      .filter(async (ctx) => !(await this.isWhitelisted(ctx))) // skip if the message is whitelisted
+      .filter(async (ctx) => {
+        if (ctx.from.id === ctx.me.id) return false // skip messages from the bot itself
+        const whitelistType = await this.isWhitelisted(ctx)
+        if (whitelistType) {
+          // creators can skip moderation entirely
+          if (whitelistType.role === "creator") return false
+          ctx.whitelisted = whitelistType
+        }
+        return true
+      }) // skip if the message is whitelisted
       // register all middlewares
       .on(
         ["message::url", "message::text_link", "edited_message::url", "edited_message::text_link"],
@@ -64,16 +89,29 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * Checks if the message should be ignored by the moderation stack.
    *
    * TODO: implement a proper whitelist system
-   * - [ ] check if the user is privileged (admin, mod, etc)
-   * - [ ] check if the message is explicitly allowed by Direttivo (e.g. via a command)
+   * - [x] check if the user is privileged (admin, mod, etc)
+   * - [x] check if the message is explicitly allowed by Direttivo (e.g. via a command)
    * - [ ] check if the chat allows specific types of content (?)
    *
    * @param ctx The context of the message
-   * @returns true if the message is exempt and therefore should be ignored by
-   * the moderation stack, false otherwise
+   * @returns WT {@link WhitelistType} if there is a whitelisted user, `null` otherwise
    */
-  private async isWhitelisted(_ctx: C): Promise<boolean> {
-    return false
+  private async isWhitelisted(ctx: ModerationContext<C>): Promise<WhitelistType | null> {
+    try {
+      const { status } = await ctx.getAuthor()
+      if (status === "creator") return { role: "creator" }
+      if (status === "administrator") return { role: "admin" }
+
+      const isAdmin = await api.tg.permissions.checkGroup.query({ userId: ctx.from.id, groupId: ctx.chatId })
+      if (isAdmin) return { role: "admin" }
+
+      const grant = await api.tg.grants.checkUser.query({ userId: ctx.from.id })
+      if (grant.isGranted) return { role: "user" }
+    } catch (e) {
+      debouncedError(e, "Error checking whitelist status in auto-moderation")
+    }
+
+    return null
   }
 
   /**
@@ -81,43 +119,60 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * If a link is not allowed, mutes the user for 1 minute and deletes the message.
    */
   private async linkHandler(
-    ctx: Filter<C, "message::url" | "message::text_link" | "edited_message::url" | "edited_message::text_link">
+    ctx: Filter<
+      ModerationContext<C>,
+      "message::url" | "message::text_link" | "edited_message::url" | "edited_message::text_link"
+    >
   ) {
-    // check both messages sent and edited
-    const message = ctx.message ?? ctx.editedMessage
+    const message = ctx.msg
     // extract all links from the message, might be inside entities, or inside the message text body
     const links = ctx
       .entities("text_link")
       .map((e) => e.url)
       .concat([getText(message).text])
+
     const allowed = await checkForAllowedLinks(links)
-    if (!allowed) {
-      await mute({
-        ctx,
-        from: ctx.me,
-        target: ctx.from,
-        reason: "Shared link not allowed",
-        duration: duration.zod.parse("1m"), // 1 minute
-        message,
-      })
-      const msg = await ctx.reply(
-        fmt(({ b }) => [
-          b`${fmtUser(ctx.from)}`,
-          "The link you shared is not allowed.",
-          "Please refrain from sharing links that could be considered spam",
-        ])
-      )
-      await wait(5000)
-      await msg.delete()
+    if (allowed) return
+
+    if (ctx.whitelisted) {
+      // no mod action
+      if (ctx.whitelisted.role === "user") {
+        // log the grant usage
+        await modules.get("tgLogger").grants({
+          action: "USAGE",
+          from: ctx.from,
+          chat: ctx.chat,
+          message,
+        })
+      }
       return
     }
+
+    await mute({
+      ctx,
+      from: ctx.me,
+      target: ctx.from,
+      reason: "Shared link not allowed",
+      duration: duration.zod.parse("1m"), // 1 minute
+      message,
+    })
+    const msg = await ctx.reply(
+      fmt(({ b }) => [
+        b`${fmtUser(ctx.from)}`,
+        "The link you shared is not allowed.",
+        "Please refrain from sharing links that could be considered spam",
+      ])
+    )
+    await wait(5000)
+    await msg.delete()
+    return
   }
 
   /**
    * Checks messages for harmful content using AI moderation.
    * If harmful content is detected, mutes the user and deletes the message.
    */
-  private async harmfulContentHandler(ctx: Filter<C, "message">) {
+  private async harmfulContentHandler(ctx: Filter<ModerationContext<C>, "message">) {
     const message = ctx.message
     const flaggedCategories = await this.aiModeration.checkForHarmfulContent(ctx)
 
@@ -125,24 +180,35 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       const reasons = flaggedCategories.map((cat) => ` - ${cat.category} (${(cat.score * 100).toFixed(1)}%)`).join("\n")
 
       if (flaggedCategories.some((cat) => cat.aboveThreshold)) {
-        // above threshold, mute user and delete the message
-        await mute({
-          ctx,
-          from: ctx.me,
-          target: ctx.from,
-          reason: `Automatic moderation detected harmful content\n${reasons}`,
-          duration: duration.zod.parse("1d"), // 1 day
-          message,
-        })
+        if (ctx.whitelisted) {
+          // log the action but do not mute
+          if (ctx.whitelisted.role === "user")
+            await modules.get("tgLogger").grants({
+              action: "USAGE",
+              from: ctx.from,
+              chat: ctx.chat,
+              message,
+            })
+        } else {
+          // above threshold, mute user and delete the message
+          await mute({
+            ctx,
+            from: ctx.me,
+            target: ctx.from,
+            reason: `Automatic moderation detected harmful content\n${reasons}`,
+            duration: duration.zod.parse("1d"), // 1 day
+            message,
+          })
 
-        const msg = await ctx.reply(
-          fmt(({ i, b }) => [
-            b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
-            i`If you think this is a mistake, please contact the group administrators.`,
-          ])
-        )
-        await wait(5000)
-        await msg.delete()
+          const msg = await ctx.reply(
+            fmt(({ i, b }) => [
+              b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
+              i`If you think this is a mistake, please contact the group administrators.`,
+            ])
+          )
+          await wait(5000)
+          await msg.delete()
+        }
       } else {
         // no flagged category is above the threshold, still log it for manual review
         await modules.get("tgLogger").moderationAction({
@@ -161,7 +227,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * Handles messages containing a high percentage of non-latin characters to avoid most spam bots.
    * If the percentage of non-latin characters is too high, mutes the user for 10 minutes and deletes the message.
    */
-  private async nonLatinHandler(ctx: Filter<C, "message:text" | "message:caption">) {
+  private async nonLatinHandler(ctx: Filter<ModerationContext<C>, "message:text" | "message:caption">) {
     const text = ctx.message.caption ?? ctx.message.text
     const match = text.match(NON_LATIN.REGEX)
 
@@ -187,8 +253,8 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
   /**
    * Handles messages sent to multiple chats with similar content.
    */
-  private async multichatSpamHandler(ctx: Filter<C, "message:text" | "message:media">) {
-    if (ctx.from.is_bot) return
+  private async multichatSpamHandler(ctx: Filter<ModerationContext<C>, "message:text" | "message:media">) {
+    if (ctx.from.is_bot || ctx.whitelisted) return
     const { text } = getText(ctx.message)
     if (text === null) return
     if (text.length < MULTI_CHAT_SPAM.LENGTH_THR) return // skip because too short
@@ -203,7 +269,11 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       const similarMessages: Message[] = await Promise.all(
         range
           .map((r) => r.split("|"))
-          .map(([hash, chatId, messageId]) => ({ hash, chatId: Number(chatId), messageId: Number(messageId) }))
+          .map(([hash, chatId, messageId]) => ({
+            hash,
+            chatId: Number(chatId),
+            messageId: Number(messageId),
+          }))
           .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SPAM.SIMILARITY_THR)
           .map(async (v) => {
             const msg = await MessageUserStorage.getInstance().get(v.chatId, v.messageId)
@@ -239,6 +309,6 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
   }
 
   middleware() {
-    return this.composer.middleware()
+    return (this.composer as MiddlewareObj<C>).middleware()
   }
 }

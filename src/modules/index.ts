@@ -17,6 +17,7 @@ export const modules = new ModuleCoordinator(
       actionRequired: 10,
       groupManagement: 33,
       deletedMessages: 130,
+      grants: 402,
     }),
     webSocket: new WebSocketClient(),
     banAll: new BanAllQueue(),

@@ -4,9 +4,10 @@ import { api } from "@/backend"
 import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
-import { fmt, fmtChat, fmtUser } from "@/utils/format"
+import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
 import { type BanAll, banAllMenu, getBanAllText } from "./ban-all"
+import { grantCreatedMenu, grantMessageMenu } from "./grants"
 import { getReportText, type Report, reportMenu } from "./report"
 import type * as Types from "./types"
 
@@ -18,6 +19,7 @@ type Topics = {
   adminActions: number
   exceptions: number
   groupManagement: number
+  grants: number
 }
 
 export class TgLogger extends Module<ModuleShared> {
@@ -281,7 +283,7 @@ export class TgLogger extends Module<ModuleShared> {
           ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`
           : undefined,
 
-        "reason" in props && props.reason ? fmt(({ n, b }) => n`${b`Reason:`} ${props.reason}`) : undefined,
+        "reason" in props && props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
 
         /// per-action specific info, like MULTI_CHAT
         ...others.map((o) => skip`${o}`),
@@ -320,11 +322,10 @@ export class TgLogger extends Module<ModuleShared> {
 
       case "LEAVE_FAIL":
         msg = fmt(
-          ({ b, n, i }) => [
-            b`‼ Cannot Left`,
+          ({ b, n }) => [
+            b`‼ Leave failed`,
             n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Added by:`} ${fmtUser(props.addedBy)}`,
-            n`${i`This user does not have enough permissions to add the bot`}`,
           ],
           {
             sep: "\n",
@@ -364,6 +365,64 @@ export class TgLogger extends Module<ModuleShared> {
 
     await this.log(this.topics.groupManagement, msg, { reply_markup })
     return msg
+  }
+
+  public async grants(props: Types.GrantLog): Promise<string> {
+    let msg: string
+    switch (props.action) {
+      case "USAGE": {
+        const { invite_link } = await this.shared.api.getChat(props.chat.id)
+        msg = fmt(
+          ({ n, b }) => [
+            b`💬 Spam-message detected`,
+            n`${b`From:`} ${fmtUser(props.from)}`,
+            n`${b`Chat:`} ${fmtChat(props.chat, invite_link)}`,
+          ],
+          { sep: "\n" }
+        )
+        const usageMenu = await grantMessageMenu({
+          target: props.from,
+          interrupted: false,
+          deleted: false,
+          chatId: props.chat.id,
+          message: props.message,
+        })
+        await this.log(this.topics.grants, msg, { reply_markup: usageMenu, disable_notification: false })
+        await this.forward(this.topics.grants, props.chat.id, [props.message.message_id])
+        return msg
+      }
+
+      case "CREATE": {
+        msg = fmt(
+          ({ n, b }) => [
+            b`✳ New Grant`,
+            n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`By:`} ${fmtUser(props.by)}`,
+            props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
+            n`\n${b`Valid since:`} ${fmtDate(props.since)}`,
+            n`${b`Duration:`} ${props.duration.raw} (until ${fmtDate(new Date(props.since.getTime() + props.duration.secondsFromNow * 1000))})`,
+          ],
+          { sep: "\n" }
+        )
+
+        const createMenu = await grantCreatedMenu(props.target)
+        await this.log(this.topics.grants, msg, { reply_markup: createMenu, disable_notification: false })
+        return msg
+      }
+
+      case "INTERRUPT":
+        msg = fmt(
+          ({ n, b }) => [
+            b`🛑 Grant Interruption`,
+            n`${b`Target:`} ${fmtUser(props.target)}`,
+            n`${b`By:`} ${fmtUser(props.by)}`,
+          ],
+          { sep: "\n" }
+        )
+
+        await this.log(this.topics.grants, msg, { reply_markup: undefined, disable_notification: false })
+        return msg
+    }
   }
 
   public async exception(props: Types.ExceptionLog, context?: string): Promise<string> {

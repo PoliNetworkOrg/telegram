@@ -10,5 +10,6 @@ import "./role"
 import "./userid"
 import "./link-admin-dashboard"
 import "./report"
+import "./grants"
 
 export { _commandsBase as commands } from "./_base"

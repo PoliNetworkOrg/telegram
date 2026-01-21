@@ -1,5 +1,6 @@
 import type { Api, Context as TContext } from "grammy"
 import type { UserFromGetMe } from "grammy/types"
+import z from "zod"
 import type { ApiInput } from "@/backend"
 import type { ManagedCommandsFlavor } from "@/lib/managed-commands"
 
@@ -22,3 +23,9 @@ export type ModuleShared = {
   api: Api
   botInfo: UserFromGetMe
 }
+
+export const numberOrString = z.string().transform((s) => {
+  const n = Number(s)
+  if (!Number.isNaN(n) && s.trim() !== "") return n
+  return s
+})

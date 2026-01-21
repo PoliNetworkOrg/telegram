@@ -2,14 +2,8 @@ import { z } from "zod"
 import { api } from "@/backend"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
-import type { Role } from "@/utils/types"
+import { numberOrString, type Role } from "@/utils/types"
 import { _commandsBase } from "./_base"
-
-const numberOrString = z.string().transform((s) => {
-  const n = Number(s)
-  if (!Number.isNaN(n) && s.trim() !== "") return n
-  return s
-})
 
 _commandsBase
   .createCommand({
