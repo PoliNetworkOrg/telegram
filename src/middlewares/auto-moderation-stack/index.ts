@@ -51,6 +51,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       .on(["message", "edited_message"])
       .fork() // fork the processing, this stack executes in parallel to the rest of the bot
       .filter(async (ctx) => {
+        if (ctx.from.id === ctx.me.id) return false // skip messages from the bot itself
         const whitelistType = await this.isWhitelisted(ctx)
         if (whitelistType) {
           // creators can skip moderation entirely
