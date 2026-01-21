@@ -400,7 +400,7 @@ export class TgLogger extends Module<ModuleShared> {
             n`${b`By:`} ${fmtUser(props.by)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
             n`\n${b`Valid since:`} ${fmtDate(props.since)}`,
-            n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`,
+            n`${b`Duration:`} ${props.duration.raw} (until ${fmtDate(new Date(props.since.getTime() + props.duration.secondsFromNow * 1000))})`,
           ],
           { sep: "\n" }
         )
