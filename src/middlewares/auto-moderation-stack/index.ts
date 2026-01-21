@@ -28,8 +28,8 @@ type ModerationContext<C extends Context> = Filter<C, "message" | "edited_messag
   whitelisted?: WhitelistType
 }
 
-const debouncedError = throttle((e: unknown, msg: string) => {
-  logger.error(e, msg)
+const debouncedError = throttle((error: unknown, msg: string) => {
+  logger.error({ error }, msg)
 }, 1000 * 60)
 
 /**
