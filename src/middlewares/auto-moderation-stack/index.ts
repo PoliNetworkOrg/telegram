@@ -94,8 +94,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * - [ ] check if the chat allows specific types of content (?)
    *
    * @param ctx The context of the message
-   * @returns true if the message is exempt and therefore should be ignored by
-   * the moderation stack, false otherwise
+   * @returns WT {@link WhitelistType} if there is a whitelisted user, `null` otherwise
    */
   private async isWhitelisted(ctx: ModerationContext<C>): Promise<WhitelistType | null> {
     try {
