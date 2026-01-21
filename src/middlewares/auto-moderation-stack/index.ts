@@ -3,6 +3,7 @@ import { Composer } from "grammy"
 import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
 import { api } from "@/backend"
+import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { mute } from "@/modules/moderation"
 import { redis } from "@/redis"
@@ -11,6 +12,7 @@ import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { createFakeMessage, getText } from "@/utils/messages"
+import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
 import { wait } from "@/utils/wait"
 import { MessageUserStorage } from "../message-user-storage"
@@ -25,6 +27,10 @@ export type WhitelistType = {
 type ModerationContext<C extends Context> = Filter<C, "message" | "edited_message"> & {
   whitelisted?: WhitelistType
 }
+
+const debouncedError = throttle((e: unknown, msg: string) => {
+  logger.error(e, msg)
+}, 1000 * 60)
 
 /**
  * # Auto-Moderation stack
@@ -92,15 +98,19 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * the moderation stack, false otherwise
    */
   private async isWhitelisted(ctx: ModerationContext<C>): Promise<WhitelistType | null> {
-    const { status } = await ctx.getAuthor()
-    if (status === "creator") return { role: "creator" }
-    if (status === "administrator") return { role: "admin" }
+    try {
+      const { status } = await ctx.getAuthor()
+      if (status === "creator") return { role: "creator" }
+      if (status === "administrator") return { role: "admin" }
 
-    const isAdmin = await api.tg.permissions.checkGroup.query({ userId: ctx.from.id, groupId: ctx.chatId })
-    if (isAdmin) return { role: "admin" }
+      const isAdmin = await api.tg.permissions.checkGroup.query({ userId: ctx.from.id, groupId: ctx.chatId })
+      if (isAdmin) return { role: "admin" }
 
-    const grant = await api.tg.grants.checkUser.query({ userId: ctx.from.id })
-    if (grant.isGranted) return { role: "user" }
+      const grant = await api.tg.grants.checkUser.query({ userId: ctx.from.id })
+      if (grant.isGranted) return { role: "user" }
+    } catch (e) {
+      debouncedError(e, "Error checking whitelist status in auto-moderation")
+    }
 
     return null
   }
