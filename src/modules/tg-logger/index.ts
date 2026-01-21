@@ -283,7 +283,7 @@ export class TgLogger extends Module<ModuleShared> {
           ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`
           : undefined,
 
-        "reason" in props && props.reason ? fmt(({ n, b }) => n`${b`Reason:`} ${props.reason}`) : undefined,
+        "reason" in props && props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
 
         /// per-action specific info, like MULTI_CHAT
         ...others.map((o) => skip`${o}`),

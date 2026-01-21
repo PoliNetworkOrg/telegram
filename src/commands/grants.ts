@@ -128,16 +128,12 @@ _commandsBase.createCommand({
         startDate.setHours(hour)
         startDate.setMinutes(minutes)
         ctx.editMessageText(baseMsg(), { reply_markup: ctx.msg?.reply_markup })
-        ctx.menu.update()
         ctx.menu.nav("grants-main")
       }
 
-      const backToMain = conversation.menu("grants-back-to-main", { parent: "grants-main" }).back("◀️ Back", (ctx) =>
-        ctx.editMessageText(
-          fmt(({ skip }) => [skip`${baseMsg()}`], { sep: "\n" }),
-          { reply_markup: ctx.msg?.reply_markup }
-        )
-      )
+      const backToMain = conversation
+        .menu("grants-back-to-main", { parent: "grants-main" })
+        .back("◀️ Back", (ctx) => ctx.editMessageText(baseMsg(), { reply_markup: ctx.msg?.reply_markup }))
 
       const durationMenu = conversation
         .menu("grants-duration", { parent: "grants-main" })
@@ -162,13 +158,13 @@ _commandsBase.createCommand({
           await changeDuration(ctx, text)
         })
         .row()
-        .back("◀️ Back")
+        .back("◀️ Back", (ctx) => ctx.editMessageText(baseMsg(), { reply_markup: ctx.msg?.reply_markup }))
 
+      const convNow = new Date(await conversation.now())
       const _startTimeMenu = conversation
         .menu("grants-start-time", { parent: "grants-main" })
-        .text(
-          () => `Now: ${timeFormat.format(new Date())}`,
-          (ctx) => changeStartTime(ctx, new Date().getHours(), new Date().getMinutes())
+        .text(`Now: ${timeFormat.format(convNow)}`, (ctx) =>
+          changeStartTime(ctx, convNow.getHours(), convNow.getMinutes())
         )
         .row()
         .text("8:00", (ctx) => changeStartTime(ctx, 8, 0))
