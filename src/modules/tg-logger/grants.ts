@@ -2,6 +2,7 @@ import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
 import { type ApiOutput, api } from "@/backend"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
+import { logger } from "@/logger"
 import { modules } from ".."
 
 type GrantedMessage = {
@@ -14,11 +15,12 @@ type GrantedMessage = {
 
 async function handleInterrupt(ctx: CallbackCtx<Context>, target: User) {
   const res = await api.tg.grants.interrupt.mutate({ interruptedById: ctx.from.id, userId: target.id })
+  logger.debug({ res }, "handleInterrupt function in grants menu")
   if (!res.success) {
     return { error: res.error }
   }
 
-  await modules.get("tgLogger").grant({ action: "INTERRUPT", by: ctx.from, target: target })
+  await modules.get("tgLogger").grants({ action: "INTERRUPT", by: ctx.from, target: target })
   return { error: null }
 }
 
@@ -44,7 +46,7 @@ async function handleDelete(ctx: CallbackCtx<Context>, data: GrantedMessage): Pr
 
   const res = await modules
     .get("tgLogger")
-    .delete([data.message], "[GRANT] Manual deleted message sent by granted user", ctx.from)
+    .delete([data.message], "[GRANT] Manual deletion of message sent by granted user", ctx.from)
 
   if (!res?.count) {
     return {
@@ -79,10 +81,11 @@ export const grantMessageMenu = MenuGenerator.getInstance<Context>().create<Gran
       cb: async ({ ctx, data }) => {
         if (data.interrupted) return { feedback: "☑️ Grant already interrupted" }
         const { error } = await handleInterrupt(ctx, data.target)
-        if (!error && data.deleted) await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {})
+        const noError = !error || error === "NOT_FOUND"
+        if (noError && data.deleted) await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {})
         return {
           feedback: getFeedback(error) ?? "✅ Grant Interrupted",
-          newData: !error ? { ...data, interrupted: true } : undefined,
+          newData: noError ? { ...data, interrupted: true } : undefined,
         }
       },
     },
@@ -100,6 +103,7 @@ export const grantCreatedMenu = MenuGenerator.getInstance<Context>().create<User
       text: "🛑 Interrupt",
       cb: async ({ ctx, data }) => {
         const { error } = await handleInterrupt(ctx, data)
+        logger.info({ error }, "handleInterrupt error output in created menu")
         if (!error || error === "NOT_FOUND")
           await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {})
         return {
