@@ -81,19 +81,19 @@ export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C>
       })
   }
 
-  checkAlloggi(ctx: Filter<C, "message">): Result<void, string> {
+  private checkAlloggi(ctx: Filter<C, "message">): Result<void, string> {
     return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
-  checkRipetizioni(ctx: Filter<C, "message">): Result<void, string> {
+  private checkRipetizioni(ctx: Filter<C, "message">): Result<void, string> {
     return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
-  checkBooks(ctx: Filter<C, "message">): Result<void, string> {
+  private checkBooks(ctx: Filter<C, "message">): Result<void, string> {
     return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
-  checkHashtags(ctx: Filter<C, "message">, requiredHashtags: string[]): Result<void, string> {
+  private checkHashtags(ctx: Filter<C, "message">, requiredHashtags: string[]): Result<void, string> {
     const hashtags = ctx.entities("hashtag").map((e) => e.text.toLowerCase())
     const hasRequired = requiredHashtags.some((tag) => hashtags.includes(tag.toLowerCase()))
     if (!hasRequired) {
