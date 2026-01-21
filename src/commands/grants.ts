@@ -160,12 +160,9 @@ _commandsBase.createCommand({
         .row()
         .back("◀️ Back", (ctx) => ctx.editMessageText(baseMsg(), { reply_markup: ctx.msg?.reply_markup }))
 
-      const convNow = new Date(await conversation.now())
       const _startTimeMenu = conversation
         .menu("grants-start-time", { parent: "grants-main" })
-        .text(`Now: ${timeFormat.format(convNow)}`, (ctx) =>
-          changeStartTime(ctx, convNow.getHours(), convNow.getMinutes())
-        )
+        .text(`Now: ${timeFormat.format(today)}`, (ctx) => changeStartTime(ctx, today.getHours(), today.getMinutes()))
         .row()
         .text("8:00", (ctx) => changeStartTime(ctx, 8, 0))
         .text("9:00", (ctx) => changeStartTime(ctx, 9, 0))
