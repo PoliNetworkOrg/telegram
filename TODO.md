@@ -27,7 +27,7 @@
   - [x] check harmful messages
   - [x] check spam across different groups (mute + del)
   - [ ] exception to send our whatsapp links?
-  - [ ] do not delete Direttivo's allowed messages
+  - [x] do not delete Direttivo's allowed messages (/grant command)
   - [x] check if user has username
   - [x] group-specific moderation (eg. #cerco #vendo in polihouse) see [here](https://github.com/PoliNetworkOrg/PoliNetworkBot_CSharp/blob/03c7434f06323ffdec301cb105d1d3b2c1ed4a95/PoliNetworkBot_CSharp/Code/Bots/Moderation/Blacklist/Blacklist.cs#L84)
 - [x] role management
