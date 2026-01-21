@@ -252,9 +252,9 @@ _commandsBase.createCommand({
         .text("❌ Cancel", async (ctx) => {
           await ctx.editMessageText(fmt(({ b, skip }) => [skip`${baseMsg()}`, b`❌ Grant Cancelled`], { sep: "\n\n" }))
           ctx.menu.close()
+          await wait(5000)
+          await ctx.deleteMessage().catch(() => {})
           await conversation.halt()
-          await wait(3000)
-          await ctx.deleteMessage()
         })
 
       const msg = await context.reply(baseMsg(), { reply_markup: mainMenu })
@@ -263,7 +263,6 @@ _commandsBase.createCommand({
     } catch (err) {
       logger.error({ err }, "Error in grant command")
       await context.deleteMessage()
-      await conversation.halt()
     }
   },
 })
