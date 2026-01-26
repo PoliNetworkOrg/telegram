@@ -37,9 +37,7 @@ export class WebSocketClient extends Module<ModuleShared> {
 
   constructor() {
     super()
-    this.io = io(`http://${env.BACKEND_URL}`, { path: WS_PATH, query: { type: "telegram" } })
-  }
-  override async start() {
+    this.io = io(`http://${env.BACKEND_URL}`, { path: WS_PATH, query: { type: "telegram" }, autoConnect: false })
     this.io.on("connect", () => {
       logger.info("[WS] connected")
       this.lastErrorCode = null
@@ -60,6 +58,10 @@ export class WebSocketClient extends Module<ModuleShared> {
       logger.error({ error }, "[WS] UNKNOWN error while connecting")
     })
 
+    this.io.on("disconnect", (reason, details) => {
+      logger.info({ reason, details }, "[WS] disconnected")
+    })
+
     this.io.on("ban", async ({ chatId, userId, durationInSeconds }, cb) => {
       const error = await this.shared.api
         .banChatMember(chatId, userId, {
@@ -78,9 +80,12 @@ export class WebSocketClient extends Module<ModuleShared> {
     })
   }
 
+  override async start() {
+    this.io.connect()
+  }
+
   override async stop() {
-    this.io.close()
-    logger.info("[WS] disconnected")
+    this.io.disconnect()
   }
 
   static isSocketError(e: Error): e is SocketError {

@@ -27,8 +27,8 @@ importers:
         specifier: ^2.0.3
         version: 2.0.3(grammy@1.37.0)
       '@polinetwork/backend':
-        specifier: ^0.13.1
-        version: 0.13.1
+        specifier: ^0.15.2
+        version: 0.15.2
       '@t3-oss/env-core':
         specifier: ^0.13.4
         version: 0.13.4(arktype@2.1.20)(typescript@5.7.3)(zod@4.1.11)
@@ -425,9 +425,8 @@ packages:
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
 
-  '@polinetwork/backend@0.13.1':
-    resolution: {integrity: sha512-wx7JTxM9GAYFY4ESriJcFq4gT2DwFGW3Lqaa1R++0qI81xpxaB6Da5be2Z5TBDKmKepOD3DFmGaBJfsygZdsjA==}
-    engines: {node: '>=24.8.0', pnpm: '>=10.17.1'}
+  '@polinetwork/backend@0.15.2':
+    resolution: {integrity: sha512-R7UT727EnHdFma3EysACcXRn7RRgeKQhK5jvXgVqXU68C2hbx9TvdtD5S88W6wq0/QxiPjTplQ8m9HmSaIk+NA==}
 
   '@redis/bloom@1.2.0':
     resolution: {integrity: sha512-HG2DFjYKbpNmVXsa0keLHp/3leGJz1mjh09f2RLGGLQZzSHpkmZWuwJbAvo3QcRY8p80m5+ZdXZdYOSBLlp7Cg==}
@@ -1785,7 +1784,7 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@polinetwork/backend@0.13.1': {}
+  '@polinetwork/backend@0.15.2': {}
 
   '@redis/bloom@1.2.0(@redis/client@1.6.0)':
     dependencies:
