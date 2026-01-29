@@ -6,7 +6,7 @@ const DURATIONS = ["m", "h", "d", "w"] as const
 type DurationUnit = (typeof DURATIONS)[number]
 const durationRegex = new RegExp(`(\\d+)[${DURATIONS.join("")}]`)
 
-type Duration = {
+export type Duration = {
   raw: string
   date: Date
   timestamp_s: number

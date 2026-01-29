@@ -1,10 +1,11 @@
+import { api } from "@/backend"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
+import { toGrammyUser } from "@/utils/types"
 import { wait } from "@/utils/wait"
-
 import { _commandsBase } from "./_base"
 
 _commandsBase
@@ -25,22 +26,10 @@ _commandsBase
         return
       }
 
-      const res = await Moderation.ban({
-        ctx: context,
-        target: repliedTo.from,
-        from: context.from,
-        message: repliedTo,
-        reason: args.reason,
-      })
-
-      if (res.isErr()) {
-        const msg = await context.reply(res.error)
-        await wait(5000)
-        await msg.delete()
-        return
-      }
-
-      await context.reply(res.value)
+      const res = await Moderation.ban(repliedTo.from, context.chat, context.from, null, [repliedTo], args.reason)
+      const msg = await context.reply(res.isErr() ? res.error : "OK")
+      await wait(5000)
+      await msg.delete()
     },
   })
   .createCommand({
@@ -68,23 +57,17 @@ _commandsBase
         return
       }
 
-      const res = await Moderation.ban({
-        ctx: context,
-        target: repliedTo.from,
-        from: context.from,
-        message: repliedTo,
-        duration: args.duration,
-        reason: args.reason,
-      })
-
-      if (res.isErr()) {
-        const msg = await context.reply(res.error)
-        await wait(5000)
-        await msg.delete()
-        return
-      }
-
-      await context.reply(res.value)
+      const res = await Moderation.ban(
+        repliedTo.from,
+        context.chat,
+        context.from,
+        args.duration,
+        [repliedTo],
+        args.reason
+      )
+      const msg = await context.reply(res.isErr() ? res.error : "OK")
+      await wait(5000)
+      await msg.delete()
     },
   })
   .createCommand({
@@ -107,12 +90,18 @@ _commandsBase
         return
       }
 
-      const res = await Moderation.unban({ ctx: context, from: context.from, targetId: userId })
-      if (res.isErr()) {
-        const msg = await context.reply(res.error)
+      const { user, error } = await api.tg.users.get.query({ userId })
+      if (!user) {
+        const msg = await context.reply("Error: cannot find this user")
+        logger.error({ error }, "UNBAN: error while retrieving the user")
         await wait(5000)
         await msg.delete()
         return
       }
+
+      const res = await Moderation.unban(toGrammyUser(user), context.chat, context.from)
+      const msg = await context.reply(res.isErr() ? res.error : "OK")
+      await wait(5000)
+      await msg.delete()
     },
   })
