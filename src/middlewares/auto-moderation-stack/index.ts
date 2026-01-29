@@ -197,7 +197,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
             ctx.from,
             ctx.chat,
             ctx.me,
-            duration.zod.parse("1d"), // 1 minute
+            duration.zod.parse("1d"),
             [message],
             `Automatic moderation detected harmful content\n${reasons}`
           )
@@ -242,14 +242,20 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
     // longer messages can have more non-latin characters, but less in percentage
     if (match && (match.length - NON_LATIN.LENGTH_THR) / text.length > NON_LATIN.PERCENTAGE_THR) {
       // just delete the message and mute the user for 10 minutes
-      await Moderation.mute(
+      const res = await Moderation.mute(
         ctx.from,
         ctx.chat,
         ctx.me,
-        duration.zod.parse(NON_LATIN.MUTE_DURATION), // 1 minute
+        duration.zod.parse(NON_LATIN.MUTE_DURATION),
         [ctx.message],
         "Message contains non-latin characters"
       )
+      if (res.isErr()) {
+        logger.error(
+          { from: ctx.from, chat: ctx.chat, messageId: ctx.message.message_id },
+          "AUTOMOD: nonLatinHandler - Cannot mute"
+        )
+      }
     }
   }
 
