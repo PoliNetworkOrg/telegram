@@ -32,7 +32,7 @@ class ModerationClass {
   private constructor() {}
 
   private async checkTargetValid(p: ModerationAction): Promise<Result<void, string>> {
-    if (p.target.id === p.from.id) return err(fmt(({ b }) => b`@${p.from.username} you cannot moderate youself (smh)`))
+    if (p.target.id === p.from.id) return err(fmt(({ b }) => b`@${p.from.username} you cannot moderate yourself (smh)`))
     if (p.target.id === modules.shared.botInfo.id)
       return err(fmt(({ b }) => b`@${p.from.username} you cannot moderate the bot!`))
 
@@ -92,7 +92,7 @@ class ModerationClass {
             .keys()
             .map((chatId) =>
               modules.shared.api
-                .restrictChatMember(chatId, p.from.id, RestrictPermissions.mute, {
+                .restrictChatMember(chatId, p.target.id, RestrictPermissions.mute, {
                   until_date: p.duration.timestamp_s,
                 })
                 .catch(() => false)
