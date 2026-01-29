@@ -44,11 +44,12 @@ async function handleDelete(ctx: CallbackCtx<Context>, data: GrantedMessage): Pr
   const { roles } = await api.tg.permissions.getRoles.query({ userId: ctx.from.id })
   if (!roles?.includes("direttivo")) return { error: "UNAUTHORIZED" }
 
-  const res = await modules
+  await modules
     .get("tgLogger")
-    .delete([data.message], "[GRANT] Manual deletion of message sent by granted user", ctx.from)
+    .preDelete([data.message], "[GRANT] Manual deletion of message sent by granted user", ctx.from)
 
-  if (!res?.count) {
+  const ok = await ctx.api.deleteMessages(data.message.chat.id, [data.message.message_id]).catch(() => false)
+  if (!ok) {
     return {
       error: "CANNOT_DELETE",
     }

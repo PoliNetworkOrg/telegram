@@ -10,7 +10,7 @@ interface KickProps {
   ctx: ContextWith<"chat">
   from: User
   target: User
-  message?: Message
+  message: Message
   reason?: string
 }
 
@@ -32,7 +32,19 @@ export async function kick({ ctx, target, from, reason, message }: KickProps): P
     reason,
     type: "kick",
   })
-  return ok(
-    await modules.get("tgLogger").moderationAction({ action: "KICK", from, target, reason, message, chat: ctx.chat })
-  )
+
+  const tgLogger = modules.get("tgLogger")
+  const preDeleteRes = await tgLogger.preDelete([message], reason ?? "Kick", from)
+  await ctx.deleteMessages([message.message_id])
+
+  const res = await tgLogger.moderationAction({
+    action: "KICK",
+    from,
+    target,
+    reason,
+    preDeleteRes,
+    chat: ctx.chat,
+  })
+
+  return ok(res)
 }

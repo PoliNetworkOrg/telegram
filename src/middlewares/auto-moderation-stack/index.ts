@@ -216,7 +216,6 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
           from: ctx.me,
           chat: ctx.chat,
           target: ctx.from,
-          message,
           reason: `Message flagged for moderation: \n${reasons}`,
         })
       }
@@ -286,21 +285,26 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       similarMessages.push(ctx.message)
 
       const muteDuration = duration.zod.parse(MULTI_CHAT_SPAM.MUTE_DURATION)
+      const tgLogger = modules.get("tgLogger")
+      const preDeleteRes = await tgLogger.preDelete(similarMessages, "MultiChatSpam")
+
+      // this one delete all similar messages and mutes the sender in all involved chat for `muteDuration`
       await Promise.allSettled(
         groupMessagesByChat(similarMessages)
-          .keys()
-          .map((chatId) =>
+          .entries()
+          .flatMap(([chatId, mIds]) => [
+            ctx.api.deleteMessages(chatId, mIds),
             ctx.api.restrictChatMember(chatId, ctx.from.id, RestrictPermissions.mute, {
               until_date: muteDuration.timestamp_s,
-            })
-          )
+            }),
+          ])
       )
 
-      await modules.get("tgLogger").moderationAction({
+      await tgLogger.moderationAction({
         action: "MULTI_CHAT_SPAM",
         from: ctx.me,
         chat: ctx.chat,
-        message: ctx.message,
+        preDeleteRes: preDeleteRes,
         messages: similarMessages,
         duration: muteDuration,
         target: ctx.from,

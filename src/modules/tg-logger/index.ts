@@ -22,6 +22,17 @@ type Topics = {
   grants: number
 }
 
+const MOD_ACTION_TITLE = (props: Types.ModerationAction) =>
+  ({
+    MUTE: fmt(({ b }) => b`🤫 ${"duration" in props && props.duration ? "Temp" : "PERMA"} Mute`),
+    KICK: fmt(({ b }) => b`👢 Kick`),
+    BAN: fmt(({ b }) => b`🚫 ${"duration" in props && props.duration ? "Temp" : "PERMA"} Ban`),
+    MULTI_CHAT_SPAM: fmt(({ b }) => [b`📑 Multi Chat Spam (MuteDel)`]),
+    UNBAN: fmt(({ b }) => b`✅ Unban`),
+    UNMUTE: fmt(({ b }) => b`🎤 Unmute`),
+    SILENT: fmt(({ b }) => b`🔶 Possible Harmful Content Detection`),
+  })[props.action]
+
 export class TgLogger extends Module<ModuleShared> {
   constructor(
     private groupId: number,
@@ -94,44 +105,33 @@ export class TgLogger extends Module<ModuleShared> {
     return true
   }
 
-  async delete(
+  // NOTE: this does not delete the messages
+  async preDelete(
     messages: Message[],
     reason: string,
     deleter: User = this.shared.botInfo
-  ): Promise<Types.DeleteResult | null> {
+  ): Promise<Types.PreDeleteResult | null> {
     if (!messages.length) return null
-    const sendersMap = new Map<number, User>()
-    messages
-      .map((m) => m.from)
-      .filter((m): m is User => m !== undefined)
-      .forEach((u) => {
-        if (!sendersMap.has(u.id)) sendersMap.set(u.id, u)
-      })
-    const senders = Array.from(sendersMap.values())
-    if (!senders.length) return null
+    const sender = messages[0].from
 
     const sent = await this.log(
       this.topics.deletedMessages,
       fmt(
         ({ n, b, i, code }) => [
           b`🗑 Delete`,
-          senders.length > 1
-            ? n`${b`Senders:`} \n - ${senders.map(fmtUser).join("\n - ")}`
-            : n`${b`Sender:`} ${fmtUser(senders[0])}`,
-
+          sender ? n`${b`Sender:`} ${fmtUser(sender)}` : undefined,
           deleter.id === this.shared.botInfo.id ? i`Automatic deletion by BOT` : n`${b`Deleter:`} ${fmtUser(deleter)}`,
           n`${b`Count:`} ${code`${messages.length}`}`,
-
           reason ? n`${b`Reason:`} ${reason}` : undefined,
         ],
         { sep: "\n" }
       )
     )
+
     if (!sent) return null
 
     for (const [chatId, mIds] of groupMessagesByChat(messages)) {
       await this.forward(this.topics.deletedMessages, chatId, mIds)
-      await this.shared.api.deleteMessages(chatId, mIds)
     }
 
     return {
@@ -221,58 +221,21 @@ export class TgLogger extends Module<ModuleShared> {
   public async moderationAction(props: Types.ModerationAction): Promise<string> {
     const isAutoModeration = props.from.id === this.shared.botInfo.id
 
-    let title: string
     const others: string[] = []
-    let deleteRes: Types.DeleteResult | null = null
     const { invite_link } = await this.shared.api.getChat(props.chat.id)
 
-    const delReason = `${props.action}${"reason" in props && props.reason ? ` -- ${props.reason}` : ""}`
-    switch (props.action) {
-      case "MUTE":
-        title = fmt(({ b }) => b`🤫 ${props.duration ? "Temp" : "PERMA"} Mute`)
-        if (props.message) deleteRes = await this.delete([props.message], delReason, props.from)
-        break
-
-      case "KICK":
-        title = fmt(({ b }) => b`👢 Kick`)
-        if (props.message) deleteRes = await this.delete([props.message], delReason, props.from)
-        break
-
-      case "BAN":
-        title = fmt(({ b }) => b`🚫 ${props.duration ? "Temp" : "PERMA"} Ban`)
-        if (props.message) deleteRes = await this.delete([props.message], delReason, props.from)
-        break
-
-      case "MULTI_CHAT_SPAM": {
-        title = fmt(({ b }) => [b`📑 Multi Chat Spam (MuteDel)`])
-
-        const groupByChat = groupMessagesByChat(props.messages)
-        others.push(fmt(({ b }) => b`\nChats involved:`))
-        for (const [chatId, mIds] of groupByChat) {
-          const chat = await this.shared.api.getChat(chatId)
-          others.push(fmt(({ n, i }) => n`${fmtChat(chat, chat.invite_link)} \n${i`Messages: ${mIds.length}`}`))
-        }
-
-        deleteRes = await this.delete(props.messages, delReason, this.shared.botInfo)
-        break
+    if (props.action === "MULTI_CHAT_SPAM") {
+      const groupByChat = groupMessagesByChat(props.messages)
+      others.push(fmt(({ b }) => b`\nChats involved:`))
+      for (const [chatId, mIds] of groupByChat) {
+        const chat = await this.shared.api.getChat(chatId)
+        others.push(fmt(({ n, i }) => n`${fmtChat(chat, chat.invite_link)} \n${i`Messages: ${mIds.length}`}`))
       }
-
-      case "UNBAN":
-        title = fmt(({ b }) => b`✅ Unban`)
-        break
-
-      case "UNMUTE":
-        title = fmt(({ b }) => b`🎤 Unmute`)
-        break
-
-      case "SILENT":
-        title = fmt(({ b }) => b`🔶 Possible Harmful Content Detection`)
-        break
     }
 
     const mainMsg = fmt(
       ({ n, b, skip }) => [
-        skip`${title}`,
+        skip`${MOD_ACTION_TITLE(props)}`,
 
         n`${b`Target:`} ${fmtUser(props.target)}`,
 
@@ -291,7 +254,9 @@ export class TgLogger extends Module<ModuleShared> {
       { sep: "\n" }
     )
 
-    const reply_markup = deleteRes ? new InlineKeyboard().url("See Deleted Message", deleteRes.link) : undefined
+    const reply_markup = props.preDeleteRes
+      ? new InlineKeyboard().url("See Deleted Message", props.preDeleteRes.link)
+      : undefined
     await this.log(isAutoModeration ? this.topics.autoModeration : this.topics.adminActions, mainMsg, { reply_markup })
     return mainMsg
   }

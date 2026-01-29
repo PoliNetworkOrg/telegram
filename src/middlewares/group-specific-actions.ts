@@ -66,7 +66,11 @@ export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C>
 
         if (check.isOk()) return next()
 
-        await modules.get("tgLogger").delete([ctx.message], `User did not follow group rules:\n${check.error}`, ctx.me)
+        await modules
+          .get("tgLogger")
+          .preDelete([ctx.message], `User did not follow group rules:\n${check.error}`, ctx.me)
+        await ctx.deleteMessage()
+
         const reply = await ctx.reply(
           fmt(({ b, n }) => [b`${fmtUser(ctx.from)} you sent an invalid message`, b`Reason:`, n`${check.error}`], {
             sep: "\n",

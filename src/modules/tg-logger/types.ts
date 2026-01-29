@@ -40,7 +40,7 @@ export type ModerationAction = {
   from: User
   target: User
   chat: Chat
-  message?: Message
+  preDeleteRes?: PreDeleteResult | null
 } & (
   | {
       action: "BAN" | "MUTE"
@@ -87,7 +87,7 @@ export type GroupManagement = {
     }
 )
 
-export type DeleteResult = {
+export type PreDeleteResult = {
   count: number
   link: string
 }

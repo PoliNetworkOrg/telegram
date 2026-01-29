@@ -9,7 +9,7 @@ import type { ContextWith } from "@/utils/types"
 
 interface BanProps {
   ctx: ContextWith<"chat">
-  message?: Message
+  message: Message
   from: User
   target: User
   reason?: string
@@ -33,11 +33,22 @@ export async function ban({ ctx, target, from, reason, duration, message }: BanP
     reason,
     type: "ban",
   })
-  return ok(
-    await modules
-      .get("tgLogger")
-      .moderationAction({ action: "BAN", from, message, target, duration, reason, chat: ctx.chat })
-  )
+
+  const tgLogger = modules.get("tgLogger")
+  const preDeleteRes = await tgLogger.preDelete([message], reason ?? "Ban", from)
+  await ctx.deleteMessages([message.message_id])
+
+  const res = await tgLogger.moderationAction({
+    action: "BAN",
+    from,
+    preDeleteRes,
+    target,
+    duration,
+    reason,
+    chat: ctx.chat,
+  })
+
+  return ok(res)
 }
 
 interface UnbanProps {

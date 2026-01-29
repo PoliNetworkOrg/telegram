@@ -47,14 +47,18 @@ export async function mute({
     type: "mute",
   })
 
-  const res = await modules.get("tgLogger").moderationAction({
+  const tgLogger = modules.get("tgLogger")
+  const preDeleteRes = await tgLogger.preDelete([message], reason ?? "Mute", from)
+  await ctx.deleteMessages([message.message_id])
+
+  const res = await tgLogger.moderationAction({
     action: "MUTE",
     chat: ctx.chat,
     from,
     target,
     duration,
+    preDeleteRes,
     reason,
-    message,
   })
 
   return ok(res)

@@ -21,7 +21,10 @@ _commandsBase.createCommand({
       sender: repliedTo.from?.username,
     })
 
-    await modules.get("tgLogger").delete([repliedTo], "Command /del", context.from) // actual message to delete
-    await context.deleteMessage() // /del message
+    await modules.get("tgLogger").preDelete([repliedTo], "Command /del", context.from) // actual message to delete
+    await Promise.all([
+      context.deleteMessages([repliedTo.message_id]),
+      context.deleteMessage(), // /del message
+    ])
   },
 })
