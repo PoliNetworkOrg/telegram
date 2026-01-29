@@ -90,15 +90,15 @@ _commandsBase
       }
 
       const user = await getUser(userId)
-      if (user.isErr()) {
+      if (!user) {
         const msg = await context.reply("Error: cannot find this user")
-        logger.error({ error: user.error }, "UNBAN: error while retrieving the user")
+        logger.error({ userId }, "UNBAN: cannot retrieve the user")
         await wait(5000)
         await msg.delete()
         return
       }
 
-      const res = await Moderation.unban(user.value, context.chat, context.from)
+      const res = await Moderation.unban(user, context.chat, context.from)
       const msg = await context.reply(res.isErr() ? res.error : "OK")
       await wait(5000)
       await msg.delete()
