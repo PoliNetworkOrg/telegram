@@ -5,7 +5,7 @@ import ssdeep from "ssdeep.js"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
-import { mute } from "@/modules/moderation"
+import { Moderation } from "@/modules/moderation"
 import { redis } from "@/redis"
 import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { defer } from "@/utils/deferred-middleware"
@@ -148,7 +148,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       return
     }
 
-    await mute({
+    await Moderation.mute({
       ctx,
       from: ctx.me,
       target: ctx.from,
@@ -191,7 +191,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
             })
         } else {
           // above threshold, mute user and delete the message
-          await mute({
+          await Moderation.mute({
             ctx,
             from: ctx.me,
             target: ctx.from,
@@ -238,7 +238,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
     // longer messages can have more non-latin characters, but less in percentage
     if (match && (match.length - NON_LATIN.LENGTH_THR) / text.length > NON_LATIN.PERCENTAGE_THR) {
       // just delete the message and mute the user for 10 minutes
-      await mute({
+      await Moderation.mute({
         ctx,
         message: ctx.message,
         target: ctx.from,

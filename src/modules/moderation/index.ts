@@ -1,3 +1,11 @@
-export * from "./ban"
-export * from "./kick"
-export * from "./mute"
+import { ban, unban } from "./ban"
+import { kick } from "./kick"
+import { mute, unmute } from "./mute"
+
+export const Moderation = {
+  ban,
+  unban,
+  mute,
+  unmute,
+  kick,
+}

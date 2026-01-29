@@ -1,5 +1,5 @@
 import { logger } from "@/logger"
-import { kick } from "@/modules/moderation"
+import { Moderation } from "@/modules/moderation"
 import { wait } from "@/utils/wait"
 
 import { _commandsBase } from "./_base"
@@ -21,7 +21,7 @@ _commandsBase.createCommand({
       return
     }
 
-    const res = await kick({
+    const res = await Moderation.kick({
       ctx: context,
       target: repliedTo.from,
       from: context.from,

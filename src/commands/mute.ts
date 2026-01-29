@@ -1,5 +1,5 @@
 import { logger } from "@/logger"
-import { mute, unmute } from "@/modules/moderation"
+import { Moderation } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
@@ -33,7 +33,7 @@ _commandsBase
         return
       }
 
-      const res = await mute({
+      const res = await Moderation.mute({
         ctx: context,
         target: repliedTo.from,
         message: repliedTo,
@@ -67,7 +67,7 @@ _commandsBase
         return
       }
 
-      const res = await mute({
+      const res = await Moderation.mute({
         ctx: context,
         target: repliedTo.from,
         message: repliedTo,
@@ -103,7 +103,7 @@ _commandsBase
         return
       }
 
-      const res = await unmute({ ctx: context, from: context.from, targetId: userId })
+      const res = await Moderation.unmute({ ctx: context, from: context.from, targetId: userId })
       if (res.isErr()) {
         const msg = await context.reply(res.error)
         await wait(5000)

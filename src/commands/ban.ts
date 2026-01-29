@@ -1,5 +1,5 @@
 import { logger } from "@/logger"
-import { ban, unban } from "@/modules/moderation"
+import { Moderation } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
@@ -25,7 +25,7 @@ _commandsBase
         return
       }
 
-      const res = await ban({
+      const res = await Moderation.ban({
         ctx: context,
         target: repliedTo.from,
         from: context.from,
@@ -68,7 +68,7 @@ _commandsBase
         return
       }
 
-      const res = await ban({
+      const res = await Moderation.ban({
         ctx: context,
         target: repliedTo.from,
         from: context.from,
@@ -107,7 +107,7 @@ _commandsBase
         return
       }
 
-      const res = await unban({ ctx: context, from: context.from, targetId: userId })
+      const res = await Moderation.unban({ ctx: context, from: context.from, targetId: userId })
       if (res.isErr()) {
         const msg = await context.reply(res.error)
         await wait(5000)
