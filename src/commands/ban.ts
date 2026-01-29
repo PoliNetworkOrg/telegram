@@ -1,10 +1,9 @@
-import { api } from "@/backend"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
-import { toGrammyUser } from "@/utils/types"
+import { getUser } from "@/utils/users"
 import { wait } from "@/utils/wait"
 import { _commandsBase } from "./_base"
 
@@ -90,16 +89,16 @@ _commandsBase
         return
       }
 
-      const { user, error } = await api.tg.users.get.query({ userId })
-      if (!user) {
+      const user = await getUser(userId)
+      if (user.isErr()) {
         const msg = await context.reply("Error: cannot find this user")
-        logger.error({ error }, "UNBAN: error while retrieving the user")
+        logger.error({ error: user.error }, "UNBAN: error while retrieving the user")
         await wait(5000)
         await msg.delete()
         return
       }
 
-      const res = await Moderation.unban(toGrammyUser(user), context.chat, context.from)
+      const res = await Moderation.unban(user.value, context.chat, context.from)
       const msg = await context.reply(res.isErr() ? res.error : "OK")
       await wait(5000)
       await msg.delete()

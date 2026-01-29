@@ -4,6 +4,7 @@ import { type ApiOutput, api } from "@/backend"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
 import { modules } from ".."
+import { Moderation } from "../moderation"
 
 type GrantedMessage = {
   message: Message
@@ -44,12 +45,13 @@ async function handleDelete(ctx: CallbackCtx<Context>, data: GrantedMessage): Pr
   const { roles } = await api.tg.permissions.getRoles.query({ userId: ctx.from.id })
   if (!roles?.includes("direttivo")) return { error: "UNAUTHORIZED" }
 
-  await modules
-    .get("tgLogger")
-    .preDelete([data.message], "[GRANT] Manual deletion of message sent by granted user", ctx.from)
+  const res = await Moderation.deleteMessages(
+    [data.message],
+    ctx.from,
+    "[GRANT] Manual deletion of message sent by granted user"
+  )
 
-  const ok = await ctx.api.deleteMessages(data.message.chat.id, [data.message.message_id]).catch(() => false)
-  if (!ok) {
+  if (res.isErr()) {
     return {
       error: "CANNOT_DELETE",
     }

@@ -101,16 +101,23 @@ class ModerationClass {
     }
   }
 
-  public async deleteMessages(messages: Message[], executor: User, reason: string): Promise<PreDeleteResult | null> {
-    if (messages.length === 0) return null
+  public async deleteMessages(
+    messages: Message[],
+    executor: User,
+    reason: string
+  ): Promise<Result<PreDeleteResult | null, "DELETE_ERROR">> {
+    if (messages.length === 0) return ok(null)
     const preRes = await modules.get("tgLogger").preDelete(messages, reason, executor)
 
     for (const [chatId, mIds] of groupMessagesByChat(messages)) {
-      await modules.shared.api.deleteMessages(chatId, mIds).catch(() => false)
-      // TODO: check if delete goes wrong, delete logs
+      const res = await modules.shared.api.deleteMessages(chatId, mIds).catch(() => false)
+      if (!res) {
+        // TODO: delete preRes messages
+        return err("DELETE_ERROR")
+      }
     }
 
-    return preRes
+    return ok(preRes)
   }
 
   private async moderate(p: ModerationAction, messagesToDelete?: Message[]): Promise<Result<void, string>> {
@@ -131,7 +138,7 @@ class ModerationClass {
 
     await modules.get("tgLogger").moderationAction({
       ...p,
-      preDeleteRes,
+      preDeleteRes: preDeleteRes?.unwrapOr(null),
     })
 
     await this.audit(p)
