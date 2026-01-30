@@ -54,4 +54,14 @@ export const duration = {
       dateStr: fmtDate(date),
     }
   },
+  fromSeconds(seconds: number): Duration {
+    const date = new Date(Date.now() + seconds * 1000)
+    return {
+      raw: "custom",
+      secondsFromNow: seconds,
+      date,
+      timestamp_s: Math.floor(date.getTime() / 1000),
+      dateStr: fmtDate(date),
+    }
+  },
 } as const

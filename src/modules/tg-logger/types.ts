@@ -1,9 +1,7 @@
 import type { GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"
-import type { z } from "zod"
-import type { duration } from "@/utils/duration"
+import type { Duration } from "@/utils/duration"
 
-type Duration = z.output<typeof duration.zod>
 export type BanAllLog = {
   target: User
   from: User
@@ -36,35 +34,6 @@ export type ExceptionLog =
       error: unknown
     }
 
-export type ModerationAction = {
-  from: User
-  target: User
-  chat: Chat
-  preDeleteRes?: PreDeleteResult | null
-} & (
-  | {
-      action: "BAN" | "MUTE"
-      duration?: Duration
-      reason?: string
-    }
-  | {
-      action: "KICK"
-      reason?: string
-    }
-  | {
-      action: "UNBAN" | "UNMUTE"
-    }
-  | {
-      action: "MULTI_CHAT_SPAM"
-      duration: Duration
-      messages: Message[]
-    }
-  | {
-      action: "SILENT"
-      reason?: string
-    }
-)
-
 export type GroupManagement = {
   chat: Chat
 } & (
@@ -86,12 +55,6 @@ export type GroupManagement = {
       inviteLink?: string
     }
 )
-
-export type PreDeleteResult = {
-  count: number
-  logMessageIds: number[]
-  link: string
-}
 
 export type GrantLog = {} & (
   | {

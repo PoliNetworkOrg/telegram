@@ -7,7 +7,7 @@ import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { type Duration, duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { modules } from ".."
-import type { ModerationAction, PreDeleteResult } from "../tg-logger/types"
+import type { ModerationAction, ModerationError, ModerationErrorCode, PreDeleteResult } from "./types"
 
 function deduceModerationAction(oldMember: ChatMember, newMember: ChatMember): ModerationAction["action"] | null {
   const prev = oldMember.status
@@ -44,9 +44,6 @@ const MAP_ACTIONS: Record<
   BAN_ALL: "ban_all",
   MUTE_ALL: "mute_all",
 }
-
-type ModerationErrorCode = "CANNOT_MOD_YOURSELF" | "CANNOT_MOD_BOT" | "CANNOT_MOD_GROUPADMIN" | "PERFORM_ERROR"
-type ModerationError = { code: ModerationErrorCode; fmtError: string; strError: string }
 
 // TODO: missing in-channel user feedback (eg. <user> has been muted by <admin>...)
 class ModerationClass<C extends Context> implements MiddlewareObj<C> {

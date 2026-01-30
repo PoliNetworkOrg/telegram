@@ -6,6 +6,7 @@ import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
+import type { ModerationAction, PreDeleteResult } from "../moderation/types"
 import { type BanAll, banAllMenu, getBanAllText } from "./ban-all"
 import { grantCreatedMenu, grantMessageMenu } from "./grants"
 import { getReportText, type Report, reportMenu } from "./report"
@@ -22,7 +23,7 @@ type Topics = {
   grants: number
 }
 
-const MOD_ACTION_TITLE = (props: Types.ModerationAction) =>
+const MOD_ACTION_TITLE = (props: ModerationAction) =>
   ({
     MUTE: fmt(({ b }) => b`🤫 ${"duration" in props && props.duration ? "Temp" : "PERMA"} Mute`),
     KICK: fmt(({ b }) => b`👢 Kick`),
@@ -119,7 +120,7 @@ export class TgLogger extends Module<ModuleShared> {
     messages: Message[],
     reason: string,
     deleter: User = this.shared.botInfo
-  ): Promise<Types.PreDeleteResult | null> {
+  ): Promise<PreDeleteResult | null> {
     if (!messages.length) return null
     const sender = messages[0].from
 
@@ -236,7 +237,7 @@ export class TgLogger extends Module<ModuleShared> {
     })
   }
 
-  public async moderationAction(props: Types.ModerationAction): Promise<string> {
+  public async moderationAction(props: ModerationAction): Promise<string> {
     const isAutoModeration = props.from.id === this.shared.botInfo.id
 
     const others: string[] = []
