@@ -1,6 +1,7 @@
 import type { Chat, Message, User } from "grammy/types"
 import { err, ok, type Result } from "neverthrow"
 import { type ApiInput, api } from "@/backend"
+import { logger } from "@/logger"
 import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { type Duration, duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
@@ -20,6 +21,9 @@ const MAP_ACTIONS: Record<
   MUTE_ALL: "mute_all",
 }
 
+type ModerationErrorCode = "CANNOT_MOD_YOURSELF" | "CANNOT_MOD_BOT" | "CANNOT_MOD_GROUPADMIN" | "PERFORM_ERROR"
+type ModerationError = { code: ModerationErrorCode; fmtError: string; strError: string }
+
 class ModerationClass {
   private static instance: ModerationClass | null = null
   static getInstance(): ModerationClass {
@@ -31,16 +35,44 @@ class ModerationClass {
 
   private constructor() {}
 
-  private async checkTargetValid(p: ModerationAction): Promise<Result<void, string>> {
-    if (p.target.id === p.from.id) return err(fmt(({ b }) => b`@${p.from.username} you cannot moderate yourself (smh)`))
-    if (p.target.id === modules.shared.botInfo.id)
-      return err(fmt(({ b }) => b`@${p.from.username} you cannot moderate the bot!`))
+  private getModerationError(p: ModerationAction, code: ModerationErrorCode): ModerationError {
+    // biome-ignore lint/nursery/noUnnecessaryConditions: lying
+    switch (code) {
+      case "CANNOT_MOD_BOT":
+        return {
+          code,
+          fmtError: fmt(({ b }) => b`@${p.from.username} you cannot moderate the bot!`),
+          strError: "You cannot moderate the bot",
+        }
+      case "CANNOT_MOD_YOURSELF":
+        return {
+          code,
+          fmtError: fmt(({ b }) => b`@${p.from.username} you cannot moderate yourself (smh)`),
+          strError: "You cannot moderate yourself",
+        }
+      case "CANNOT_MOD_GROUPADMIN":
+        return {
+          code,
+          fmtError: fmt(
+            ({ b }) => b`@${p.from.username} the user ${fmtUser(p.target)} is a group admin and cannot be moderated`
+          ),
+          strError: "You cannot moderate a group admin",
+        }
+      case "PERFORM_ERROR":
+        return {
+          code,
+          fmtError: fmt(() => "TG: Cannot perform the moderation action"),
+          strError: "There was an error perfoming the moderation action",
+        }
+    }
+  }
+
+  private async checkTargetValid(p: ModerationAction): Promise<Result<void, ModerationErrorCode>> {
+    if (p.target.id === p.from.id) return err("CANNOT_MOD_YOURSELF")
+    if (p.target.id === modules.shared.botInfo.id) return err("CANNOT_MOD_BOT")
 
     const chatMember = await modules.shared.api.getChatMember(p.chat.id, p.target.id).catch(() => null)
-    if (chatMember?.status === "administrator" || chatMember?.status === "creator")
-      return err(
-        fmt(({ b }) => b`@${p.from.username} the user ${fmtUser(p.target)} is a group admin and cannot be moderated`)
-      )
+    if (chatMember?.status === "administrator" || chatMember?.status === "creator") return err("CANNOT_MOD_GROUPADMIN")
 
     return ok()
   }
@@ -105,24 +137,45 @@ class ModerationClass {
     messages: Message[],
     executor: User,
     reason: string
-  ): Promise<Result<PreDeleteResult | null, "DELETE_ERROR">> {
+  ): Promise<Result<PreDeleteResult | null, "DELETE_ERROR" | "NOT_FOUND">> {
     if (messages.length === 0) return ok(null)
-    const preRes = await modules.get("tgLogger").preDelete(messages, reason, executor)
 
+    const preRes = await modules.get("tgLogger").preDelete(messages, reason, executor)
+    if (preRes === null || preRes.count === 0) return err("NOT_FOUND")
+
+    let delCount = 0
     for (const [chatId, mIds] of groupMessagesByChat(messages)) {
-      const res = await modules.shared.api.deleteMessages(chatId, mIds).catch(() => false)
-      if (!res) {
-        // TODO: delete preRes messages
-        return err("DELETE_ERROR")
-      }
+      const ok = await modules.shared.api.deleteMessages(chatId, mIds).catch(() => false)
+      if (ok) delCount += mIds.length
+    }
+
+    if (delCount === 0) {
+      logger.error(
+        { initialMessages: messages, executor, forwaredCount: preRes.count, deletedCount: 0 },
+        "[Moderation:deleteMessages] no message(s) could be deleted"
+      )
+      return err("DELETE_ERROR")
+    }
+
+    if (delCount / preRes.count < 0.2) {
+      logger.warn(
+        {
+          initialMessages: messages,
+          executor,
+          forwaredCount: preRes.count,
+          deletedCount: delCount,
+          deletedPercentage: (delCount / preRes.count).toFixed(3),
+        },
+        "[Moderation:deleteMessages] delete count is much lower than forwarded count"
+      )
     }
 
     return ok(preRes)
   }
 
-  private async moderate(p: ModerationAction, messagesToDelete?: Message[]): Promise<Result<void, string>> {
+  private async moderate(p: ModerationAction, messagesToDelete?: Message[]): Promise<Result<void, ModerationError>> {
     const check = await this.checkTargetValid(p)
-    if (check.isErr()) return check
+    if (check.isErr()) return err(this.getModerationError(p, check.error))
 
     const preDeleteRes =
       messagesToDelete !== undefined
@@ -134,7 +187,7 @@ class ModerationClass {
         : null
 
     const performOk = await this.perform(p)
-    if (!performOk) return err("TG: Cannot perform the moderation action") // TODO: make the perform output a Result
+    if (!performOk) return err(this.getModerationError(p, "PERFORM_ERROR")) // TODO: make the perform output a Result
 
     await modules.get("tgLogger").moderationAction({
       ...p,
@@ -152,14 +205,14 @@ class ModerationClass {
     duration: Duration | null,
     messagesToDelete?: Message[],
     reason?: string
-  ): Promise<Result<void, string>> {
+  ): Promise<Result<void, ModerationError>> {
     return await this.moderate(
       { action: "BAN", from: moderator, target, chat, duration: duration ?? undefined, reason },
       messagesToDelete
     )
   }
 
-  public async unban(target: User, chat: Chat, moderator: User): Promise<Result<void, string>> {
+  public async unban(target: User, chat: Chat, moderator: User): Promise<Result<void, ModerationError>> {
     return await this.moderate({ action: "UNBAN", from: moderator, target, chat })
   }
 
@@ -170,14 +223,14 @@ class ModerationClass {
     duration: Duration | null,
     messagesToDelete?: Message[],
     reason?: string
-  ): Promise<Result<void, string>> {
+  ): Promise<Result<void, ModerationError>> {
     return await this.moderate(
       { action: "MUTE", from: moderator, target, chat, duration: duration ?? undefined, reason },
       messagesToDelete
     )
   }
 
-  public async unmute(target: User, chat: Chat, moderator: User): Promise<Result<void, string>> {
+  public async unmute(target: User, chat: Chat, moderator: User): Promise<Result<void, ModerationError>> {
     return await this.moderate({ action: "UNMUTE", from: moderator, target, chat })
   }
 
@@ -187,12 +240,17 @@ class ModerationClass {
     moderator: User,
     messagesToDelete?: Message[],
     reason?: string
-  ): Promise<Result<void, string>> {
+  ): Promise<Result<void, ModerationError>> {
     return await this.moderate({ action: "KICK", from: moderator, target, chat, reason }, messagesToDelete)
   }
 
-  public async multiChatSpam(target: User, messagesToDelete: Message[], duration: Duration) {
-    if (messagesToDelete.length === 0) return err("Sei stupido")
+  public async multiChatSpam(
+    target: User,
+    messagesToDelete: Message[],
+    duration: Duration
+  ): Promise<Result<void, ModerationError>> {
+    if (messagesToDelete.length === 0)
+      throw new Error("[Moderation:multiChatSpam] passed an empty messagesToDelete array")
 
     return await this.moderate(
       {

@@ -62,29 +62,37 @@ export class TgLogger extends Module<ModuleShared> {
       })
   }
 
-  private async forward(topicId: number, chatId: number, messageIds: number[]): Promise<void> {
-    await this.shared.api
-      .forwardMessages(this.groupId, chatId, messageIds, {
+  private async forward(topicId: number, chatId: number, messageIds: number[]): Promise<number[]> {
+    if (messageIds.length === 0) return []
+
+    try {
+      const res = await this.shared.api.forwardMessages(this.groupId, chatId, messageIds, {
         message_thread_id: topicId,
         disable_notification: true,
       })
-      .catch(async (e: unknown) => {
-        if (e instanceof GrammyError) {
-          if (e.description === "Bad Request: message to forward not found") {
-            await this.log(
-              topicId,
-              fmt(({ b, i }) => [b`Could not forward the message`, i`It probably was deleted before forwarding`], {
-                sep: "\n",
-              })
-            )
-          } else {
-            await this.exception({ type: "BOT_ERROR", error: e }, "TgLogger.forward")
-            logger.error({ e }, "[TgLogger:forward] There was an error while trying to forward a message")
-          }
-        } else if (e instanceof Error) {
-          await this.exception({ type: "GENERIC", error: e }, "TgLogger.forward")
+      return res.map((r) => r.message_id)
+    } catch (e) {
+      if (e instanceof GrammyError) {
+        if (
+          e.description.includes("message to forward not found") ||
+          e.description.includes("there are no messages to forward")
+        ) {
+          logger.warn({ e }, "[TgLogger:forward] Message(s) to forward not found")
+          // await this.log(
+          //   topicId,
+          //   fmt(({ b, i }) => [b`Could not forward the message`, i`It probably was deleted before forwarding`], {
+          //     sep: "\n",
+          //   })
+          // )
+        } else {
+          await this.exception({ type: "BOT_ERROR", error: e }, "TgLogger.forward")
+          logger.error({ e }, "[TgLogger:forward] There was an error while trying to forward a message")
         }
-      })
+      } else if (e instanceof Error) {
+        await this.exception({ type: "GENERIC", error: e }, "TgLogger.forward")
+      }
+    }
+    return []
   }
 
   public async report(message: Message, reporter: User): Promise<boolean> {
@@ -106,6 +114,7 @@ export class TgLogger extends Module<ModuleShared> {
   }
 
   // NOTE: this does not delete the messages
+  // TODO: better return type
   async preDelete(
     messages: Message[],
     reason: string,
@@ -127,15 +136,23 @@ export class TgLogger extends Module<ModuleShared> {
         { sep: "\n" }
       )
     )
-
     if (!sent) return null
 
+    const forwardedIds: number[] = []
     for (const [chatId, mIds] of groupMessagesByChat(messages)) {
-      await this.forward(this.topics.deletedMessages, chatId, mIds)
+      if (mIds.length === 0) continue
+      forwardedIds.push(...(await this.forward(this.topics.deletedMessages, chatId, mIds)))
+    }
+
+    logger.debug({ forwardedIds }, "preDel")
+
+    if (forwardedIds.length === 0) {
+      void this.shared.api.deleteMessage(this.groupId, sent.message_id).catch(() => {})
+      return null
     }
 
     return {
-      count: messages.length,
+      count: forwardedIds.length,
       link: `https://t.me/c/${stripChatId(this.groupId)}/${this.topics.deletedMessages}/${sent.message_id}`,
     }
   }

@@ -25,7 +25,7 @@ async function handleInterrupt(ctx: CallbackCtx<Context>, target: User) {
   return { error: null }
 }
 
-type Error = ApiOutput["tg"]["grants"]["interrupt"]["error"] | "CANNOT_DELETE" | null
+type Error = ApiOutput["tg"]["grants"]["interrupt"]["error"] | "DELETE_ERROR" | "DELETE_NOT_FOUND" | null
 const getFeedback = (error: Error): string | null => {
   switch (error) {
     case null:
@@ -36,8 +36,10 @@ const getFeedback = (error: Error): string | null => {
       return "❌ You don't have enough permissions"
     case "INTERNAL_SERVER_ERROR":
       return "⁉️ Backend error, please check logs"
-    case "CANNOT_DELETE":
-      return "⁉️ Cannot delete, maybe message already deleted"
+    case "DELETE_NOT_FOUND":
+      return "☑️ Message already deleted or is unreachable"
+    case "DELETE_ERROR":
+      return "⁉️ Cannot delete message, please check logs"
   }
 }
 
@@ -53,7 +55,7 @@ async function handleDelete(ctx: CallbackCtx<Context>, data: GrantedMessage): Pr
 
   if (res.isErr()) {
     return {
-      error: "CANNOT_DELETE",
+      error: res.error === "NOT_FOUND" ? "DELETE_NOT_FOUND" : "DELETE_ERROR",
     }
   }
 

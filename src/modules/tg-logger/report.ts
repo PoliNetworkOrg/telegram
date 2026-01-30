@@ -81,7 +81,15 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "🗑 Del",
       cb: async ({ data, ctx }) => {
-        await Moderation.deleteMessages([data.message], ctx.from, "[REPORT] resolved with delete")
+        const res = await Moderation.deleteMessages([data.message], ctx.from, "[REPORT] resolved with delete")
+        if (res.isErr())
+          return {
+            feedback:
+              res.error === "DELETE_ERROR"
+                ? "❌ There was an error deleting the message(s)"
+                : "☑️ Message(s) already deleted or unreachable",
+          }
+
         await editReportMessage(data, ctx, "🗑 Delete")
         return null
       },
@@ -91,13 +99,18 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "👢 Kick",
       cb: async ({ data, ctx }) => {
-        await Moderation.kick(
+        const res = await Moderation.kick(
           data.message.from,
           data.message.chat,
           ctx.from,
           [data.message],
           "[REPORT] resolved with kick"
         )
+        if (res.isErr())
+          return {
+            feedback: `❌ ${res.error.strError}`,
+          }
+
         await editReportMessage(data, ctx, "👢 Kick")
         return null
       },
@@ -105,7 +118,7 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "🚫 Ban",
       cb: async ({ data, ctx }) => {
-        await Moderation.ban(
+        const res = await Moderation.ban(
           data.message.from,
           data.message.chat,
           ctx.from,
@@ -113,6 +126,11 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
           [data.message],
           "[REPORT] resolved with ban"
         )
+        if (res.isErr())
+          return {
+            feedback: `❌ ${res.error.strError}`,
+          }
+
         await editReportMessage(data, ctx, "🚫 Ban")
         return null
       },

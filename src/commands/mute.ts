@@ -41,7 +41,7 @@ _commandsBase
         [repliedTo],
         args.reason
       )
-      const msg = await context.reply(res.isErr() ? res.error : "OK")
+      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
       await wait(5000)
       await msg.delete()
     },
@@ -64,7 +64,7 @@ _commandsBase
       }
 
       const res = await Moderation.mute(repliedTo.from, context.chat, context.from, null, [repliedTo], args.reason)
-      const msg = await context.reply(res.isErr() ? res.error : "OK")
+      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
       await wait(5000)
       await msg.delete()
     },
@@ -99,7 +99,7 @@ _commandsBase
       }
 
       const res = await Moderation.unmute(user, context.chat, context.from)
-      const msg = await context.reply(res.isErr() ? res.error : "OK")
+      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
       await wait(5000)
       await msg.delete()
     },

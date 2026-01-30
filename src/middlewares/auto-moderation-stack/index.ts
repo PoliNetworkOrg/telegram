@@ -163,7 +163,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
             "The link you shared is not allowed.",
             "Please refrain from sharing links that could be considered spam",
           ])
-        : res.error
+        : res.error.fmtError
     )
     await wait(5000)
     await msg.delete()
@@ -208,7 +208,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
                   b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
                   i`If you think this is a mistake, please contact the group administrators.`,
                 ])
-              : res.error
+              : res.error.fmtError
           )
           await wait(5000)
           await msg.delete()
