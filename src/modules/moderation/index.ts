@@ -63,7 +63,7 @@ class ModerationClass {
         return {
           code,
           fmtError: fmt(() => "TG: Cannot perform the moderation action"),
-          strError: "There was an error perfoming the moderation action",
+          strError: "There was an error performing the moderation action",
         }
     }
   }
