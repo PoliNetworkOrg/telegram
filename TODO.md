@@ -20,7 +20,7 @@
   - [x] /report to allow user to report (@admin is not implemented)
   - [x] track ban, mute and kick done via telegram UI (not by command)
 - [ ] controlled moderation flow (see #42)
-  - [ ] audit log (implemented, need to audit every mod action)
+  - [x] audit log (implemented, need to audit every mod action)
   - [ ] send in-chat action log (deprived of chat ids and stuff)
 - [x] automatic moderation
   - [x] delete non-latin alphabet characters 
