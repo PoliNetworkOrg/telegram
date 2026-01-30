@@ -89,6 +89,7 @@ export type GroupManagement = {
 
 export type PreDeleteResult = {
   count: number
+  logMessageIds: number[]
   link: string
 }
 

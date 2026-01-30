@@ -141,7 +141,8 @@ class ModerationClass {
   ): Promise<Result<PreDeleteResult | null, "DELETE_ERROR" | "NOT_FOUND">> {
     if (messages.length === 0) return ok(null)
 
-    const preRes = await modules.get("tgLogger").preDelete(messages, reason, executor)
+    const tgLogger = modules.get("tgLogger")
+    const preRes = await tgLogger.preDelete(messages, reason, executor)
     if (preRes === null || preRes.count === 0) return err("NOT_FOUND")
 
     let delCount = 0
@@ -155,6 +156,7 @@ class ModerationClass {
         { initialMessages: messages, executor, forwaredCount: preRes.count, deletedCount: 0 },
         "[Moderation:deleteMessages] no message(s) could be deleted"
       )
+      void modules.shared.api.deleteMessages(tgLogger.groupId, preRes.logMessageIds)
       return err("DELETE_ERROR")
     }
 

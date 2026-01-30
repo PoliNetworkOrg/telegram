@@ -35,7 +35,7 @@ const MOD_ACTION_TITLE = (props: Types.ModerationAction) =>
 
 export class TgLogger extends Module<ModuleShared> {
   constructor(
-    private groupId: number,
+    public readonly groupId: number,
     private topics: Topics
   ) {
     super()
@@ -152,6 +152,7 @@ export class TgLogger extends Module<ModuleShared> {
     }
 
     return {
+      logMessageIds: [sent.message_id, ...forwardedIds],
       count: forwardedIds.length,
       link: `https://t.me/c/${stripChatId(this.groupId)}/${this.topics.deletedMessages}/${sent.message_id}`,
     }
