@@ -4,6 +4,7 @@ import type { User } from "grammy/types"
 import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
 import { padChatId } from "@/utils/chat"
+import { toGrammyUser } from "@/utils/types"
 
 export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
 type DBUsers = ApiInput["tg"]["users"]["add"]["users"]
@@ -78,6 +79,22 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
 
     logger.debug(`memoryStorage: ${this.memoryStorage.length} messages written to the database`)
     this.memoryStorage = []
+  }
+
+  public async getStoredUser(userId: number): Promise<User | null> {
+    const fromMemory = this.userStorage.get(userId)
+    if (fromMemory) return fromMemory
+
+    try {
+      const fromBackend = await api.tg.users.get.query({ userId })
+      if (fromBackend.user) return toGrammyUser(fromBackend.user)
+
+      if (fromBackend.error !== "NOT_FOUND")
+        logger.error({ error: fromBackend.error }, "userStorage: error from API while retrieving user from backend")
+    } catch (error) {
+      logger.error({ error }, "userStorage: error while calling API for retrieving user from backend")
+    }
+    return null
   }
 
   private async syncUsers(): Promise<void> {

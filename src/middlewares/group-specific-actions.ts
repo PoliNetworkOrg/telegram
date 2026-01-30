@@ -2,7 +2,7 @@ import { Composer, type Filter, type MiddlewareObj } from "grammy"
 import { err, ok, type Result } from "neverthrow"
 import { api } from "@/backend"
 import { logger } from "@/logger"
-import { modules } from "@/modules"
+import { Moderation } from "@/modules/moderation"
 import { fmt, fmtUser } from "@/utils/format"
 import type { Context } from "@/utils/types"
 import { wait } from "@/utils/wait"
@@ -66,7 +66,16 @@ export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C>
 
         if (check.isOk()) return next()
 
-        await modules.get("tgLogger").delete([ctx.message], `User did not follow group rules:\n${check.error}`, ctx.me)
+        const res = await Moderation.deleteMessages(
+          [ctx.message],
+          ctx.me,
+          `User did not follow group rules:\n${check.error}`
+        )
+
+        if (res.isErr()) {
+          logger.error({ error: res.error }, "Failed to delete message in GroupSpecificActions middleware")
+        }
+
         const reply = await ctx.reply(
           fmt(({ b, n }) => [b`${fmtUser(ctx.from)} you sent an invalid message`, b`Reason:`, n`${check.error}`], {
             sep: "\n",

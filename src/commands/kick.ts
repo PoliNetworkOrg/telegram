@@ -1,5 +1,5 @@
 import { logger } from "@/logger"
-import { kick } from "@/modules/moderation"
+import { Moderation } from "@/modules/moderation"
 import { wait } from "@/utils/wait"
 
 import { _commandsBase } from "./_base"
@@ -21,20 +21,9 @@ _commandsBase.createCommand({
       return
     }
 
-    const res = await kick({
-      ctx: context,
-      target: repliedTo.from,
-      from: context.from,
-      message: repliedTo,
-      reason: args.reason,
-    })
-    if (res.isErr()) {
-      const msg = await context.reply(res.error)
-      await wait(5000)
-      await msg.delete()
-      return
-    }
-
-    await context.reply(res.value)
+    const res = await Moderation.kick(repliedTo.from, context.chat, context.from, [repliedTo], args.reason)
+    const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
+    await wait(5000)
+    await msg.delete()
   },
 })

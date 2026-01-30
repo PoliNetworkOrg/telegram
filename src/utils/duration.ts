@@ -6,7 +6,7 @@ const DURATIONS = ["m", "h", "d", "w"] as const
 type DurationUnit = (typeof DURATIONS)[number]
 const durationRegex = new RegExp(`(\\d+)[${DURATIONS.join("")}]`)
 
-type Duration = {
+export type Duration = {
   raw: string
   date: Date
   timestamp_s: number
@@ -51,6 +51,16 @@ export const duration = {
       secondsFromNow: seconds,
       date,
       timestamp_s: until_date,
+      dateStr: fmtDate(date),
+    }
+  },
+  fromSeconds(seconds: number): Duration {
+    const date = new Date(Date.now() + seconds * 1000)
+    return {
+      raw: "custom",
+      secondsFromNow: seconds,
+      date,
+      timestamp_s: Math.floor(date.getTime() / 1000),
       dateStr: fmtDate(date),
     }
   },

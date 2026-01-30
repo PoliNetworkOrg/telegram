@@ -1,9 +1,9 @@
 import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
-import { duration } from "@/utils/duration"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import { modules } from ".."
+import { Moderation } from "../moderation"
 
 export type Report = {
   message: Message & { from: User }
@@ -81,7 +81,15 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "🗑 Del",
       cb: async ({ data, ctx }) => {
-        await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
+        const res = await Moderation.deleteMessages([data.message], ctx.from, "[REPORT] resolved with delete")
+        if (res.isErr())
+          return {
+            feedback:
+              res.error === "DELETE_ERROR"
+                ? "❌ There was an error deleting the message(s)"
+                : "☑️ Message(s) already deleted or unreachable",
+          }
+
         await editReportMessage(data, ctx, "🗑 Delete")
         return null
       },
@@ -91,11 +99,18 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "👢 Kick",
       cb: async ({ data, ctx }) => {
-        await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
-        await ctx.api.banChatMember(data.message.chat.id, data.message.from.id, {
-          // kick = ban for 1 minute, kick is not a thing in Telegram
-          until_date: Math.floor(Date.now() / 1000) + duration.values.m,
-        })
+        const res = await Moderation.kick(
+          data.message.from,
+          data.message.chat,
+          ctx.from,
+          [data.message],
+          "[REPORT] resolved with kick"
+        )
+        if (res.isErr())
+          return {
+            feedback: `❌ ${res.error.strError}`,
+          }
+
         await editReportMessage(data, ctx, "👢 Kick")
         return null
       },
@@ -103,8 +118,19 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "🚫 Ban",
       cb: async ({ data, ctx }) => {
-        await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id)
-        await ctx.api.banChatMember(data.message.chat.id, data.message.from.id)
+        const res = await Moderation.ban(
+          data.message.from,
+          data.message.chat,
+          ctx.from,
+          null,
+          [data.message],
+          "[REPORT] resolved with ban"
+        )
+        if (res.isErr())
+          return {
+            feedback: `❌ ${res.error.strError}`,
+          }
+
         await editReportMessage(data, ctx, "🚫 Ban")
         return null
       },

@@ -1,10 +1,11 @@
 import { logger } from "@/logger"
-import { mute, unmute } from "@/modules/moderation"
+import { Moderation } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
+import { numberOrString } from "@/utils/types"
+import { getUser } from "@/utils/users"
 import { wait } from "@/utils/wait"
-
 import { _commandsBase } from "./_base"
 
 _commandsBase
@@ -33,21 +34,17 @@ _commandsBase
         return
       }
 
-      const res = await mute({
-        ctx: context,
-        target: repliedTo.from,
-        message: repliedTo,
-        from: context.from,
-        duration: args.duration,
-        reason: args.reason,
-      })
-
-      if (res.isErr()) {
-        const msg = await context.reply(res.error)
-        await wait(5000)
-        await msg.delete()
-        return
-      }
+      const res = await Moderation.mute(
+        repliedTo.from,
+        context.chat,
+        context.from,
+        args.duration,
+        [repliedTo],
+        args.reason
+      )
+      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
+      await wait(5000)
+      await msg.delete()
     },
   })
   .createCommand({
@@ -67,25 +64,15 @@ _commandsBase
         return
       }
 
-      const res = await mute({
-        ctx: context,
-        target: repliedTo.from,
-        message: repliedTo,
-        from: context.from,
-        reason: args.reason,
-      })
-
-      if (res.isErr()) {
-        const msg = await context.reply(res.error)
-        await wait(5000)
-        await msg.delete()
-        return
-      }
+      const res = await Moderation.mute(repliedTo.from, context.chat, context.from, null, [repliedTo], args.reason)
+      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
+      await wait(5000)
+      await msg.delete()
     },
   })
   .createCommand({
     trigger: "unmute",
-    args: [{ key: "username", optional: false, description: "Username (or user id) to unmute" }],
+    args: [{ key: "username", type: numberOrString, description: "Username (or user id) to unmute" }],
     description: "Unmute a user from a group",
     scope: "group",
     permissions: {
@@ -94,7 +81,8 @@ _commandsBase
     },
     handler: async ({ args, context }) => {
       await context.deleteMessage()
-      const userId = args.username.startsWith("@") ? await getTelegramId(args.username) : parseInt(args.username, 10)
+      const userId: number | null =
+        typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
       if (!userId) {
         logger.debug(`unmute: no userId for username ${args.username}`)
         const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
@@ -103,12 +91,18 @@ _commandsBase
         return
       }
 
-      const res = await unmute({ ctx: context, from: context.from, targetId: userId })
-      if (res.isErr()) {
-        const msg = await context.reply(res.error)
+      const user = await getUser(userId, context)
+      if (!user) {
+        const msg = await context.reply("Error: cannot find this user")
+        logger.error({ userId }, "UNMUTE: cannot retrieve the user")
         await wait(5000)
         await msg.delete()
         return
       }
+
+      const res = await Moderation.unmute(user, context.chat, context.from)
+      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
+      await wait(5000)
+      await msg.delete()
     },
   })

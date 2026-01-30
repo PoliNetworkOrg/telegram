@@ -4,6 +4,7 @@ import { type ApiOutput, api } from "@/backend"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
 import { modules } from ".."
+import { Moderation } from "../moderation"
 
 type GrantedMessage = {
   message: Message
@@ -24,7 +25,7 @@ async function handleInterrupt(ctx: CallbackCtx<Context>, target: User) {
   return { error: null }
 }
 
-type Error = ApiOutput["tg"]["grants"]["interrupt"]["error"] | "CANNOT_DELETE" | null
+type Error = ApiOutput["tg"]["grants"]["interrupt"]["error"] | "DELETE_ERROR" | "DELETE_NOT_FOUND" | null
 const getFeedback = (error: Error): string | null => {
   switch (error) {
     case null:
@@ -35,8 +36,10 @@ const getFeedback = (error: Error): string | null => {
       return "❌ You don't have enough permissions"
     case "INTERNAL_SERVER_ERROR":
       return "⁉️ Backend error, please check logs"
-    case "CANNOT_DELETE":
-      return "⁉️ Cannot delete, maybe message already deleted"
+    case "DELETE_NOT_FOUND":
+      return "☑️ Message already deleted or is unreachable"
+    case "DELETE_ERROR":
+      return "⁉️ Cannot delete message, please check logs"
   }
 }
 
@@ -44,13 +47,15 @@ async function handleDelete(ctx: CallbackCtx<Context>, data: GrantedMessage): Pr
   const { roles } = await api.tg.permissions.getRoles.query({ userId: ctx.from.id })
   if (!roles?.includes("direttivo")) return { error: "UNAUTHORIZED" }
 
-  const res = await modules
-    .get("tgLogger")
-    .delete([data.message], "[GRANT] Manual deletion of message sent by granted user", ctx.from)
+  const res = await Moderation.deleteMessages(
+    [data.message],
+    ctx.from,
+    "[GRANT] Manual deletion of message sent by granted user"
+  )
 
-  if (!res?.count) {
+  if (res.isErr()) {
     return {
-      error: "CANNOT_DELETE",
+      error: res.error === "NOT_FOUND" ? "DELETE_NOT_FOUND" : "DELETE_ERROR",
     }
   }
 

@@ -5,9 +5,8 @@ import ssdeep from "ssdeep.js"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
-import { mute } from "@/modules/moderation"
+import { Moderation } from "@/modules/moderation"
 import { redis } from "@/redis"
-import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
@@ -148,20 +147,23 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       return
     }
 
-    await mute({
-      ctx,
-      from: ctx.me,
-      target: ctx.from,
-      reason: "Shared link not allowed",
-      duration: duration.zod.parse("1m"), // 1 minute
-      message,
-    })
+    const res = await Moderation.mute(
+      ctx.from,
+      ctx.chat,
+      ctx.me,
+      duration.zod.parse("1m"), // 1 minute
+      [message],
+      "Shared link not allowed"
+    )
+
     const msg = await ctx.reply(
-      fmt(({ b }) => [
-        b`${fmtUser(ctx.from)}`,
-        "The link you shared is not allowed.",
-        "Please refrain from sharing links that could be considered spam",
-      ])
+      res.isOk()
+        ? fmt(({ b }) => [
+            b`${fmtUser(ctx.from)}`,
+            "The link you shared is not allowed.",
+            "Please refrain from sharing links that could be considered spam",
+          ])
+        : res.error.fmtError
     )
     await wait(5000)
     await msg.delete()
@@ -191,20 +193,22 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
             })
         } else {
           // above threshold, mute user and delete the message
-          await mute({
-            ctx,
-            from: ctx.me,
-            target: ctx.from,
-            reason: `Automatic moderation detected harmful content\n${reasons}`,
-            duration: duration.zod.parse("1d"), // 1 day
-            message,
-          })
+          const res = await Moderation.mute(
+            ctx.from,
+            ctx.chat,
+            ctx.me,
+            duration.zod.parse("1d"),
+            [message],
+            `Automatic moderation detected harmful content\n${reasons}`
+          )
 
           const msg = await ctx.reply(
-            fmt(({ i, b }) => [
-              b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
-              i`If you think this is a mistake, please contact the group administrators.`,
-            ])
+            res.isOk()
+              ? fmt(({ i, b }) => [
+                  b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
+                  i`If you think this is a mistake, please contact the group administrators.`,
+                ])
+              : res.error.fmtError
           )
           await wait(5000)
           await msg.delete()
@@ -216,7 +220,6 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
           from: ctx.me,
           chat: ctx.chat,
           target: ctx.from,
-          message,
           reason: `Message flagged for moderation: \n${reasons}`,
         })
       }
@@ -239,14 +242,20 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
     // longer messages can have more non-latin characters, but less in percentage
     if (match && (match.length - NON_LATIN.LENGTH_THR) / text.length > NON_LATIN.PERCENTAGE_THR) {
       // just delete the message and mute the user for 10 minutes
-      await mute({
-        ctx,
-        message: ctx.message,
-        target: ctx.from,
-        reason: "Message contains non-latin characters",
-        duration: duration.zod.parse(NON_LATIN.MUTE_DURATION),
-        from: ctx.me,
-      })
+      const res = await Moderation.mute(
+        ctx.from,
+        ctx.chat,
+        ctx.me,
+        duration.zod.parse(NON_LATIN.MUTE_DURATION),
+        [ctx.message],
+        "Message contains non-latin characters"
+      )
+      if (res.isErr()) {
+        logger.error(
+          { from: ctx.from, chat: ctx.chat, messageId: ctx.message.message_id },
+          "AUTOMOD: nonLatinHandler - Cannot mute"
+        )
+      }
     }
   }
 
@@ -286,25 +295,12 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       similarMessages.push(ctx.message)
 
       const muteDuration = duration.zod.parse(MULTI_CHAT_SPAM.MUTE_DURATION)
-      await Promise.allSettled(
-        groupMessagesByChat(similarMessages)
-          .keys()
-          .map((chatId) =>
-            ctx.api.restrictChatMember(chatId, ctx.from.id, RestrictPermissions.mute, {
-              until_date: muteDuration.timestamp_s,
-            })
-          )
-      )
 
-      await modules.get("tgLogger").moderationAction({
-        action: "MULTI_CHAT_SPAM",
-        from: ctx.me,
-        chat: ctx.chat,
-        message: ctx.message,
-        messages: similarMessages,
-        duration: muteDuration,
-        target: ctx.from,
-      })
+      const res = await Moderation.multiChatSpam(ctx.from, similarMessages, muteDuration)
+
+      if (res.isErr()) {
+        logger.error({ error: res.error }, "Cannot execute moderation action for MULTI_CHAT_SPAM")
+      }
     }
   }
 
