@@ -1,4 +1,5 @@
-import type { Chat, Message, User } from "grammy/types"
+import { Composer, type Context, type MiddlewareObj } from "grammy"
+import type { Chat, ChatMember, Message, User } from "grammy/types"
 import { err, ok, type Result } from "neverthrow"
 import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
@@ -7,6 +8,29 @@ import { type Duration, duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { modules } from ".."
 import type { ModerationAction, PreDeleteResult } from "../tg-logger/types"
+
+function deduceModerationAction(oldMember: ChatMember, newMember: ChatMember): ModerationAction["action"] | null {
+  const prev = oldMember.status
+  const curr = newMember.status
+
+  if (prev === "left" && curr === "member") return null // join event
+  if (prev === "member" && curr === "left") return null // left event
+
+  if (prev === "kicked" && curr === "left") return "UNBAN"
+  if (prev === "member" && curr === "kicked") return "BAN"
+  if (prev === "member" && curr === "restricted" && !newMember.can_send_messages) return "MUTE"
+  if (prev === "restricted" && curr === "member") return "UNMUTE"
+
+  if (prev === "restricted" && curr === "restricted") {
+    if (oldMember.can_send_messages && !newMember.can_send_messages) {
+      return "MUTE"
+    } else if (!oldMember.can_send_messages && newMember.can_send_messages) {
+      return "UNMUTE"
+    }
+  }
+
+  return null
+}
 
 const MAP_ACTIONS: Record<
   Exclude<ModerationAction["action"], "SILENT" | "MULTI_CHAT_SPAM"> | "BAN_ALL" | "MUTE_ALL",
@@ -25,16 +49,47 @@ type ModerationErrorCode = "CANNOT_MOD_YOURSELF" | "CANNOT_MOD_BOT" | "CANNOT_MO
 type ModerationError = { code: ModerationErrorCode; fmtError: string; strError: string }
 
 // TODO: missing in-channel user feedback (eg. <user> has been muted by <admin>...)
-class ModerationClass {
-  private static instance: ModerationClass | null = null
-  static getInstance(): ModerationClass {
+class ModerationClass<C extends Context> implements MiddlewareObj<C> {
+  private composer = new Composer<C>()
+  private static instance: ModerationClass<Context> | null = null
+  static getInstance<C extends Context>(): ModerationClass<C> {
     if (!ModerationClass.instance) {
       ModerationClass.instance = new ModerationClass()
     }
-    return ModerationClass.instance
+    return ModerationClass.instance as unknown as ModerationClass<C>
   }
 
-  private constructor() {}
+  middleware() {
+    return this.composer.middleware()
+  }
+
+  private constructor() {
+    this.composer.on("chat_member", async (ctx) => {
+      const { chat, from: admin, new_chat_member, old_chat_member } = ctx.chatMember
+      if (admin.id === ctx.me.id) return
+
+      const actionType = deduceModerationAction(old_chat_member, new_chat_member)
+      if (!actionType) return
+
+      const moderationAction = {
+        action: actionType,
+        from: admin,
+        target: new_chat_member.user,
+        chat,
+        reason: "Manual action via Telegram UI",
+      } as ModerationAction
+
+      if (
+        (moderationAction.action === "BAN" || moderationAction.action === "MUTE") &&
+        "until_date" in new_chat_member &&
+        new_chat_member.until_date
+      ) {
+        moderationAction.duration = duration.fromUntilDate(new_chat_member.until_date)
+      }
+
+      await this.post(moderationAction, null)
+    })
+  }
 
   private getModerationError(p: ModerationAction, code: ModerationErrorCode): ModerationError {
     // biome-ignore lint/nursery/noUnnecessaryConditions: lying
@@ -134,6 +189,17 @@ class ModerationClass {
     }
   }
 
+  private async post(p: ModerationAction, preDeleteRes: PreDeleteResult | null) {
+    // TODO: handle errors?
+    await Promise.allSettled([
+      modules.get("tgLogger").moderationAction({
+        ...p,
+        preDeleteRes: preDeleteRes,
+      }),
+      this.audit(p),
+    ])
+  }
+
   public async deleteMessages(
     messages: Message[],
     executor: User,
@@ -187,17 +253,12 @@ class ModerationClass {
             p.from,
             `${p.action}${"reason" in p && p.reason ? ` -- ${p.reason}` : ""}`
           )
-        : null
+        : ok(null)
 
     const performOk = await this.perform(p)
     if (!performOk) return err(this.getModerationError(p, "PERFORM_ERROR")) // TODO: make the perform output a Result
 
-    await modules.get("tgLogger").moderationAction({
-      ...p,
-      preDeleteRes: preDeleteRes?.unwrapOr(null),
-    })
-
-    await this.audit(p)
+    await this.post(p, preDeleteRes.unwrapOr(null))
     return ok()
   }
 

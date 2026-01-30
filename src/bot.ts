@@ -15,8 +15,8 @@ import { checkUsername } from "./middlewares/check-username"
 import { GroupSpecificActions } from "./middlewares/group-specific-actions"
 import { messageLink } from "./middlewares/message-link"
 import { MessageUserStorage } from "./middlewares/message-user-storage"
-import { UIActionsLogger } from "./middlewares/ui-actions-logger"
 import { modules, sharedDataInit } from "./modules"
+import { Moderation } from "./modules/moderation"
 import { redis } from "./redis"
 import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
@@ -78,7 +78,7 @@ bot.use(commands)
 bot.use(new BotMembershipHandler())
 bot.use(new AutoModerationStack())
 bot.use(new GroupSpecificActions())
-bot.use(new UIActionsLogger())
+bot.use(Moderation)
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
