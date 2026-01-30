@@ -255,6 +255,7 @@ export class TgLogger extends Module<ModuleShared> {
         skip`${MOD_ACTION_TITLE(props)}`,
 
         n`${b`Target:`} ${fmtUser(props.target)}`,
+        !isAutoModeration ? n`${b`Moderator:`} ${fmtUser(props.from)}` : undefined,
 
         // for MULTI_CHAT we have specific per-chat info
         props.action !== "MULTI_CHAT_SPAM" ? `${b`Group:`} ${fmtChat(props.chat, invite_link)}` : undefined,

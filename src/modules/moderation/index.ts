@@ -24,6 +24,7 @@ const MAP_ACTIONS: Record<
 type ModerationErrorCode = "CANNOT_MOD_YOURSELF" | "CANNOT_MOD_BOT" | "CANNOT_MOD_GROUPADMIN" | "PERFORM_ERROR"
 type ModerationError = { code: ModerationErrorCode; fmtError: string; strError: string }
 
+// TODO: missing in-channel user feedback (eg. <user> has been muted by <admin>...)
 class ModerationClass {
   private static instance: ModerationClass | null = null
   static getInstance(): ModerationClass {
