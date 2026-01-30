@@ -1,6 +1,7 @@
 import { logger } from "@/logger"
-import { modules } from "@/modules"
+import { Moderation } from "@/modules/moderation"
 import { getText } from "@/utils/messages"
+import { wait } from "@/utils/wait"
 import { _commandsBase } from "./_base"
 
 _commandsBase.createCommand({
@@ -13,6 +14,7 @@ _commandsBase.createCommand({
   description: "Deletes the replied to message",
   reply: "required",
   handler: async ({ repliedTo, context }) => {
+    await context.deleteMessage()
     const { text, type } = getText(repliedTo)
     logger.info({
       action: "delete_message",
@@ -21,10 +23,10 @@ _commandsBase.createCommand({
       sender: repliedTo.from?.username,
     })
 
-    await modules.get("tgLogger").preDelete([repliedTo], "Command /del", context.from) // actual message to delete
-    await Promise.all([
-      context.deleteMessages([repliedTo.message_id]),
-      context.deleteMessage(), // /del message
-    ])
+    const res = await Moderation.deleteMessages([repliedTo], context.from, "Command /del")
+    // TODO: better error and ok response
+    const msg = await context.reply(res.isErr() ? "Cannot delete the message" : "OK")
+    await wait(5000)
+    await msg.delete()
   },
 })
