@@ -3,6 +3,7 @@ import { Moderation } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
+import { numberOrString } from "@/utils/types"
 import { getUser } from "@/utils/users"
 import { wait } from "@/utils/wait"
 import { _commandsBase } from "./_base"
@@ -71,7 +72,7 @@ _commandsBase
   })
   .createCommand({
     trigger: "unmute",
-    args: [{ key: "username", optional: false, description: "Username (or user id) to unmute" }],
+    args: [{ key: "username", type: numberOrString, description: "Username (or user id) to unmute" }],
     description: "Unmute a user from a group",
     scope: "group",
     permissions: {
@@ -80,7 +81,8 @@ _commandsBase
     },
     handler: async ({ args, context }) => {
       await context.deleteMessage()
-      const userId = args.username.startsWith("@") ? await getTelegramId(args.username) : parseInt(args.username, 10)
+      const userId: number | null =
+        typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
       if (!userId) {
         logger.debug(`unmute: no userId for username ${args.username}`)
         const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
@@ -89,7 +91,7 @@ _commandsBase
         return
       }
 
-      const user = await getUser(userId)
+      const user = await getUser(userId, context)
       if (!user) {
         const msg = await context.reply("Error: cannot find this user")
         logger.error({ userId }, "UNMUTE: cannot retrieve the user")
