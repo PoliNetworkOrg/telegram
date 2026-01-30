@@ -147,13 +147,13 @@ class ModerationClass {
 
     let delCount = 0
     for (const [chatId, mIds] of groupMessagesByChat(messages)) {
-      const ok = await modules.shared.api.deleteMessages(chatId, mIds).catch(() => false)
-      if (ok) delCount += mIds.length
+      const delOk = await modules.shared.api.deleteMessages(chatId, mIds).catch(() => false)
+      if (delOk) delCount += mIds.length
     }
 
     if (delCount === 0) {
       logger.error(
-        { initialMessages: messages, executor, forwaredCount: preRes.count, deletedCount: 0 },
+        { initialMessages: messages, executor, forwardedCount: preRes.count, deletedCount: 0 },
         "[Moderation:deleteMessages] no message(s) could be deleted"
       )
       void modules.shared.api.deleteMessages(tgLogger.groupId, preRes.logMessageIds)
@@ -165,7 +165,7 @@ class ModerationClass {
         {
           initialMessages: messages,
           executor,
-          forwaredCount: preRes.count,
+          forwardedCount: preRes.count,
           deletedCount: delCount,
           deletedPercentage: (delCount / preRes.count).toFixed(3),
         },
