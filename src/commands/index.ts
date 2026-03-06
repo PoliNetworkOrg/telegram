@@ -32,13 +32,13 @@ export const commands = new ManagedCommands<Role>({
     wrongScope: async ({ context, command }) => {
       await context.deleteMessage()
       logger.info(
-        `[ManagedCommands] command '/${command.trigger}' with scope '${command.scope}' invoked by ${printCtxFrom(context)} in a '${context.chat.type}' chat.`
+        `[ManagedCommands] Command '/${command.trigger}' with scope '${command.scope}' invoked by ${printCtxFrom(context)} in a '${context.chat.type}' chat`
       )
     },
     missingPermissions: async ({ context, command }) => {
       logger.info(
         { command_permissions: command.permissions },
-        `[ManagedCommands] command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
+        `[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
       )
       // Inform the user of restricted access
       const reply = await context.reply("You are not allowed to execute this command")
@@ -46,10 +46,11 @@ export const commands = new ManagedCommands<Role>({
       void wait(3000).then(() => reply.delete())
     },
     handlerError: async ({ context, command, error }) => {
-      logger.error({ error, command: command.trigger }, `Error in handler for command '/${command.trigger}'`)
+      logger.error({ error }, `[ManagedCommands] Error in handler for command '/${command.trigger}'`)
+      // TODO: we should figure out what to tell the user, maybe if we have some telemetry we can produce an error report id here?
       await context.reply(`An error occurred: ${String(error)}`)
     },
-    beforeCommand: async ({ context }) => {
+    beforeHandler: async ({ context }) => {
       if (context.chat.type !== "private") {
         // silently delete the command trigger if the command is used in a group, to reduce noise
         context.deleteMessage().catch(() => {})

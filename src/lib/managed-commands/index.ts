@@ -48,29 +48,29 @@ const defaultPermissionHandler: PermissionHandler<string, Context> = async ({ co
   return true
 }
 
-export type Hook<C extends Context, Params = unknown> = (
+export type Hook<C extends Context, TRole extends string = string, Params = unknown> = (
   params: Params & {
     context: CommandContext<C>
-    command: AnyCommand<string>
+    command: AnyCommand<TRole>
   }
 ) => Promise<void>
-export type ManagedCommandsHooks<C extends Context> = {
+export type ManagedCommandsHooks<C extends Context, TRole extends string = string> = {
   /**
    * Called when a command is invoked in the wrong scope (e.g. a private-only command is invoked in a group)
    */
-  wrongScope?: Hook<C>
+  wrongScope?: Hook<C, TRole>
   /**
    * Called when a user without the required permissions invokes a command
    */
-  missingPermissions?: Hook<C>
+  missingPermissions?: Hook<C, TRole>
   /**
    * Called when an error is thrown in the command handler
    */
-  handlerError?: Hook<C, { error: unknown }>
+  handlerError?: Hook<C, TRole, { error: unknown }>
   /**
    * Called before executing the command handler, can be used to implement custom pre-handler logic, for example logging or analytics
    */
-  beforeCommand?: Hook<C>
+  beforeHandler?: Hook<C, TRole>
 }
 
 export interface ManagedCommandsOptions<TRole extends string, C extends Context> {
@@ -105,7 +105,7 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
   /**
    * Hooks to execute on specific events
    */
-  hooks: ManagedCommandsHooks<C>
+  hooks: ManagedCommandsHooks<C, TRole>
 }
 
 /**
@@ -139,7 +139,7 @@ export class ManagedCommands<
   private composer = new Composer<C>()
   private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
   private permissionHandler: PermissionHandler<TRole, C>
-  private hooks: ManagedCommandsHooks<C>
+  private hooks: ManagedCommandsHooks<C, TRole>
   private adapter: ConversationStorage<C, ConversationData>
 
   /**
@@ -377,8 +377,8 @@ export class ManagedCommands<
 
           const { args, repliedTo } = requirements.value
 
-          if (this.hooks.beforeCommand)
-            await this.hooks.beforeCommand({ context: ctx as CommandContext<C>, command: cmd })
+          if (this.hooks.beforeHandler)
+            await this.hooks.beforeHandler({ context: ctx as CommandContext<C>, command: cmd })
 
           // Fianlly execute the handler
           await cmd
