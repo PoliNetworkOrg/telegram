@@ -1,10 +1,10 @@
 import { api } from "@/backend"
+import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt, fmtDate } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
+import type { Role } from "@/utils/types"
 
-import { _commandsBase } from "./_base"
-
-_commandsBase.createCommand({
+export const audit = new CommandsCollection<Role>("Auditing").createCommand({
   trigger: "audit",
   scope: "private",
   description: "Get audit of an user",

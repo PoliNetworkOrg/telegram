@@ -1,3 +1,4 @@
+export { CommandsCollection } from "./collection"
 export type { CommandScopedContext } from "./command"
 export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
 export * from "./context"
@@ -339,7 +340,7 @@ export class ManagedCommands<
    */
   createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
     cmd: Command<A, R, S, TRole>
-  ) {
+  ): this {
     cmd.scope = cmd.scope ?? ("both" as S) // default to both
     this.commands.push(cmd) // add the command to the list
     this.commands.sort((a, b) => a.trigger.localeCompare(b.trigger)) // sort the commands by alphabetical order of the trigger
@@ -384,7 +385,7 @@ export class ManagedCommands<
             .handler({
               context: ctx,
               conversation: conv,
-              args,
+              args: args as ArgumentMap<A>,
               repliedTo,
             })
             .catch(async (error) => {
@@ -423,10 +424,34 @@ export class ManagedCommands<
     return this
   }
 
-  addCollection(collection: CommandsCollection<TRole>) {
-    collection.flush().forEach((cmd) => {
-      this.createCommand(cmd)
-    })
+  /**
+   * Adds all the commands from a CommandsCollection to the ManagedCommands instance
+   * @param collection The CommandsCollection to add
+   * @returns The ManagedCommands instance for chaining
+   * @example
+   * ```ts
+   * const collection = new CommandsCollection()
+   *   .createCommand({
+   *     trigger: "ping",
+   *     description: "Replies with pong",
+   *     handler: async ({ context }) => {
+   *       await context.reply("pong")
+   *     },
+   *   })
+   *
+   * const commands = new ManagedCommands()
+   * commands.addCollection(collection)
+   *
+   * bot.use(commands)
+   * ```
+   */
+  withCollection(...collections: CommandsCollection<TRole>[]): this {
+    collections
+      .flatMap((c) => c.flush())
+      .forEach((cmd) => {
+        this.createCommand(cmd)
+      })
+    return this
   }
 
   /**

@@ -1,14 +1,14 @@
 import type { User } from "grammy/types"
 import z from "zod"
 import { api } from "@/backend"
+import { CommandsCollection } from "@/lib/managed-commands"
 import { modules } from "@/modules"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
-import { _commandsBase } from "./_base"
 
 const BYPASS_ROLES: Role[] = ["president", "owner", "direttivo"]
 
-_commandsBase
+export const banAll = new CommandsCollection<Role>("Ban All")
   .createCommand({
     trigger: "ban_all",
     description: "PREMA BAN a user from all the Network's groups",

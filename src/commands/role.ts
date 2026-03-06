@@ -1,11 +1,11 @@
 import { z } from "zod"
 import { api } from "@/backend"
+import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
-import { _commandsBase } from "./_base"
 
-_commandsBase
+export const role = new CommandsCollection<Role>("Roles")
   .createCommand({
     trigger: "getroles",
     scope: "private",

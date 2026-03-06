@@ -1,14 +1,14 @@
+import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
-import { numberOrString } from "@/utils/types"
+import { numberOrString, type Role } from "@/utils/types"
 import { getUser } from "@/utils/users"
 import { wait } from "@/utils/wait"
-import { _commandsBase } from "./_base"
 
-_commandsBase
+export const ban = new CommandsCollection<Role>("Banning")
   .createCommand({
     trigger: "ban",
     args: [{ key: "reason", optional: true, description: "Optional reason to ban the user" }],

@@ -3,14 +3,14 @@ import type { User } from "grammy/types"
 import z from "zod"
 import { api } from "@/backend"
 import type { ConversationContext } from "@/lib/managed-commands"
+import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
-import { numberOrString } from "@/utils/types"
+import { numberOrString, type Role } from "@/utils/types"
 import { wait } from "@/utils/wait"
-import { _commandsBase } from "./_base"
 
 const dateFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -52,7 +52,7 @@ const askDurationMsg = fmt(({ n, b }) => [b`How long should the special grant la
   sep: "\n",
 })
 
-_commandsBase.createCommand({
+export const grants = new CommandsCollection<Role>("Grants").createCommand({
   trigger: "grant",
   description: "Grant special permissions to a user allowing them to bypass the Auto-Moderation stack",
   scope: "private",

@@ -1,10 +1,11 @@
+import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
 import { getText } from "@/utils/messages"
+import type { Role } from "@/utils/types"
 import { wait } from "@/utils/wait"
-import { _commandsBase } from "./_base"
 
-_commandsBase.createCommand({
+export const del = new CommandsCollection<Role>("Deletion").createCommand({
   trigger: "del",
   scope: "group",
   permissions: {

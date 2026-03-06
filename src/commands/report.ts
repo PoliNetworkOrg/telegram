@@ -1,8 +1,9 @@
+import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
-import { _commandsBase } from "./_base"
+import type { Role } from "@/utils/types"
 
-_commandsBase.createCommand({
+export const report = new CommandsCollection<Role>("Reporting").createCommand({
   trigger: "report",
   description: "Report a message to admins",
   scope: "group",

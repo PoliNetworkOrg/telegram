@@ -1,10 +1,10 @@
+import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
+import type { Role } from "@/utils/types"
 import { wait } from "@/utils/wait"
 
-import { _commandsBase } from "./_base"
-
-_commandsBase.createCommand({
+export const kick = new CommandsCollection<Role>("Kicking").createCommand({
   trigger: "kick",
   args: [{ key: "reason", optional: true, description: "Optional reason to kick the user" }],
   description: "Kick a user from a group",

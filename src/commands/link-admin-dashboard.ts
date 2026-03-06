@@ -1,12 +1,12 @@
 import type { ConversationMenuContext } from "@grammyjs/conversations"
 import { api } from "@/backend"
 import type { ConversationContext } from "@/lib/managed-commands"
+import { CommandsCollection } from "@/lib/managed-commands"
 import type { CommandConversation } from "@/lib/managed-commands/command"
 import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
+import type { Role } from "@/utils/types"
 import { wait } from "@/utils/wait"
-
-import { _commandsBase } from "./_base"
 
 const mainMsg = fmt(({ b }) => [b`🔗 Admin dashboard link`, b`\nStatus: ⏳ WAITING FOR CODE`], { sep: "\n" })
 
@@ -34,7 +34,7 @@ async function cancel(
   await conv.halt()
 }
 
-_commandsBase.createCommand({
+export const linkAdminDashboard = new CommandsCollection<Role>("Link Admin Dashboard").createCommand({
   trigger: "link",
   scope: "private",
   description: "Verify the login code for the admin dashboard",

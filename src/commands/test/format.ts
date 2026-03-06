@@ -1,8 +1,7 @@
+import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 
-import { _commandsBase } from "../_base"
-
-_commandsBase.createCommand({
+export const testformat = new CommandsCollection().createCommand({
   trigger: "test_format",
   scope: "private",
   description: "Test the formatting",
