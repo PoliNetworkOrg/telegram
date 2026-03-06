@@ -14,7 +14,6 @@ _commandsBase.createCommand({
   description: "Deletes the replied to message",
   reply: "required",
   handler: async ({ repliedTo, context }) => {
-    await context.deleteMessage()
     const { text, type } = getText(repliedTo)
     logger.info({
       action: "delete_message",
@@ -26,7 +25,6 @@ _commandsBase.createCommand({
     const res = await Moderation.deleteMessages([repliedTo], context.from, "Command /del")
     // TODO: better error and ok response
     const msg = await context.reply(res.isErr() ? "Cannot delete the message" : "OK")
-    await wait(5000)
-    await msg.delete()
+    void wait(5000).then(() => msg.delete())
   },
 })

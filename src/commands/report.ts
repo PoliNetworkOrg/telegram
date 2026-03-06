@@ -8,7 +8,6 @@ _commandsBase.createCommand({
   scope: "group",
   reply: "required",
   handler: async ({ context, repliedTo }) => {
-    await context.deleteMessage()
     if (!repliedTo.from) {
       logger.error("report: no repliedTo.from field (the msg was sent in a channel)")
       return

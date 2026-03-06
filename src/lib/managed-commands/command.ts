@@ -66,6 +66,14 @@ export type CommandConversation<S extends CommandScope = CommandScope, C extends
   CommandScopedContext<S>
 >
 
+/**
+ * Represents a command that can be registered in the ManagedCommands collection.
+ *
+ * @template A The type of the command arguments, this should be an array of {@link ArgumentOptions}
+ * @template R The type of the command reply, this should be "required", "optional" or undefined
+ * @template S The scope of the command, this should be "private", "group" or "both"
+ * @template TRole The type of the roles used in permissions, this should be a string literal type representing the possible roles in the bot (e.g. "admin" | "moderator" | "user")
+ */
 export interface Command<
   A extends CommandArgs,
   R extends CommandReplyTo,
@@ -132,6 +140,8 @@ export interface Command<
     repliedTo: RepliedTo<R>
   }) => Promise<void>
 }
+
+export type AnyCommand<TRole extends string = string> = Command<CommandArgs, CommandReplyTo, CommandScope, TRole>
 
 /**
  * Type guard to check if a command is allowed in groups.

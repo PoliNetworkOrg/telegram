@@ -20,7 +20,6 @@ _commandsBase
       allowedGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo }) => {
-      await context.deleteMessage()
       if (!repliedTo.from) {
         logger.error("ban: no repliedTo.from field (the msg was sent in a channel)")
         return
@@ -28,8 +27,7 @@ _commandsBase
 
       const res = await Moderation.ban(repliedTo.from, context.chat, context.from, null, [repliedTo], args.reason)
       const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      await wait(5000)
-      await msg.delete()
+      void wait(5000).then(() => msg.delete())
     },
   })
   .createCommand({
@@ -51,7 +49,6 @@ _commandsBase
       allowedGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo }) => {
-      await context.deleteMessage()
       if (!repliedTo.from) {
         logger.error("ban: no repliedTo.from field (the msg was sent in a channel)")
         return
@@ -66,8 +63,7 @@ _commandsBase
         args.reason
       )
       const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      await wait(5000)
-      await msg.delete()
+      void wait(5000).then(() => msg.delete())
     },
   })
   .createCommand({
@@ -80,15 +76,13 @@ _commandsBase
       allowedGroupAdmins: true,
     },
     handler: async ({ args, context }) => {
-      await context.deleteMessage()
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 
       if (!userId) {
         logger.debug(`unban: no userId for username ${args.username}`)
         const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
-        await wait(5000)
-        await msg.delete()
+        void wait(5000).then(() => msg.delete())
         return
       }
 
@@ -96,14 +90,12 @@ _commandsBase
       if (!user) {
         const msg = await context.reply("Error: cannot find this user")
         logger.error({ userId }, "UNBAN: cannot retrieve the user")
-        await wait(5000)
-        await msg.delete()
+        void wait(5000).then(() => msg.delete())
         return
       }
 
       const res = await Moderation.unban(user, context.chat, context.from)
       const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      await wait(5000)
-      await msg.delete()
+      void wait(5000).then(() => msg.delete())
     },
   })

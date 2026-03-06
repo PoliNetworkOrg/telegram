@@ -11,10 +11,12 @@ import { Composer, MemorySessionStorage } from "grammy"
 import type { ChatMember, Message } from "grammy/types"
 import type { Result } from "neverthrow"
 import { err, ok } from "neverthrow"
-import type { LogFn } from "pino"
+import z from "zod"
 import { fmt } from "@/utils/format"
 import { wait } from "@/utils/wait"
+import type { CommandsCollection } from "./collection"
 import type {
+  AnyCommand,
   ArgumentMap,
   ArgumentOptions,
   Command,
@@ -30,7 +32,7 @@ import type { ManagedCommandsFlavor } from "./context"
 
 export type PermissionHandler<TRole extends string, C extends Context> = (arg: {
   context: CommandContext<C>
-  command: Command<CommandArgs, CommandReplyTo, CommandScope, TRole>
+  command: AnyCommand<TRole>
 }) => Promise<boolean>
 
 type DefaultRoles = ChatMember["status"]
@@ -45,13 +47,29 @@ const defaultPermissionHandler: PermissionHandler<string, Context> = async ({ co
   return true
 }
 
-interface Logger {
-  info: LogFn
-  error: LogFn
-}
-const defaultLogger: Logger = {
-  info: console.log,
-  error: console.error,
+export type Hook<C extends Context, Params = unknown> = (
+  params: Params & {
+    context: CommandContext<C>
+    command: AnyCommand<string>
+  }
+) => Promise<void>
+export type ManagedCommandsHooks<C extends Context> = {
+  /**
+   * Called when a command is invoked in the wrong scope (e.g. a private-only command is invoked in a group)
+   */
+  wrongScope?: Hook<C>
+  /**
+   * Called when a user without the required permissions invokes a command
+   */
+  missingPermissions?: Hook<C>
+  /**
+   * Called when an error is thrown in the command handler
+   */
+  handlerError?: Hook<C, { error: unknown }>
+  /**
+   * Called before executing the command handler, can be used to implement custom pre-handler logic, for example logging or analytics
+   */
+  beforeCommand?: Hook<C>
 }
 
 export interface ManagedCommandsOptions<TRole extends string, C extends Context> {
@@ -84,22 +102,34 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
   permissionHandler: PermissionHandler<TRole, C>
 
   /**
-   * The logger to use for logging messages, you can pass your pino logger here
-   * @example
-   * ```ts
-   * import pino from "pino"
-   * const logger = pino({
-   *   level: "info",
-   * })
-   * const commands = new ManagedCommands({
-   *   logger: logger,
-   * })
-   * ```
-   * @default console.log
+   * Hooks to execute on specific events
    */
-  logger: Logger
+  hooks: ManagedCommandsHooks<C>
 }
 
+/**
+ * A class to manage commands in a grammY bot, with support for argument parsing, permission handling, and hooks for various events.
+ * You can create commands with specific triggers, arguments, and permissions, and the class will handle the parsing and execution of the commands, as well as checking permissions and executing hooks.
+ *
+ * To use, create an instance of the class and pass it as middleware to your bot. Then, use the `createCommand` method to add commands to the instance.
+ * @example
+ * ```ts
+ * const commands = new ManagedCommands()
+ * commands.createCommand({
+ *   trigger: "ping",
+ *   description: "Replies with pong",
+ *   handler: async ({ context }) => {
+ *     await context.reply("pong")
+ *   },
+ * })
+ *
+ * bot.use(commands)
+ * ```
+ *
+ * @typeParam TRole A string type representing the possible roles for command permissions. This is used in the `permissions` field of the command options and in the `permissionHandler`.
+ * @typeParam C The context type for the bot, used in the hooks and permission handler. Defaults to `Context`.
+ * @see Command for the options available when creating a command
+ */
 export class ManagedCommands<
   TRole extends string = DefaultRoles,
   C extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
@@ -108,7 +138,7 @@ export class ManagedCommands<
   private composer = new Composer<C>()
   private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
   private permissionHandler: PermissionHandler<TRole, C>
-  private logger: Logger
+  private hooks: ManagedCommandsHooks<C>
   private adapter: ConversationStorage<C, ConversationData>
 
   /**
@@ -145,7 +175,7 @@ export class ManagedCommands<
     } else {
       if (isTypedArgumentOptions(argument)) {
         const data = argument.type.safeParse(value)
-        if (!data.success) return err(data.error.message)
+        if (!data.success) return err(z.prettifyError(data.error))
         else return ok(data.data)
       }
       return ok(value)
@@ -205,7 +235,7 @@ export class ManagedCommands<
    * @param cmd The command to print usage for
    * @returns A markdown formatted string representing the usage of the command
    */
-  private static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo, CommandScope>): string {
+  private static formatCommandUsage(cmd: AnyCommand): string {
     const args = cmd.args ?? []
     const scope =
       cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
@@ -270,7 +300,8 @@ export class ManagedCommands<
    */
   constructor(options?: Partial<ManagedCommandsOptions<TRole, C>>) {
     this.permissionHandler = options?.permissionHandler ?? defaultPermissionHandler
-    this.logger = options?.logger ?? defaultLogger
+    // this.logger = options?.logger ?? defaultLogger
+    this.hooks = options?.hooks ?? {}
     this.adapter = options?.adapter ?? new MemorySessionStorage()
 
     this.composer.use(
@@ -345,13 +376,22 @@ export class ManagedCommands<
 
           const { args, repliedTo } = requirements.value
 
+          if (this.hooks.beforeCommand)
+            await this.hooks.beforeCommand({ context: ctx as CommandContext<C>, command: cmd })
+
           // Fianlly execute the handler
-          await cmd.handler({
-            context: ctx,
-            conversation: conv,
-            args,
-            repliedTo,
-          })
+          await cmd
+            .handler({
+              context: ctx,
+              conversation: conv,
+              args,
+              repliedTo,
+            })
+            .catch(async (error) => {
+              if (this.hooks.handlerError)
+                await this.hooks.handlerError({ context: ctx as CommandContext<C>, command: cmd, error })
+              else throw error
+            })
         },
         {
           id: cmd.trigger, // the conversation ID is set to the command trigger
@@ -364,10 +404,7 @@ export class ManagedCommands<
         (cmd.scope === "private" && ctx.chat.type !== "private") ||
         (cmd.scope === "group" && ctx.chat.type !== "supergroup" && ctx.chat.type !== "group")
       ) {
-        await ctx.deleteMessage()
-        this.logger.info(
-          `[ManagedCommands] command '/${cmd.trigger}' with scope '${cmd.scope}' invoked by ${this.printUsername(ctx)} in a '${ctx.chat.type}' chat.`
-        )
+        if (this.hooks.wrongScope) await this.hooks.wrongScope({ context: ctx, command: cmd })
         return
       }
 
@@ -375,14 +412,7 @@ export class ManagedCommands<
       if (cmd.permissions) {
         const allowed = await this.permissionHandler({ command: cmd, context: ctx })
         if (!allowed) {
-          this.logger.info(
-            { command_permissions: cmd.permissions },
-            `[ManagedCommands] command '/${cmd.trigger}' invoked by ${this.printUsername(ctx)} without permissions`
-          )
-          // Inform the user of restricted access
-          const reply = await ctx.reply("You are not allowed to execute this command")
-          await ctx.deleteMessage()
-          setTimeout(() => void reply.delete(), 3000)
+          if (this.hooks.missingPermissions) await this.hooks.missingPermissions({ context: ctx, command: cmd })
           return
         }
       }
@@ -393,15 +423,10 @@ export class ManagedCommands<
     return this
   }
 
-  /**
-   * Creates a string that can be logged with the username and id of the user
-   * who invoked the command
-   * @param ctx The context of the command
-   * @returns a string that can be logged with username and id
-   */
-  private printUsername(ctx: CommandContext<C>) {
-    if (!ctx.from) return "<N/A>"
-    return `@${ctx.from.username ?? "<unset>"} [${ctx.from.id}]`
+  addCollection(collection: CommandsCollection<TRole>) {
+    collection.flush().forEach((cmd) => {
+      this.createCommand(cmd)
+    })
   }
 
   /**

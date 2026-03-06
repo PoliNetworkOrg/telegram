@@ -29,8 +29,6 @@ _commandsBase
       },
     ],
     handler: async ({ args, context }) => {
-      await context.deleteMessage()
-
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 
@@ -78,8 +76,6 @@ _commandsBase
       },
     ],
     handler: async ({ args, context }) => {
-      await context.deleteMessage()
-
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 

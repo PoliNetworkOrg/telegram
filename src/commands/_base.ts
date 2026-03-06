@@ -1,11 +1,12 @@
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
-
 import { api } from "@/backend"
 import { isAllowedInGroups, ManagedCommands } from "@/lib/managed-commands"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
 import type { Role } from "@/utils/types"
+import { printCtxFrom } from "@/utils/users"
+import { wait } from "@/utils/wait"
 
 const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
   redis,
@@ -15,7 +16,34 @@ const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
 
 export const _commandsBase = new ManagedCommands<Role>({
   adapter,
-  logger,
+  hooks: {
+    wrongScope: async ({ context, command }) => {
+      await context.deleteMessage()
+      logger.info(
+        `[ManagedCommands] command '/${command.trigger}' with scope '${command.scope}' invoked by ${printCtxFrom(context)} in a '${context.chat.type}' chat.`
+      )
+    },
+    missingPermissions: async ({ context, command }) => {
+      logger.info(
+        { command_permissions: command.permissions },
+        `[ManagedCommands] command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
+      )
+      // Inform the user of restricted access
+      const reply = await context.reply("You are not allowed to execute this command")
+      await context.deleteMessage()
+      void wait(3000).then(() => reply.delete())
+    },
+    handlerError: async ({ context, command, error }) => {
+      logger.error({ error, command: command.trigger }, `Error in handler for command '/${command.trigger}'`)
+      await context.reply(`An error occurred: ${String(error)}`)
+    },
+    beforeCommand: async ({ context }) => {
+      if (context.chat.type !== "private") {
+        // silently delete the command trigger if the command is used in a group, to reduce noise
+        context.deleteMessage().catch(() => {})
+      }
+    },
+  },
   permissionHandler: async ({ command, context: ctx }) => {
     if (!command.permissions) return true
     if (!ctx.from) return false

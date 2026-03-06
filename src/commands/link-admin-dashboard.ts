@@ -30,8 +30,6 @@ async function cancel(
   ctx: ConversationMenuContext<ConversationContext<"private">>
 ) {
   await ctx.editMessageText(fmt(({ n, code }) => n`Linking procedure was canceled. Send ${code`/link`} to restart it.`))
-  await wait(4000)
-  await ctx.deleteMessage()
   ctx.menu.close()
   await conv.halt()
 }
@@ -41,7 +39,6 @@ _commandsBase.createCommand({
   scope: "private",
   description: "Verify the login code for the admin dashboard",
   handler: async ({ context, conversation }) => {
-    await context.deleteMessage()
     // we need username
     if (context.from.username === undefined) {
       await context.reply(fmt(() => `You need to set a username to use this command`))
@@ -112,7 +109,6 @@ _commandsBase.createCommand({
       )
     }
 
-    await wait(4000)
-    await msg.delete()
+    void wait(5000).then(async () => msg.delete())
   },
 })

@@ -26,14 +26,10 @@ _commandsBase
         return
       }
 
-      try {
-        const { roles } = await api.tg.permissions.getRoles.query({ userId })
-        await context.reply(
-          fmt(({ b }) => (roles?.length ? [`Roles:`, b`${roles.join(" ")}`] : "This user has no roles"))
-        )
-      } catch (err) {
-        await context.reply(`There was an error: \n${String(err)}`)
-      }
+      const { roles } = await api.tg.permissions.getRoles.query({ userId })
+      await context.reply(
+        fmt(({ b }) => (roles?.length ? [`Roles:`, b`${roles.join(" ")}`] : "This user has no roles"))
+      )
     },
   })
   .createCommand({
@@ -60,30 +56,22 @@ _commandsBase
         return
       }
 
-      try {
-        const { roles, error } = await api.tg.permissions.addRole.mutate({
-          userId,
-          adderId: context.from.id,
-          role: args.role,
-        })
+      const { roles, error } = await api.tg.permissions.addRole.mutate({
+        userId,
+        adderId: context.from.id,
+        role: args.role,
+      })
 
-        if (error) {
-          await context.reply(fmt(({ n }) => n`There was an error: ${error}`))
-          return
-        }
-
-        await context.reply(
-          fmt(
-            ({ b, n }) => [b`✅ Role added!`, n`${b`Username:`} ${args.username}`, n`${b`Updated roles:`} ${roles}`],
-            {
-              sep: "\n",
-            }
-          )
-        )
-        await context.deleteMessage()
-      } catch (err) {
-        await context.reply(`There was an error: \n${String(err)}`)
+      if (error) {
+        await context.reply(fmt(({ n }) => n`There was an error: ${error}`))
+        return
       }
+
+      await context.reply(
+        fmt(({ b, n }) => [b`✅ Role added!`, n`${b`Username:`} ${args.username}`, n`${b`Updated roles:`} ${roles}`], {
+          sep: "\n",
+        })
+      )
     },
   })
   .createCommand({
@@ -110,29 +98,22 @@ _commandsBase
         return
       }
 
-      try {
-        const { roles, error } = await api.tg.permissions.removeRole.mutate({
-          userId,
-          removerId: context.from.id,
-          role: args.role,
-        })
+      const { roles, error } = await api.tg.permissions.removeRole.mutate({
+        userId,
+        removerId: context.from.id,
+        role: args.role,
+      })
 
-        if (error) {
-          await context.reply(fmt(({ n }) => n`There was an error: ${error}`))
-          return
-        }
-
-        await context.reply(
-          fmt(
-            ({ b, n }) => [b`✅ Role removed!`, n`${b`Username:`} ${args.username}`, n`${b`Updated roles:`} ${roles}`],
-            {
-              sep: "\n",
-            }
-          )
-        )
-        await context.deleteMessage()
-      } catch (err) {
-        await context.reply(`There was an error: \n${String(err)}`)
+      if (error) {
+        await context.reply(fmt(({ n }) => n`There was an error: ${error}`))
+        return
       }
+
+      await context.reply(
+        fmt(
+          ({ b, n }) => [b`✅ Role removed!`, n`${b`Username:`} ${args.username}`, n`${b`Updated roles:`} ${roles}`],
+          { sep: "\n" }
+        )
+      )
     },
   })

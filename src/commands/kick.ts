@@ -15,7 +15,6 @@ _commandsBase.createCommand({
     allowedGroupAdmins: true,
   },
   handler: async ({ args, context, repliedTo }) => {
-    await context.deleteMessage()
     if (!repliedTo.from) {
       logger.error("kick: no repliedTo.from field (the msg was sent in a channel)")
       return
@@ -23,7 +22,6 @@ _commandsBase.createCommand({
 
     const res = await Moderation.kick(repliedTo.from, context.chat, context.from, [repliedTo], args.reason)
     const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-    await wait(5000)
-    await msg.delete()
+    void wait(5000).then(async () => msg.delete())
   },
 })
