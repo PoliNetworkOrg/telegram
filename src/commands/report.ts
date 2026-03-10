@@ -1,5 +1,6 @@
 import { logger } from "@/logger"
 import { modules } from "@/modules"
+import { fmt, fmtUser } from "@/utils/format"
 import { _commandsBase } from "./_base"
 
 _commandsBase.createCommand({
@@ -14,6 +15,21 @@ _commandsBase.createCommand({
       return
     }
 
-    await modules.get("tgLogger").report(repliedTo, context.from)
+    const reportSent = await modules.get("tgLogger").report(repliedTo, context.from)
+    await context.reply(
+      reportSent
+        ? fmt(
+            ({ b, n }) => [
+              b`✅ Message reported!`,
+              n`Thanks ${fmtUser(context.from, false)}, moderators have been notified.`,
+            ],
+            { sep: "\n" }
+          )
+        : fmt(({ b, n }) => [b`⚠️ Report not sent`, n`Please try again in a moment.`], { sep: "\n" }),
+      {
+        disable_notification: false,
+        reply_parameters: { message_id: repliedTo.message_id },
+      }
+    )
   },
 })

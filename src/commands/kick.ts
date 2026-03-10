@@ -22,8 +22,10 @@ _commandsBase.createCommand({
     }
 
     const res = await Moderation.kick(repliedTo.from, context.chat, context.from, [repliedTo], args.reason)
-    const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-    await wait(5000)
-    await msg.delete()
+    if (res.isErr()) {
+      const msg = await context.reply(res.error.fmtError)
+      await wait(5000)
+      await msg.delete()
+    }
   },
 })

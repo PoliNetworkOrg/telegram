@@ -27,9 +27,11 @@ _commandsBase
       }
 
       const res = await Moderation.ban(repliedTo.from, context.chat, context.from, null, [repliedTo], args.reason)
-      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      await wait(5000)
-      await msg.delete()
+      if (res.isErr()) {
+        const msg = await context.reply(res.error.fmtError)
+        await wait(5000)
+        await msg.delete()
+      }
     },
   })
   .createCommand({
@@ -65,9 +67,11 @@ _commandsBase
         [repliedTo],
         args.reason
       )
-      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      await wait(5000)
-      await msg.delete()
+      if (res.isErr()) {
+        const msg = await context.reply(res.error.fmtError)
+        await wait(5000)
+        await msg.delete()
+      }
     },
   })
   .createCommand({
@@ -102,8 +106,10 @@ _commandsBase
       }
 
       const res = await Moderation.unban(user, context.chat, context.from)
-      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      await wait(5000)
-      await msg.delete()
+      if (res.isErr()) {
+        const msg = await context.reply(res.error.fmtError)
+        await wait(5000)
+        await msg.delete()
+      }
     },
   })
