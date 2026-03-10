@@ -12,6 +12,7 @@ import type { ChatMember, Message } from "grammy/types"
 import type { Result } from "neverthrow"
 import { err, ok } from "neverthrow"
 import type { LogFn } from "pino"
+import { BotAttributes, botMetrics, withSpan } from "@/telemetry"
 import { fmt } from "@/utils/format"
 import { wait } from "@/utils/wait"
 import type {
@@ -375,6 +376,10 @@ export class ManagedCommands<
       if (cmd.permissions) {
         const allowed = await this.permissionHandler({ command: cmd, context: ctx })
         if (!allowed) {
+          botMetrics.commandsCount.add(1, {
+            [BotAttributes.COMMAND_NAME]: cmd.trigger,
+            [BotAttributes.COMMAND_PERMITTED]: false,
+          })
           this.logger.info(
             { command_permissions: cmd.permissions },
             `[ManagedCommands] command '/${cmd.trigger}' invoked by ${this.printUsername(ctx)} without permissions`
@@ -387,8 +392,26 @@ export class ManagedCommands<
         }
       }
 
+      botMetrics.commandsCount.add(1, {
+        [BotAttributes.COMMAND_NAME]: cmd.trigger,
+        [BotAttributes.COMMAND_PERMITTED]: true,
+      })
+
       // enter the conversation that handles the command execution
-      await ctx.conversation.enter(cmd.trigger)
+      await withSpan(
+        `bot.command.${cmd.trigger}`,
+        {
+          [BotAttributes.IMPORTANCE]: "high",
+          [BotAttributes.COMMAND_NAME]: cmd.trigger,
+          [BotAttributes.COMMAND_SCOPE]: cmd.scope ?? "both",
+          [BotAttributes.CHAT_ID]: ctx.chat.id,
+          [BotAttributes.USER_ID]: ctx.from?.id ?? 0,
+          [BotAttributes.USERNAME]: ctx.from?.username ?? "unknown",
+        },
+        async () => {
+          await ctx.conversation.enter(cmd.trigger)
+        }
+      )
     })
     return this
   }

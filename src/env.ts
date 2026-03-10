@@ -12,6 +12,9 @@ export const env = createEnv({
     REDIS_PASSWORD: z.string().min(1).optional(),
     NODE_ENV: z.enum(["development", "production"]).default("development"),
     OPENAI_API_KEY: z.string().optional(),
+    OTEL_EXPORTER_OTLP_ENDPOINT: z.string().default("http://localhost:4318"),
+    OTEL_SERVICE_NAME: z.string().default("polinetwork-telegram-bot"),
+    OTEL_STORAGE_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
   },
 
   runtimeEnv: process.env,

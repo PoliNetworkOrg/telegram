@@ -3,6 +3,7 @@ import { Composer, type Context, type MiddlewareObj } from "grammy"
 import type { User } from "grammy/types"
 import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
+import { BotAttributes, botMetrics, withSpan } from "@/telemetry"
 import { padChatId } from "@/utils/chat"
 import { toGrammyUser } from "@/utils/types"
 
@@ -38,6 +39,7 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
         message: text,
         timestamp: new Date(ctx.message.date * 1000),
       })
+      botMetrics.storageBufferSize.add(1)
 
       this.userStorage.set(ctx.from.id, ctx.from)
       return next()
@@ -64,21 +66,44 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
   }
 
   async sync(): Promise<void> {
-    await Promise.all([this.syncMessages(), this.syncUsers()])
+    await withSpan(
+      "bot.storage.sync",
+      {
+        [BotAttributes.IMPORTANCE]: "low",
+        [BotAttributes.STORAGE_OPERATION]: "sync",
+      },
+      async (span) => {
+        span.setAttribute(BotAttributes.STORAGE_COUNT, this.memoryStorage.length + this.userStorage.size)
+        await Promise.all([this.syncMessages(), this.syncUsers()])
+      }
+    )
   }
 
   private async syncMessages(): Promise<void> {
     if (this.memoryStorage.length === 0) return
-    const { error } = await api.tg.messages.add.mutate({ messages: this.memoryStorage })
-    if (error) {
-      logger.error(
-        "memoryStorage: There was an error while encrypting messages in the backend, cannot save messages in table"
-      )
-      return
-    }
+    const count = this.memoryStorage.length
 
-    logger.debug(`memoryStorage: ${this.memoryStorage.length} messages written to the database`)
-    this.memoryStorage = []
+    await withSpan(
+      "bot.storage.message_sync",
+      {
+        [BotAttributes.IMPORTANCE]: "low",
+        [BotAttributes.STORAGE_OPERATION]: "message_sync",
+        [BotAttributes.STORAGE_COUNT]: count,
+      },
+      async () => {
+        const { error } = await api.tg.messages.add.mutate({ messages: this.memoryStorage })
+        if (error) {
+          logger.error(
+            "memoryStorage: There was an error while encrypting messages in the backend, cannot save messages in table"
+          )
+          return
+        }
+
+        logger.debug(`memoryStorage: ${count} messages written to the database`)
+        botMetrics.storageBufferSize.add(-count)
+        this.memoryStorage = []
+      }
+    )
   }
 
   public async getStoredUser(userId: number): Promise<User | null> {
@@ -111,18 +136,29 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
         langCode: u.language_code,
       }))
 
+    const count = users.length
     this.userStorage.clear()
 
-    const { error } = await api.tg.users.add.mutate({ users })
-    if (error === "ENCRYPT_ERROR") {
-      logger.error("userStorage: There was an error while encrypting users in the backend, users voided")
-      return
-    } else if (error === "INTERNAL_SERVER_ERROR") {
-      logger.error("userStorage: There was an UNEXPECTED error while saving users in backend, users voided")
-      return
-    }
+    await withSpan(
+      "bot.storage.user_sync",
+      {
+        [BotAttributes.IMPORTANCE]: "low",
+        [BotAttributes.STORAGE_OPERATION]: "user_sync",
+        [BotAttributes.STORAGE_COUNT]: count,
+      },
+      async () => {
+        const { error } = await api.tg.users.add.mutate({ users })
+        if (error === "ENCRYPT_ERROR") {
+          logger.error("userStorage: There was an error while encrypting users in the backend, users voided")
+          return
+        } else if (error === "INTERNAL_SERVER_ERROR") {
+          logger.error("userStorage: There was an UNEXPECTED error while saving users in backend, users voided")
+          return
+        }
 
-    logger.debug(`userStorage: ${users.length} users upserted in the database`)
+        logger.debug(`userStorage: ${count} users upserted in the database`)
+      }
+    )
   }
 
   middleware() {

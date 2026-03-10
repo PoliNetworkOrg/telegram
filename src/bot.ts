@@ -15,6 +15,7 @@ import { checkUsername } from "./middlewares/check-username"
 import { GroupSpecificActions } from "./middlewares/group-specific-actions"
 import { messageLink } from "./middlewares/message-link"
 import { MessageUserStorage } from "./middlewares/message-user-storage"
+import { telemetryMiddleware } from "./middlewares/telemetry"
 import { modules, sharedDataInit } from "./modules"
 import { Moderation } from "./modules/moderation"
 import { redis } from "./redis"
@@ -62,6 +63,9 @@ bot.use(
     return [ctx.chat?.id, ctx.from?.id].filter((e) => e !== undefined).map((e) => e.toString())
   })
 )
+
+// Telemetry: root span per update — must be first after sequentialize
+bot.use(telemetryMiddleware)
 
 bot.init().then(() => {
   const sharedData: ModuleShared = {
@@ -123,7 +127,10 @@ const terminate = once(async (signal: NodeJS.Signals) => {
   const p2 = redis.quit()
   const p3 = runner.isRunning() && runner.stop()
   const p4 = modules.stop()
-  await Promise.all([p1, p2, p3, p4])
+  // Flush pending telemetry (set by instrumentation.ts via globalThis)
+  const otelShutdown = (globalThis as Record<string, unknown>).__otelShutdown as (() => Promise<void>) | undefined
+  const p5 = otelShutdown?.() ?? Promise.resolve()
+  await Promise.all([p1, p2, p3, p4, p5])
   logger.info("Bot stopped!")
   process.exit(0)
 })
