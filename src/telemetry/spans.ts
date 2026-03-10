@@ -12,9 +12,7 @@ export { tracer }
 export async function withSpan<T>(name: string, attributes: Attributes, fn: (span: Span) => Promise<T>): Promise<T> {
   return tracer.startActiveSpan(name, { attributes }, async (span) => {
     try {
-      const result = await fn(span)
-      span.setStatus({ code: SpanStatusCode.OK })
-      return result
+      return await fn(span)
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR, message: error instanceof Error ? error.message : String(error) })
       span.recordException(error instanceof Error ? error : new Error(String(error)))
@@ -35,10 +33,21 @@ export function startSpan(name: string, attributes: Attributes): Span {
 }
 
 /** Records an exception on the currently active span (if any). */
-export function recordException(error: unknown): void {
-  const span = trace.getActiveSpan()
-  if (span) {
-    span.recordException(error instanceof Error ? error : new Error(String(error)))
-    span.setStatus({ code: SpanStatusCode.ERROR, message: error instanceof Error ? error.message : String(error) })
+export function recordException(
+  error: unknown,
+  options?: {
+    name?: string
+    attributes?: Attributes
+  }
+): void {
+  const exception = error instanceof Error ? error : new Error(String(error))
+  const span =
+    trace.getActiveSpan() ?? tracer.startSpan(options?.name ?? "bot.exception", { attributes: options?.attributes })
+
+  span.recordException(exception)
+  span.setStatus({ code: SpanStatusCode.ERROR, message: exception.message })
+
+  if (!trace.getActiveSpan()) {
+    span.end()
   }
 }

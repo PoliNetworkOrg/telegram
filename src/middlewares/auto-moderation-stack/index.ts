@@ -7,7 +7,7 @@ import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { Moderation } from "@/modules/moderation"
 import { redis } from "@/redis"
-import { BotAttributes, botMetrics, withSpan } from "@/telemetry"
+import { BotAttributes, botMetrics, recordException, withSpan } from "@/telemetry"
 import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
@@ -108,6 +108,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       const grant = await api.tg.grants.checkUser.query({ userId: ctx.from.id })
       if (grant.isGranted) return { role: "user" }
     } catch (e) {
+      recordException(e)
       debouncedError(e, "Error checking whitelist status in auto-moderation")
     }
 
@@ -124,6 +125,16 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       "message::url" | "message::text_link" | "edited_message::url" | "edited_message::text_link"
     >
   ) {
+    const message = ctx.msg
+    // extract all links from the message, might be inside entities, or inside the message text body
+    const links = ctx
+      .entities("text_link")
+      .map((e) => e.url)
+      .concat([getText(message).text])
+
+    const allowed = await checkForAllowedLinks(links)
+    if (allowed) return
+
     await withSpan(
       "bot.automod.link_check",
       {
@@ -133,21 +144,12 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         [BotAttributes.USER_ID]: ctx.from.id,
       },
       async (span) => {
-        const message = ctx.msg
-        const links = ctx
-          .entities("text_link")
-          .map((e) => e.url)
-          .concat([getText(message).text])
-
-        const allowed = await checkForAllowedLinks(links)
-        if (allowed) {
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "pass")
-          return
-        }
-
         if (ctx.whitelisted) {
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "whitelisted")
+          // no mod action
+          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "skip")
+          span.setAttribute(BotAttributes.AUTOMOD_REASON, "whitelist_bypass")
           if (ctx.whitelisted.role === "user") {
+            // log the grant usage
             await modules.get("tgLogger").grants({
               action: "USAGE",
               from: ctx.from,
@@ -158,7 +160,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
           return
         }
 
-        span.setAttribute(BotAttributes.AUTOMOD_RESULT, "fail")
+        span.setAttribute(BotAttributes.AUTOMOD_RESULT, "moderate")
         span.setAttribute(BotAttributes.AUTOMOD_ACTION, "mute")
         botMetrics.automodActions.add(1, {
           [BotAttributes.AUTOMOD_CHECK]: "link",
@@ -173,6 +175,9 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
           [message],
           "Shared link not allowed"
         )
+        if (res.isErr()) {
+          recordException(new Error(`Link automod mute failed: ${res.error.fmtError}`))
+        }
 
         const msg = await ctx.reply(
           res.isOk()
@@ -194,6 +199,12 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * If harmful content is detected, mutes the user and deletes the message.
    */
   private async harmfulContentHandler(ctx: Filter<ModerationContext<C>, "message">) {
+    const message = ctx.message
+    const flaggedCategories = await this.aiModeration.checkForHarmfulContent(ctx)
+    if (flaggedCategories.length === 0) return
+
+    const reasons = flaggedCategories.map((cat) => ` - ${cat.category} (${(cat.score * 100).toFixed(1)}%)`).join("\n")
+
     await withSpan(
       "bot.automod.harmful_content",
       {
@@ -203,23 +214,11 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         [BotAttributes.USER_ID]: ctx.from.id,
       },
       async (span) => {
-        const message = ctx.message
-        const flaggedCategories = await this.aiModeration.checkForHarmfulContent(ctx)
-
-        if (flaggedCategories.length === 0) {
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "pass")
-          return
-        }
-
-        const reasons = flaggedCategories
-          .map((cat) => ` - ${cat.category} (${(cat.score * 100).toFixed(1)}%)`)
-          .join("\n")
-
         if (flaggedCategories.some((cat) => cat.aboveThreshold)) {
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "fail")
-
           if (ctx.whitelisted) {
-            span.setAttribute(BotAttributes.AUTOMOD_ACTION, "whitelisted")
+            // log the action but do not mute
+            span.setAttribute(BotAttributes.AUTOMOD_RESULT, "skip")
+            span.setAttribute(BotAttributes.AUTOMOD_REASON, "whitelist_bypass")
             if (ctx.whitelisted.role === "user")
               await modules.get("tgLogger").grants({
                 action: "USAGE",
@@ -227,44 +226,52 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
                 chat: ctx.chat,
                 message,
               })
-          } else {
-            span.setAttribute(BotAttributes.AUTOMOD_ACTION, "mute")
-            botMetrics.automodActions.add(1, {
-              [BotAttributes.AUTOMOD_CHECK]: "harmful_content",
-              [BotAttributes.AUTOMOD_ACTION]: "mute",
-            })
-
-            const res = await Moderation.mute(
-              ctx.from,
-              ctx.chat,
-              ctx.me,
-              duration.zod.parse("1d"),
-              [message],
-              `Automatic moderation detected harmful content\n${reasons}`
-            )
-
-            const msg = await ctx.reply(
-              res.isOk()
-                ? fmt(({ i, b }) => [
-                    b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
-                    i`If you think this is a mistake, please contact the group administrators.`,
-                  ])
-                : res.error.fmtError
-            )
-            await wait(5000)
-            await msg.delete()
+            return
           }
-        } else {
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "flagged_below_threshold")
-          span.setAttribute(BotAttributes.AUTOMOD_ACTION, "silent_log")
-          await modules.get("tgLogger").moderationAction({
-            action: "SILENT",
-            from: ctx.me,
-            chat: ctx.chat,
-            target: ctx.from,
-            reason: `Message flagged for moderation: \n${reasons}`,
+
+          // above threshold, mute user and delete the message
+          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "moderate")
+          span.setAttribute(BotAttributes.AUTOMOD_ACTION, "mute")
+          botMetrics.automodActions.add(1, {
+            [BotAttributes.AUTOMOD_CHECK]: "harmful_content",
+            [BotAttributes.AUTOMOD_ACTION]: "mute",
           })
+
+          const res = await Moderation.mute(
+            ctx.from,
+            ctx.chat,
+            ctx.me,
+            duration.zod.parse("1d"),
+            [message],
+            `Automatic moderation detected harmful content\n${reasons}`
+          )
+          if (res.isErr()) {
+            recordException(new Error(`Harmful-content automod mute failed: ${res.error.fmtError}`))
+          }
+
+          const msg = await ctx.reply(
+            res.isOk()
+              ? fmt(({ i, b }) => [
+                  b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
+                  i`If you think this is a mistake, please contact the group administrators.`,
+                ])
+              : res.error.fmtError
+          )
+          await wait(5000)
+          await msg.delete()
+          return
         }
+
+        // no flagged category is above the threshold, still log it for manual review
+        span.setAttribute(BotAttributes.AUTOMOD_RESULT, "observe")
+        span.setAttribute(BotAttributes.AUTOMOD_REASON, "below_threshold")
+        await modules.get("tgLogger").moderationAction({
+          action: "SILENT",
+          from: ctx.me,
+          chat: ctx.chat,
+          target: ctx.from,
+          reason: `Message flagged for moderation: \n${reasons}`,
+        })
       }
     )
   }
@@ -274,6 +281,16 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * If the percentage of non-latin characters is too high, mutes the user for 10 minutes and deletes the message.
    */
   private async nonLatinHandler(ctx: Filter<ModerationContext<C>, "message:text" | "message:caption">) {
+    const text = ctx.message.caption ?? ctx.message.text
+    const match = text.match(NON_LATIN.REGEX)
+    // 1. there are non latin characters
+    // 2. there are more than LENGTH_THR non-latin characters
+    // 3. the percentage of non-latin characters after the LENGTH_THR is more than PERCENTAGE_THR
+    // that should catch messages respecting this inequality: 0.2y + 8 < x ≤ y
+    // with x = number of non-latin characters, y = total length of the message
+    // longer messages can have more non-latin characters, but less in percentage
+    if (!(match && (match.length - NON_LATIN.LENGTH_THR) / text.length > NON_LATIN.PERCENTAGE_THR)) return
+
     await withSpan(
       "bot.automod.non_latin",
       {
@@ -283,33 +300,28 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         [BotAttributes.USER_ID]: ctx.from.id,
       },
       async (span) => {
-        const text = ctx.message.caption ?? ctx.message.text
-        const match = text.match(NON_LATIN.REGEX)
+        // just delete the message and mute the user for 10 minutes
+        span.setAttribute(BotAttributes.AUTOMOD_RESULT, "moderate")
+        span.setAttribute(BotAttributes.AUTOMOD_ACTION, "mute")
+        botMetrics.automodActions.add(1, {
+          [BotAttributes.AUTOMOD_CHECK]: "non_latin",
+          [BotAttributes.AUTOMOD_ACTION]: "mute",
+        })
 
-        if (match && (match.length - NON_LATIN.LENGTH_THR) / text.length > NON_LATIN.PERCENTAGE_THR) {
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "fail")
-          span.setAttribute(BotAttributes.AUTOMOD_ACTION, "mute")
-          botMetrics.automodActions.add(1, {
-            [BotAttributes.AUTOMOD_CHECK]: "non_latin",
-            [BotAttributes.AUTOMOD_ACTION]: "mute",
-          })
-
-          const res = await Moderation.mute(
-            ctx.from,
-            ctx.chat,
-            ctx.me,
-            duration.zod.parse(NON_LATIN.MUTE_DURATION),
-            [ctx.message],
-            "Message contains non-latin characters"
+        const res = await Moderation.mute(
+          ctx.from,
+          ctx.chat,
+          ctx.me,
+          duration.zod.parse(NON_LATIN.MUTE_DURATION),
+          [ctx.message],
+          "Message contains non-latin characters"
+        )
+        if (res.isErr()) {
+          recordException(new Error("Non-latin automod mute failed"))
+          logger.error(
+            { from: ctx.from, chat: ctx.chat, messageId: ctx.message.message_id },
+            "AUTOMOD: nonLatinHandler - Cannot mute"
           )
-          if (res.isErr()) {
-            logger.error(
-              { from: ctx.from, chat: ctx.chat, messageId: ctx.message.message_id },
-              "AUTOMOD: nonLatinHandler - Cannot mute"
-            )
-          }
-        } else {
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "pass")
         }
       }
     )
@@ -320,6 +332,35 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    */
   private async multichatSpamHandler(ctx: Filter<ModerationContext<C>, "message:text" | "message:media">) {
     if (ctx.from.is_bot || ctx.whitelisted) return
+    const { text } = getText(ctx.message)
+    if (text === null) return
+    if (text.length < MULTI_CHAT_SPAM.LENGTH_THR) return // skip because too short
+
+    const key = `moderation:multichatspam:${ctx.from.id}` // the key is unique for each user
+    const hash = ssdeep.digest(text) // hash to compute message similarity
+    const res = await redis.rPush(key, `${hash}|${ctx.chat.id}|${ctx.message.message_id}`) // push the message data to the redis list
+    await redis.expire(key, MULTI_CHAT_SPAM.EXPIRY) // seconds expiry, refreshed with each message
+    if (res < 3) return
+
+    // triggered when more than 3 messages have been sent within EXPIRY seconds of each other
+    const range = await redis.lRange(key, 0, -2)
+    const similarMessages: Message[] = await Promise.all(
+      range
+        .map((r) => r.split("|"))
+        .map(([hash, chatId, messageId]) => ({
+          hash,
+          chatId: Number(chatId),
+          messageId: Number(messageId),
+        }))
+        .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SPAM.SIMILARITY_THR)
+        .map(async (v) => {
+          const msg = await MessageUserStorage.getInstance().get(v.chatId, v.messageId)
+          const message = createFakeMessage(v.chatId, v.messageId, ctx.from, msg?.timestamp)
+          return message
+        })
+    )
+    if (similarMessages.length === 0) return
+    similarMessages.push(ctx.message)
 
     await withSpan(
       "bot.automod.multichat_spam",
@@ -330,59 +371,19 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         [BotAttributes.USER_ID]: ctx.from.id,
       },
       async (span) => {
-        const { text } = getText(ctx.message)
-        if (text === null) {
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "skip")
-          return
-        }
-        if (text.length < MULTI_CHAT_SPAM.LENGTH_THR) {
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "skip")
-          return
-        }
-        const key = `moderation:multichatspam:${ctx.from.id}`
-        const hash = ssdeep.digest(text)
-        const res = await redis.rPush(key, `${hash}|${ctx.chat.id}|${ctx.message.message_id}`)
-        await redis.expire(key, MULTI_CHAT_SPAM.EXPIRY)
+        span.setAttribute(BotAttributes.AUTOMOD_RESULT, "moderate")
+        span.setAttribute(BotAttributes.AUTOMOD_ACTION, "mute")
+        botMetrics.automodActions.add(1, {
+          [BotAttributes.AUTOMOD_CHECK]: "multichat_spam",
+          [BotAttributes.AUTOMOD_ACTION]: "mute",
+        })
 
-        if (res >= 3) {
-          const range = await redis.lRange(key, 0, -2)
-          const similarMessages: Message[] = await Promise.all(
-            range
-              .map((r) => r.split("|"))
-              .map(([hash, chatId, messageId]) => ({
-                hash,
-                chatId: Number(chatId),
-                messageId: Number(messageId),
-              }))
-              .filter((v) => ssdeep.similarity(v.hash, hash) > MULTI_CHAT_SPAM.SIMILARITY_THR)
-              .map(async (v) => {
-                const msg = await MessageUserStorage.getInstance().get(v.chatId, v.messageId)
-                const message = createFakeMessage(v.chatId, v.messageId, ctx.from, msg?.timestamp)
-                return message
-              })
-          )
+        const muteDuration = duration.zod.parse(MULTI_CHAT_SPAM.MUTE_DURATION)
+        const res = await Moderation.multiChatSpam(ctx.from, similarMessages, muteDuration)
 
-          if (similarMessages.length === 0) {
-            span.setAttribute(BotAttributes.AUTOMOD_RESULT, "pass")
-            return
-          }
-          similarMessages.push(ctx.message)
-
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "fail")
-          span.setAttribute(BotAttributes.AUTOMOD_ACTION, "mute")
-          botMetrics.automodActions.add(1, {
-            [BotAttributes.AUTOMOD_CHECK]: "multichat_spam",
-            [BotAttributes.AUTOMOD_ACTION]: "mute",
-          })
-
-          const muteDuration = duration.zod.parse(MULTI_CHAT_SPAM.MUTE_DURATION)
-          const res = await Moderation.multiChatSpam(ctx.from, similarMessages, muteDuration)
-
-          if (res.isErr()) {
-            logger.error({ error: res.error }, "Cannot execute moderation action for MULTI_CHAT_SPAM")
-          }
-        } else {
-          span.setAttribute(BotAttributes.AUTOMOD_RESULT, "pass")
+        if (res.isErr()) {
+          recordException(new Error("Multichat-spam automod action failed"))
+          logger.error({ error: res.error }, "Cannot execute moderation action for MULTI_CHAT_SPAM")
         }
       }
     )

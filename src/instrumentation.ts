@@ -2,7 +2,7 @@ import type { Attributes } from "@opentelemetry/api"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-proto"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-proto"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto"
-import { HttpInstrumentation } from "@opentelemetry/instrumentation-http"
+import { HttpInstrumentation, type HttpInstrumentationConfig } from "@opentelemetry/instrumentation-http"
 import { PinoInstrumentation } from "@opentelemetry/instrumentation-pino"
 import { RedisInstrumentation } from "@opentelemetry/instrumentation-redis-4"
 import { resourceFromAttributes } from "@opentelemetry/resources"
@@ -21,11 +21,20 @@ import {
   ATTR_SERVICE_VERSION,
   SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
 } from "@opentelemetry/semantic-conventions"
+import { env } from "./env"
 
-const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://localhost:4318"
-const serviceName = process.env.OTEL_SERVICE_NAME || "polinetwork-telegram-bot"
-const storageRate = Number.parseFloat(process.env.OTEL_STORAGE_SAMPLE_RATE || "0.1")
-const nodeEnv = process.env.NODE_ENV || "development"
+const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT
+const serviceName = env.OTEL_SERVICE_NAME
+const serviceVersion = env.OTEL_SERVICE_VERSION
+const storageRate = env.OTEL_STORAGE_SAMPLE_RATE
+const nodeEnv = env.NODE_ENV
+
+function shouldIgnoreOutgoingHttpRequest(
+  request: Parameters<NonNullable<HttpInstrumentationConfig["ignoreOutgoingRequestHook"]>>[0]
+) {
+  if (typeof request.path === "string") return request.path.endsWith("/getUpdates")
+  return false
+}
 
 /**
  * Custom sampler that always traces high-importance spans (commands, automod)
@@ -63,7 +72,7 @@ class BotSampler implements Sampler {
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: serviceName,
-    [ATTR_SERVICE_VERSION]: process.env.npm_package_version || "unknown",
+    [ATTR_SERVICE_VERSION]: serviceVersion,
     [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: nodeEnv,
   }),
   sampler: new ParentBasedSampler({ root: new BotSampler() }),
@@ -72,7 +81,13 @@ const sdk = new NodeSDK({
     exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
   }),
   logRecordProcessor: new BatchLogRecordProcessor(new OTLPLogExporter({ url: `${endpoint}/v1/logs` })),
-  instrumentations: [new HttpInstrumentation(), new RedisInstrumentation(), new PinoInstrumentation()],
+  instrumentations: [
+    new HttpInstrumentation({
+      ignoreOutgoingRequestHook: shouldIgnoreOutgoingHttpRequest,
+    }),
+    new RedisInstrumentation(),
+    new PinoInstrumentation(),
+  ],
 })
 
 sdk.start()

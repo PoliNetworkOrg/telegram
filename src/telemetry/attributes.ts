@@ -22,10 +22,14 @@ export const BotAttributes = {
   AUTOMOD_CHECK: "bot.automod.check",
   AUTOMOD_RESULT: "bot.automod.result",
   AUTOMOD_ACTION: "bot.automod.action",
+  AUTOMOD_REASON: "bot.automod.reason",
 
   // Storage attributes
   STORAGE_OPERATION: "bot.storage.operation",
   STORAGE_COUNT: "bot.storage.count",
+
+  // Cache attributes
+  CACHE_OPERATION: "bot.cache.operation",
 
   // tRPC attributes
   TRPC_PROCEDURE: "bot.trpc.procedure",

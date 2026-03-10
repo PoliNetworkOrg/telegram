@@ -19,6 +19,7 @@ import { telemetryMiddleware } from "./middlewares/telemetry"
 import { modules, sharedDataInit } from "./modules"
 import { Moderation } from "./modules/moderation"
 import { redis } from "./redis"
+import { BotAttributes, recordException } from "./telemetry"
 import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
 import type { Context, ModuleShared } from "./utils/types"
@@ -98,6 +99,10 @@ bot.on("message", checkUsername)
 
 bot.catch(async (err) => {
   const { error } = err
+  recordException(error, {
+    name: "bot.error",
+    attributes: { [BotAttributes.IMPORTANCE]: "high" },
+  })
   if (error instanceof GrammyError) {
     await tgLogger.exception({ type: "BOT_ERROR", error }, "bot.catch() -- middleware stack")
   } else if (error instanceof HttpError) {
@@ -139,6 +144,10 @@ process.on("SIGINT", () => terminate("SIGINT"))
 process.on("SIGTERM", () => terminate("SIGTERM"))
 
 process.on("unhandledRejection", (reason: Error, promise) => {
+  recordException(reason, {
+    name: "bot.unhandled_rejection",
+    attributes: { [BotAttributes.IMPORTANCE]: "high" },
+  })
   logger.fatal({ reason, promise }, "UNHANDLED PROMISE REJECTION")
   void tgLogger.exception({ type: "UNHANDLED_PROMISE", error: reason, promise })
 })

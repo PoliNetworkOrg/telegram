@@ -3,7 +3,7 @@ import { Composer, type Context, type MiddlewareObj } from "grammy"
 import type { User } from "grammy/types"
 import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
-import { BotAttributes, botMetrics, withSpan } from "@/telemetry"
+import { BotAttributes, botMetrics, recordException, withSpan } from "@/telemetry"
 import { padChatId } from "@/utils/chat"
 import { toGrammyUser } from "@/utils/types"
 
@@ -55,6 +55,7 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
     if (!error) return dbMsg
 
     if (error === "DECRYPT_ERROR") {
+      recordException(new Error(`Failed to decrypt message ${messageId} in chat ${chatId}`))
       logger.error(
         `messageLink: there was an error in the backend while decrypting the message ${messageId} in chat ${chatId}`
       )
@@ -93,6 +94,7 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
       async () => {
         const { error } = await api.tg.messages.add.mutate({ messages: this.memoryStorage })
         if (error) {
+          recordException(new Error(`Failed to store ${count} messages: ${error}`))
           logger.error(
             "memoryStorage: There was an error while encrypting messages in the backend, cannot save messages in table"
           )
@@ -114,9 +116,12 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
       const fromBackend = await api.tg.users.get.query({ userId })
       if (fromBackend.user) return toGrammyUser(fromBackend.user)
 
-      if (fromBackend.error !== "NOT_FOUND")
+      if (fromBackend.error !== "NOT_FOUND") {
+        recordException(new Error(`Failed to retrieve stored user ${userId}: ${fromBackend.error}`))
         logger.error({ error: fromBackend.error }, "userStorage: error from API while retrieving user from backend")
+      }
     } catch (error) {
+      recordException(error)
       logger.error({ error }, "userStorage: error while calling API for retrieving user from backend")
     }
     return null
@@ -149,9 +154,11 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
       async () => {
         const { error } = await api.tg.users.add.mutate({ users })
         if (error === "ENCRYPT_ERROR") {
+          recordException(new Error(`Failed to store ${count} users: ${error}`))
           logger.error("userStorage: There was an error while encrypting users in the backend, users voided")
           return
         } else if (error === "INTERNAL_SERVER_ERROR") {
+          recordException(new Error(`Failed to store ${count} users: ${error}`))
           logger.error("userStorage: There was an UNEXPECTED error while saving users in backend, users voided")
           return
         }

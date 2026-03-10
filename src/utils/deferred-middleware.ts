@@ -1,4 +1,6 @@
 import type { Context, MiddlewareFn } from "grammy"
+import { logger } from "@/logger"
+import { BotAttributes, recordException } from "@/telemetry"
 
 /**
  * Defer middleware execution as to not halt the execution of the main stack.
@@ -8,7 +10,13 @@ import type { Context, MiddlewareFn } from "grammy"
  */
 export function defer<C extends Context>(middleware: (ctx: C) => Promise<void>): MiddlewareFn<C> {
   return (context, next) => {
-    void middleware(context)
+    void middleware(context).catch((error) => {
+      recordException(error, {
+        name: "bot.deferred.error",
+        attributes: { [BotAttributes.IMPORTANCE]: "high" },
+      })
+      logger.error({ error }, "Deferred middleware failed")
+    })
     return next()
   }
 }
