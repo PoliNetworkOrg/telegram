@@ -134,8 +134,7 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
 export class ManagedCommands<
   TRole extends string = DefaultRoles,
   C extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
-> implements MiddlewareObj<C>
-{
+> implements MiddlewareObj<C> {
   private composer = new Composer<C>()
   private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
   private permissionHandler: PermissionHandler<TRole, C>
@@ -440,7 +439,7 @@ export class ManagedCommands<
    *   })
    *
    * const commands = new ManagedCommands()
-   * commands.addCollection(collection)
+   * commands.withCollection(collection)
    *
    * bot.use(commands)
    * ```
