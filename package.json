@@ -8,7 +8,7 @@
   "scripts": {
     "start": "NODE_ENV=production node --import ./dist/instrumentation.js dist/bot.js",
     "build": "tsup",
-    "dev:raw": "NODE_ENV=development tsx watch --import ./src/instrumentation.ts --clear-screen=false --env-file=.env src/bot.ts",
+    "dev:raw": "NODE_ENV=development tsx watch --clear-screen=false --env-file=.env --import ./src/instrumentation.ts src/bot.ts",
     "dev": "pnpm run dev:raw | pino-pretty",
     "test": "vitest",
     "typecheck": "tsc --noEmit",

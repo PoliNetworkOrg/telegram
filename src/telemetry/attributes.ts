@@ -24,6 +24,17 @@ export const BotAttributes = {
   AUTOMOD_ACTION: "bot.automod.action",
   AUTOMOD_REASON: "bot.automod.reason",
 
+  // Moderation attributes
+  MODERATION_ACTION: "bot.moderation.action",
+  MODERATION_RESULT: "bot.moderation.result",
+  MODERATION_REASON: "bot.moderation.reason",
+  MODERATION_ERROR_CODE: "bot.moderation.error_code",
+  MODERATION_MODERATOR_ID: "bot.moderation.moderator_id",
+  MODERATION_TARGET_ID: "bot.moderation.target_id",
+  MODERATION_CHAT_COUNT: "bot.moderation.chat_count",
+  MODERATION_TARGET_COUNT: "bot.moderation.target_count",
+  MESSAGE_COUNT: "bot.message.count",
+
   // Storage attributes
   STORAGE_OPERATION: "bot.storage.operation",
   STORAGE_COUNT: "bot.storage.count",
