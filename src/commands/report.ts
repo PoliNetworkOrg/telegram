@@ -1,7 +1,26 @@
+import type { Context, Filter } from "grammy"
+import type { Message } from "grammy/types"
+import type { ConversationContext } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { fmt } from "@/utils/format"
 import { _commandsBase } from "./_base"
+
+export const report = async (
+  context: Filter<Context, "message"> | ConversationContext<"group"> | ConversationContext<"supergroup">,
+  repliedTo: Message
+) => {
+  const reportSent = await modules.get("tgLogger").report(repliedTo, context.from)
+  await context.reply(
+    reportSent
+      ? fmt(({ b, n }) => [b`✅ Message reported!`, n`Moderators have been notified.`], { sep: "\n" })
+      : fmt(({ b, n }) => [b`⚠️ Report not sent`, n`Please try again in a moment.`], { sep: "\n" }),
+    {
+      disable_notification: false,
+      reply_parameters: { message_id: repliedTo.message_id },
+    }
+  )
+}
 
 _commandsBase.createCommand({
   trigger: "report",
@@ -15,15 +34,6 @@ _commandsBase.createCommand({
       return
     }
 
-    const reportSent = await modules.get("tgLogger").report(repliedTo, context.from)
-    await context.reply(
-      reportSent
-        ? fmt(({ b, n }) => [b`✅ Message reported!`, n`Moderators have been notified.`], { sep: "\n" })
-        : fmt(({ b, n }) => [b`⚠️ Report not sent`, n`Please try again in a moment.`], { sep: "\n" }),
-      {
-        disable_notification: false,
-        reply_parameters: { message_id: repliedTo.message_id },
-      }
-    )
+    await report(context, repliedTo)
   },
 })

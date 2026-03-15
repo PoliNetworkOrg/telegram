@@ -21,6 +21,7 @@ import { redis } from "./redis"
 import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
 import type { Context, ModuleShared } from "./utils/types"
+import { MentionListener } from "./middlewares/mention-listener"
 
 const TEST_CHAT_ID = -1002669533277
 const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
@@ -79,6 +80,7 @@ bot.use(new BotMembershipHandler())
 bot.use(new AutoModerationStack())
 bot.use(new GroupSpecificActions())
 bot.use(Moderation)
+bot.use(new MentionListener())
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
