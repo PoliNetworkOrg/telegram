@@ -278,6 +278,7 @@ export class TgLogger extends Module<ModuleShared> {
       ? new InlineKeyboard().url("See Deleted Message", props.preDeleteRes.link)
       : undefined
     await this.log(isAutoModeration ? this.topics.autoModeration : this.topics.adminActions, mainMsg, { reply_markup })
+    if (!isAutoModeration) await this.logModActionInChat(props)
     return mainMsg
   }
 
@@ -497,5 +498,39 @@ export class TgLogger extends Module<ModuleShared> {
 
     await this.log(this.topics.exceptions, msg)
     return msg
+  }
+
+  private async logModActionInChat(p: ModerationAction): Promise<void> {
+    if (
+      p.action !== "BAN" &&
+      p.action !== "KICK" &&
+      p.action !== "MUTE" &&
+      p.action !== "UNBAN" &&
+      p.action !== "UNMUTE"
+    )
+      return
+
+    const msg = fmt(
+      ({ b, n, skip }) => [
+        skip`${MOD_ACTION_TITLE(p)}`,
+        n`${b`Target:`} ${fmtUser(p.target, false)}`,
+        n`${b`Moderator:`} ${fmtUser(p.from, false)}`,
+        "duration" in p && p.duration ? n`${b`Duration:`} ${p.duration.raw} (until ${p.duration.dateStr})` : undefined,
+        "reason" in p && p.reason ? n`${b`Reason:`} ${p.reason}` : undefined,
+      ],
+      { sep: "\n" }
+    )
+
+    await this.shared.api
+      .sendMessage(p.chat.id, msg, {
+        disable_notification: false,
+        link_preview_options: { is_disabled: true },
+      })
+      .catch((error: unknown) => {
+        logger.warn(
+          { error, action: p.action },
+          "[Moderation:logActionInChat] Failed to post moderation action in chat"
+        )
+      })
   }
 }

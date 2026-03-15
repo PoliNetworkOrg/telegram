@@ -45,7 +45,6 @@ const MAP_ACTIONS: Record<
   MUTE_ALL: "mute_all",
 }
 
-// TODO: missing in-channel user feedback (eg. <user> has been muted by <admin>...)
 class ModerationClass<C extends Context> implements MiddlewareObj<C> {
   private composer = new Composer<C>()
   private static instance: ModerationClass<Context> | null = null

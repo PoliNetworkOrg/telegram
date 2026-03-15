@@ -1,8 +1,8 @@
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
+import { ephemeral } from "@/utils/messages"
 import type { Role } from "@/utils/types"
-import { wait } from "@/utils/wait"
 
 export const kick = new CommandsCollection<Role>("Kicking").createCommand({
   trigger: "kick",
@@ -21,7 +21,6 @@ export const kick = new CommandsCollection<Role>("Kicking").createCommand({
     }
 
     const res = await Moderation.kick(repliedTo.from, context.chat, context.from, [repliedTo], args.reason)
-    const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-    void wait(5000).then(async () => msg.delete())
+    if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
   },
 })

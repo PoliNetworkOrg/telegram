@@ -1,9 +1,8 @@
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
-import { getText } from "@/utils/messages"
+import { ephemeral, getText } from "@/utils/messages"
 import type { Role } from "@/utils/types"
-import { wait } from "@/utils/wait"
 
 export const del = new CommandsCollection<Role>("Deletion").createCommand({
   trigger: "del",
@@ -24,8 +23,6 @@ export const del = new CommandsCollection<Role>("Deletion").createCommand({
     })
 
     const res = await Moderation.deleteMessages([repliedTo], context.from, "Command /del")
-    // TODO: better error and ok response
-    const msg = await context.reply(res.isErr() ? "Cannot delete the message" : "OK")
-    void wait(5000).then(() => msg.delete())
+    if (res.isErr()) void ephemeral(context.reply("Cannot delete the message"))
   },
 })

@@ -3,6 +3,7 @@ import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
+import { ephemeral } from "@/utils/messages"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
 import { getUser } from "@/utils/users"
@@ -41,8 +42,7 @@ export const mute = new CommandsCollection<Role>("Muting")
         [repliedTo],
         args.reason
       )
-      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      void wait(5000).then(async () => msg.delete())
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })
   .createCommand({
@@ -62,8 +62,7 @@ export const mute = new CommandsCollection<Role>("Muting")
       }
 
       const res = await Moderation.mute(repliedTo.from, context.chat, context.from, null, [repliedTo], args.reason)
-      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      void wait(5000).then(async () => msg.delete())
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })
   .createCommand({
@@ -94,7 +93,6 @@ export const mute = new CommandsCollection<Role>("Muting")
       }
 
       const res = await Moderation.unmute(user, context.chat, context.from)
-      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      void wait(5000).then(async () => msg.delete())
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })
