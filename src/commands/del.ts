@@ -24,9 +24,10 @@ _commandsBase.createCommand({
     })
 
     const res = await Moderation.deleteMessages([repliedTo], context.from, "Command /del")
-    // TODO: better error and ok response
-    const msg = await context.reply(res.isErr() ? "Cannot delete the message" : "OK")
-    await wait(5000)
-    await msg.delete()
+    if (res.isErr()) {
+      const msg = await context.reply("Cannot delete the message")
+      await wait(5000)
+      await msg.delete()
+    }
   },
 })
