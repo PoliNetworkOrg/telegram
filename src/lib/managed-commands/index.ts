@@ -14,7 +14,7 @@ import type { Result } from "neverthrow"
 import { err, ok } from "neverthrow"
 import z from "zod"
 import { fmt } from "@/utils/format"
-import { wait } from "@/utils/wait"
+import { ephemeral } from "@/utils/messages"
 import type { CommandsCollection } from "./collection"
 import type {
   AnyCommand,
@@ -410,17 +410,14 @@ export class ManagedCommands<
             if (message.chat.type !== "private") await ctx.deleteMessage()
 
             const msg = await ctx.reply(
-              fmt(({ b, skip }) => [
+              fmt(({ b, code }) => [
                 `Error:`,
                 b`${requirements.error.join("\n")}`,
-                `\n\nUsage:`,
-                skip`\n${ManagedCommands.formatCommandUsage(cmd)}`,
+                `\nSee usage with:`,
+                code`/help ${Array.isArray(cmd.trigger) ? cmd.trigger[0] : cmd.trigger}`,
               ])
             )
-            if (ctx.chat.type !== "private") {
-              await wait(5000)
-              await msg.delete()
-            }
+            if (ctx.chat.type !== "private") void ephemeral(msg, 10_000) // delete the error message after some time in groups, no need to keep it
             return
           }
 
