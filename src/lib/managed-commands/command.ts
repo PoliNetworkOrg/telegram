@@ -2,6 +2,7 @@ import type { Conversation } from "@grammyjs/conversations"
 import type { Context } from "grammy"
 import type { Message } from "grammy/types"
 import type { z } from "zod"
+import type { MaybeArray } from "@/utils/types"
 import type { ConversationContext } from "./context"
 
 interface BaseArgumentOptions {
@@ -82,8 +83,9 @@ export interface Command<
 > {
   /**
    * The command trigger, the string that will be used to call the command.
+   * If an array is provided, all entries will be used as aliases for the command
    */
-  trigger: string
+  trigger: MaybeArray<string>
   /**
    * The scope of the command, can be "private", "group" or "both".
    * @default "both"

@@ -134,12 +134,14 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
 export class ManagedCommands<
   TRole extends string = DefaultRoles,
   C extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
-> implements MiddlewareObj<C> {
+> implements MiddlewareObj<C>
+{
   private composer = new Composer<C>()
   private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
   private permissionHandler: PermissionHandler<TRole, C>
   private hooks: ManagedCommandsHooks<C, TRole>
   private adapter: ConversationStorage<C, ConversationData>
+  private registeredTriggers = new Set<string>()
 
   /**
    * Parses the `reply_to_message` field from the message object
@@ -254,6 +256,15 @@ export class ManagedCommands<
   }
 
   /**
+   * Generate a unique ID for a command based on its trigger(s), used for conversation IDs.
+   * @param cmd The command
+   * @returns a unique ID for the command based on its trigger(s)
+   */
+  private static commandID(cmd: AnyCommand) {
+    return typeof cmd.trigger === "string" ? cmd.trigger : cmd.trigger.join("_")
+  }
+
+  /**
    * Creates a new instance of ManagedCommands, which can be used as a middleware
    * @example
    * ```ts
@@ -340,9 +351,21 @@ export class ManagedCommands<
   createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
     cmd: Command<A, R, S, TRole>
   ): this {
+    const triggers = Array.isArray(cmd.trigger) ? cmd.trigger : [cmd.trigger]
+    for (const trigger of triggers) {
+      if (this.registeredTriggers.has(trigger)) {
+        throw new Error(
+          `[ManagedCommands] Trigger '${trigger}' is already registered (aliases: [${triggers.join(", ")}])`
+        )
+      }
+      this.registeredTriggers.add(trigger)
+    }
+
     cmd.scope = cmd.scope ?? ("both" as S) // default to both
     this.commands.push(cmd) // add the command to the list
-    this.commands.sort((a, b) => a.trigger.localeCompare(b.trigger)) // sort the commands by alphabetical order of the trigger
+    // TODO: rethink sorting
+    // this.commands.sort((a, b) => a.trigger.localeCompare(b.trigger)) // sort the commands by alphabetical order of the trigger
+    const id = ManagedCommands.commandID(cmd)
 
     // create a conversation that handles the command execution
     this.composer.use(
@@ -393,9 +416,7 @@ export class ManagedCommands<
               else throw error
             })
         },
-        {
-          id: cmd.trigger, // the conversation ID is set to the command trigger
-        }
+        { id }
       )
     )
     this.composer.command(cmd.trigger, async (ctx) => {
@@ -418,7 +439,7 @@ export class ManagedCommands<
       }
 
       // enter the conversation that handles the command execution
-      await ctx.conversation.enter(cmd.trigger)
+      await ctx.conversation.enter(id)
     })
     return this
   }
