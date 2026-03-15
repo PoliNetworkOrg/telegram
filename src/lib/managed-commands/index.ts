@@ -402,7 +402,7 @@ export class ManagedCommands<
           if (this.hooks.beforeHandler)
             await this.hooks.beforeHandler({ context: ctx as CommandContext<C>, command: cmd })
 
-          // Fianlly execute the handler
+          // Finally execute the handler
           await cmd
             .handler({
               context: ctx,
