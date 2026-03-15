@@ -34,7 +34,7 @@ async function cancel(
   await conv.halt()
 }
 
-export const linkAdminDashboard = new CommandsCollection<Role>("Link Admin Dashboard").createCommand({
+export const linkAdminDashboard = new CommandsCollection<Role>().createCommand({
   trigger: "link",
   scope: "private",
   description: "Verify the login code for the admin dashboard",

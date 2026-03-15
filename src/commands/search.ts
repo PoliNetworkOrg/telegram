@@ -9,7 +9,7 @@ const LIMIT = 9
 type Group = Awaited<ReturnType<typeof api.tg.groups.search.query>>["groups"][number]
 type LinkedGroup = Group & { link: string }
 
-export const search = new CommandsCollection<Role>("Search").createCommand({
+export const search = new CommandsCollection<Role>().createCommand({
   trigger: "search",
   scope: "both",
   description: "Search groups by title",

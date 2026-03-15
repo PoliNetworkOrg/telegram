@@ -133,7 +133,7 @@ export class ManagedCommands<
 > implements MiddlewareObj<C>
 {
   private composer = new Composer<C>()
-  private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
+  private commands: Record<string, AnyCommand<TRole>[]> = {}
   private getUserRoles: (userId: number, context: CommandContext<C>) => Promise<TRole[]>
   private hooks: ManagedCommandsHooks<C, TRole>
   private adapter: ConversationStorage<C, ConversationData>
@@ -239,7 +239,7 @@ export class ManagedCommands<
       cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
 
     return fmt(({ n, b, i }) => [
-      `/${cmd.trigger}`,
+      typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | "),
       ...args.map(({ key, optional }) => (optional ? n`[${i`${key}`}]` : n`<${i`${key}`}>`)),
       i`\nDesc:`,
       b`${cmd.description ?? "No description"}`,
@@ -248,6 +248,15 @@ export class ManagedCommands<
       ...(cmd.reply ? [i`\nCall while replying to a message:`, b`${cmd.reply.toUpperCase()}`] : []),
       args.length ? i`\nArgs:` : ``,
       ...args.flatMap(({ key, description }) => [`\n-`, i`${key}:`, description ?? "No description"]),
+    ])
+  }
+
+  private static formatCommandShort(cmd: AnyCommand): string {
+    const args = cmd.args ?? []
+    return fmt(({ i, n }) => [
+      typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | "),
+      ...args.map(({ key, optional }) => (optional ? i` [${key}]` : i` <${key}>`)),
+      n`\n\t${cmd.description ?? "No description"}`,
     ])
   }
 
@@ -328,14 +337,34 @@ export class ManagedCommands<
       const text = ctx.message?.text ?? ""
       const [_, cmdArg] = text.replaceAll("/", "").split(" ")
       if (cmdArg) {
-        const cmd = this.commands.find((c) => c.trigger === cmdArg)
+        const cmd = this.getCommands().find((c) => c.trigger === cmdArg)
         if (!cmd) return ctx.reply(fmt(() => "Command not found. See /help."))
 
         return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
       }
 
-      return ctx.reply(this.commands.map((cmd) => ManagedCommands.formatCommandUsage(cmd)).join("\n\n"))
+      const reply = fmt(
+        ({ u, b, skip, n, code }) => [
+          b`Available commands:`,
+          ...Object.entries(this.commands).flatMap(([collection, cmds]) => [
+            collection === "default" ? "" : u`${b`\n${collection}:`}`,
+            ...cmds.flatMap((cmd) => [skip`${ManagedCommands.formatCommandShort(cmd)}`]),
+          ]),
+          n`\n\nType ${code`\/help <command>`} for more details on a specific command.`,
+        ],
+        { sep: "\n" }
+      )
+
+      return ctx.reply(reply)
     })
+  }
+
+  public getCommands() {
+    const cmds: AnyCommand<TRole>[] = []
+    for (const collection in this.commands) {
+      cmds.push(...this.commands[collection])
+    }
+    return cmds
   }
 
   private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<C>): Promise<boolean> {
@@ -376,7 +405,8 @@ export class ManagedCommands<
    * @returns The ManagedCommands instance for chaining
    */
   createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
-    cmd: Command<A, R, S, TRole>
+    cmd: Command<A, R, S, TRole>,
+    collection: string = "default"
   ): this {
     const triggers = Array.isArray(cmd.trigger) ? cmd.trigger : [cmd.trigger]
     for (const trigger of triggers) {
@@ -389,7 +419,8 @@ export class ManagedCommands<
     }
 
     cmd.scope = cmd.scope ?? ("both" as S) // default to both
-    this.commands.push(cmd) // add the command to the list
+    this.commands[collection] = this.commands[collection] ?? []
+    this.commands[collection].push(cmd)
     // TODO: rethink sorting
     // this.commands.sort((a, b) => a.trigger.localeCompare(b.trigger)) // sort the commands by alphabetical order of the trigger
     const id = ManagedCommands.commandID(cmd)
@@ -490,11 +521,11 @@ export class ManagedCommands<
    * ```
    */
   withCollection(...collections: CommandsCollection<TRole>[]): this {
-    collections
-      .flatMap((c) => c.flush())
-      .forEach((cmd) => {
-        this.createCommand(cmd)
+    collections.forEach((c) => {
+      c.flush().forEach((cmd) => {
+        this.createCommand(cmd, c.name)
       })
+    })
     return this
   }
 

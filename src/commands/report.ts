@@ -4,7 +4,7 @@ import { modules } from "@/modules"
 import { fmt } from "@/utils/format"
 import type { Role } from "@/utils/types"
 
-export const report = new CommandsCollection<Role>("Reporting").createCommand({
+export const report = new CommandsCollection<Role>().createCommand({
   trigger: ["report", "admin"],
   description: "Report a message to admins",
   scope: "group",

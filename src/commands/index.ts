@@ -7,18 +7,11 @@ import { redis } from "@/redis"
 import type { Role } from "@/utils/types"
 import { printCtxFrom } from "@/utils/users"
 import { wait } from "@/utils/wait"
-import { audit } from "./audit"
-import { ban } from "./ban"
-import { banAll } from "./banall"
-import { del } from "./del"
-import { grants } from "./grants"
-import { kick } from "./kick"
 import { linkAdminDashboard } from "./link-admin-dashboard"
-import { mute } from "./mute"
+import { management } from "./management"
+import { moderation } from "./moderation"
 import { report } from "./report"
-import { role } from "./role"
 import { search } from "./search"
-import { userid } from "./userid"
 
 const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
   redis,
@@ -77,4 +70,4 @@ export const commands = new ManagedCommands<Role>({
       await context.reply("pong")
     },
   })
-  .withCollection(audit, ban, banAll, del, grants, kick, linkAdminDashboard, mute, report, role, search, userid)
+  .withCollection(linkAdminDashboard, report, search, management, moderation)

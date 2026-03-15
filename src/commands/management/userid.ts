@@ -14,7 +14,7 @@ export const userid = new CommandsCollection<Role>("User IDs").createCommand({
     const id = await getTelegramId(username)
     if (!id) {
       logger.warn(`[/userid] username @${username} not in our cache`)
-      await context.reply(fmt(() => `Username @${username} not in our cache`))
+      await context.reply(fmt(({ u }) => u`Username @${username} not in our cache`))
       return
     }
 
