@@ -18,7 +18,7 @@ export const ban = new CommandsCollection<Role>("Banning")
     reply: "required",
     permissions: {
       excludedRoles: ["creator"],
-      allowedGroupAdmins: true,
+      allowGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo }) => {
       if (!repliedTo.from) {
@@ -46,7 +46,7 @@ export const ban = new CommandsCollection<Role>("Banning")
     reply: "required",
     permissions: {
       excludedRoles: ["creator"],
-      allowedGroupAdmins: true,
+      allowGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo }) => {
       if (!repliedTo.from) {
@@ -72,7 +72,7 @@ export const ban = new CommandsCollection<Role>("Banning")
     scope: "group",
     permissions: {
       excludedRoles: ["creator"],
-      allowedGroupAdmins: true,
+      allowGroupAdmins: true,
     },
     handler: async ({ args, context }) => {
       const userId: number | null =

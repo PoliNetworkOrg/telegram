@@ -26,7 +26,7 @@ export const mute = new CommandsCollection<Role>("Muting")
     reply: "required",
     permissions: {
       excludedRoles: ["creator"],
-      allowedGroupAdmins: true,
+      allowGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo }) => {
       if (!repliedTo.from) {
@@ -53,7 +53,7 @@ export const mute = new CommandsCollection<Role>("Muting")
     reply: "required",
     permissions: {
       excludedRoles: ["creator"],
-      allowedGroupAdmins: true,
+      allowGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo }) => {
       if (!repliedTo.from) {
@@ -72,7 +72,7 @@ export const mute = new CommandsCollection<Role>("Muting")
     scope: "group",
     permissions: {
       excludedRoles: ["creator"],
-      allowedGroupAdmins: true,
+      allowGroupAdmins: true,
     },
     handler: async ({ args, context }) => {
       const userId: number | null =

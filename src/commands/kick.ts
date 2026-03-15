@@ -12,7 +12,7 @@ export const kick = new CommandsCollection<Role>("Kicking").createCommand({
   reply: "required",
   permissions: {
     excludedRoles: ["creator"],
-    allowedGroupAdmins: true,
+    allowGroupAdmins: true,
   },
   handler: async ({ args, context, repliedTo }) => {
     if (!repliedTo.from) {

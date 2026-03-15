@@ -9,7 +9,7 @@ import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import type { CommandContext, Context, MiddlewareObj } from "grammy"
 import { Composer, MemorySessionStorage } from "grammy"
-import type { ChatMember, Message } from "grammy/types"
+import type { Message } from "grammy/types"
 import type { Result } from "neverthrow"
 import { err, ok } from "neverthrow"
 import z from "zod"
@@ -28,25 +28,8 @@ import type {
   CommandScopedContext,
   RepliedTo,
 } from "./command"
-import { isTypedArgumentOptions } from "./command"
+import { isAllowedInGroups, isTypedArgumentOptions } from "./command"
 import type { ManagedCommandsFlavor } from "./context"
-
-export type PermissionHandler<TRole extends string, C extends Context> = (arg: {
-  context: CommandContext<C>
-  command: AnyCommand<TRole>
-}) => Promise<boolean>
-
-type DefaultRoles = ChatMember["status"]
-const defaultPermissionHandler: PermissionHandler<string, Context> = async ({ context, command }) => {
-  const { allowedRoles, excludedRoles } = command.permissions ?? {}
-  if (!context.from) return false
-  const member = await context.getChatMember(context.from.id)
-
-  if (allowedRoles && !allowedRoles.includes(member.status)) return false
-  if (excludedRoles?.includes(member.status)) return false
-
-  return true
-}
 
 export type Hook<C extends Context, TRole extends string = string, Params = unknown> = (
   params: Params & {
@@ -71,9 +54,15 @@ export type ManagedCommandsHooks<C extends Context, TRole extends string = strin
    * Called before executing the command handler, can be used to implement custom pre-handler logic, for example logging or analytics
    */
   beforeHandler?: Hook<C, TRole>
+  /**
+   * A function to override what counts as a "Group Admin", by default it considers users with Telegram Chat Role of
+   * "administrator" or "creator" as group admins, but you can override this to implement your own logic,
+   *  for example by checking an external database of admins
+   */
+  overrideGroupAdminCheck?: (userId: number, chatId: number, context: CommandContext<C>) => Promise<boolean>
 }
 
-export interface ManagedCommandsOptions<TRole extends string, C extends Context> {
+export interface IManagedCommandsOptions<TRole extends string, C extends Context> {
   /**
    * The storage adapter to use for persisting conversations.
    * - {@link https://grammy.dev/plugins/conversations#persisting-conversations conversations plugin documentation}
@@ -83,30 +72,37 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
   adapter: ConversationStorage<C, ConversationData>
 
   /**
-   * The permission handler to use for checking user permissions.
+   * A function to get externally defined roles for a specific user.
    *
-   * By default, this checks the user's status in the chat (e.g. admin, member,
-   * etc.) against the allowed and excluded roles.
-   *
-   * You can override this to implement your own permission logic.
    * @example
    * ```ts
    * const commands = new ManagedCommands({
-   *   permissionHandler: async ({ command, context }) => {
-   *     const { allowedRoles, excludedRoles } = command.permissions
-   *     if (Math.random() > 0.5) return true // don't gable, kids
-   *     return false
+   *   getUserRoles: async (userId, context) => {
+   *     const roles = await db.getUserRoles(userId) // Array<"admin" | "user">[]
+   *     return roles
    *   },
+   * }).createCommand({
+   *   trigger: "admincmd",
+   *   permissions: {
+   *     allowedRoles: ["admin"],
+   *   },
+   *   handler: async ({ context }) => {
+   *     await context.reply("You are an admin!")
+   *   }),
    * })
    * ```
    */
-  permissionHandler: PermissionHandler<TRole, C>
+  getUserRoles: (userId: number, context: CommandContext<C>) => Promise<TRole[]>
 
   /**
    * Hooks to execute on specific events
    */
   hooks: ManagedCommandsHooks<C, TRole>
 }
+
+export type ManagedCommandsOptions<TRole extends string, C extends Context> = string extends TRole
+  ? Omit<IManagedCommandsOptions<TRole, C>, "getUserRoles"> & { getUserRoles?: never }
+  : IManagedCommandsOptions<TRole, C>
 
 /**
  * A class to manage commands in a grammY bot, with support for argument parsing, permission handling, and hooks for various events.
@@ -132,13 +128,13 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
  * @see Command for the options available when creating a command
  */
 export class ManagedCommands<
-  TRole extends string = DefaultRoles,
+  TRole extends string = string,
   C extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
 > implements MiddlewareObj<C>
 {
   private composer = new Composer<C>()
   private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
-  private permissionHandler: PermissionHandler<TRole, C>
+  private getUserRoles: (userId: number, context: CommandContext<C>) => Promise<TRole[]>
   private hooks: ManagedCommandsHooks<C, TRole>
   private adapter: ConversationStorage<C, ConversationData>
   private registeredTriggers = new Set<string>()
@@ -309,9 +305,8 @@ export class ManagedCommands<
    *
    * @param options The options to use for the ManagedCommands instance
    */
-  constructor(options?: Partial<ManagedCommandsOptions<TRole, C>>) {
-    this.permissionHandler = options?.permissionHandler ?? defaultPermissionHandler
-    // this.logger = options?.logger ?? defaultLogger
+  constructor(options?: ManagedCommandsOptions<TRole, C>) {
+    this.getUserRoles = options?.getUserRoles ?? (async () => [])
     this.hooks = options?.hooks ?? {}
     this.adapter = options?.adapter ?? new MemorySessionStorage()
 
@@ -341,6 +336,38 @@ export class ManagedCommands<
 
       return ctx.reply(this.commands.map((cmd) => ManagedCommands.formatCommandUsage(cmd)).join("\n\n"))
     })
+  }
+
+  private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<C>): Promise<boolean> {
+    if (!command.permissions) return true
+    if (!ctx.from) return false
+
+    const { allowedRoles, excludedRoles } = command.permissions
+
+    if (isAllowedInGroups(command)) {
+      const { allowGroupAdmins, allowedGroupsId, excludedGroupsId } = command.permissions
+
+      if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
+      if (excludedGroupsId?.includes(ctx.chatId)) return false
+
+      if (allowGroupAdmins) {
+        if (this.hooks.overrideGroupAdminCheck) {
+          const isAdmin = await this.hooks.overrideGroupAdminCheck(ctx.from.id, ctx.chatId, ctx)
+          if (isAdmin) return true
+        } else {
+          const { status: groupRole } = await ctx.getChatMember(ctx.from.id)
+          if (groupRole === "administrator" || groupRole === "creator") return true
+        }
+      }
+    }
+
+    const roles = await this.getUserRoles(ctx.from.id, ctx)
+
+    // blacklist is stronger than whitelist
+    if (allowedRoles?.every((r) => !roles.includes(r))) return false
+    if (excludedRoles?.some((r) => roles.includes(r))) return false
+
+    return true
   }
 
   /**
@@ -431,7 +458,7 @@ export class ManagedCommands<
 
       // delete the command call if the user is not allowed to use it
       if (cmd.permissions) {
-        const allowed = await this.permissionHandler({ command: cmd, context: ctx })
+        const allowed = await this.checkPermissions(cmd, ctx)
         if (!allowed) {
           if (this.hooks.missingPermissions) await this.hooks.missingPermissions({ context: ctx, command: cmd })
           return

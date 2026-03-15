@@ -1,6 +1,6 @@
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 import { api } from "@/backend"
-import { isAllowedInGroups, ManagedCommands } from "@/lib/managed-commands"
+import { ManagedCommands } from "@/lib/managed-commands"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
@@ -56,34 +56,17 @@ export const commands = new ManagedCommands<Role>({
         context.deleteMessage().catch(() => {})
       }
     },
+    overrideGroupAdminCheck: async (userId, groupId, ctx) => {
+      const { status: groupRole } = await ctx.getChatMember(userId)
+      if (groupRole === "administrator" || groupRole === "creator") return true
+      const isDbAdmin = await api.tg.permissions.checkGroup.query({ userId, groupId })
+      return isDbAdmin
+    },
   },
-  permissionHandler: async ({ command, context: ctx }) => {
-    if (!command.permissions) return true
-    if (!ctx.from) return false
-
-    const { allowedRoles, excludedRoles } = command.permissions
-
-    if (isAllowedInGroups(command)) {
-      const { allowedGroupAdmins, allowedGroupsId, excludedGroupsId } = command.permissions
-      const { status: groupRole } = await ctx.getChatMember(ctx.from.id)
-
-      if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
-      if (excludedGroupsId?.includes(ctx.chatId)) return false
-      if (allowedGroupAdmins) {
-        const isDbAdmin = await api.tg.permissions.checkGroup.query({ userId: ctx.from.id, groupId: ctx.chatId })
-        const isTgAdmin = groupRole === "administrator" || groupRole === "creator"
-        if (isDbAdmin || isTgAdmin) return true
-      }
-    }
-
-    const { roles } = await api.tg.permissions.getRoles.query({ userId: ctx.from.id })
-    if (!roles) return false
-
-    // blacklist is stronger than whitelist
-    if (allowedRoles?.every((r) => !roles.includes(r))) return false
-    if (excludedRoles?.some((r) => roles.includes(r))) return false
-
-    return true
+  getUserRoles: async (userId) => {
+    // TODO: cache this to avoid hitting the db on every command
+    const { roles } = await api.tg.permissions.getRoles.query({ userId })
+    return roles || []
   },
 })
   .createCommand({

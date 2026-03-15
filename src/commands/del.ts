@@ -9,7 +9,7 @@ export const del = new CommandsCollection<Role>("Deletion").createCommand({
   scope: "group",
   permissions: {
     allowedRoles: ["admin", "owner", "direttivo"],
-    allowedGroupAdmins: true,
+    allowGroupAdmins: true,
   },
   description: "Deletes the replied to message",
   reply: "required",

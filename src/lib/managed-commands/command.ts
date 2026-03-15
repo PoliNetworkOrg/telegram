@@ -44,12 +44,22 @@ export type CommandReplyTo = "required" | "optional" | undefined
 export type CommandScope = "private" | "group" | "both"
 
 interface PrivatePermissions<TRole extends string> {
+  /** The roles that are allowed to use the command */
   allowedRoles?: TRole[]
+  /** The roles that are excluded from using the command */
   excludedRoles?: TRole[]
 }
 interface GroupPermissions<TRole extends string> extends PrivatePermissions<TRole> {
-  allowedGroupAdmins: boolean
+  /**
+   * Whether to allow group admins to use the command, without considering their external role
+   *
+   * You can use hooks to override what is considered a group admin, by default it considers users with
+   * Telegram Chat Role of "administrator" or "creator" as group admins
+   */
+  allowGroupAdmins: boolean
+  /** Group IDs where the command is allowed */
   allowedGroupsId?: number[]
+  /** Group IDs where the command is not allowed, if a group ID is in both allowedGroupsId and excludedGroupsId, the exclusion takes precedence */
   excludedGroupsId?: number[]
 }
 type Permissions<TRole extends string, S extends CommandScope> = S extends "private"
