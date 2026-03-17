@@ -7,7 +7,7 @@ import type { Role } from "@/utils/types"
 export const audit = new CommandsCollection<Role>("Auditing").createCommand({
   trigger: "audit",
   scope: "private",
-  description: "Get audit of an user",
+  description: "Get the audit log of a user",
   args: [{ key: "username", optional: false, description: "Username or userid" }],
   permissions: {
     allowedRoles: ["hr", "owner", "direttivo"],

@@ -337,8 +337,10 @@ export class ManagedCommands<
       const text = ctx.message?.text ?? ""
       const [_, cmdArg] = text.replaceAll("/", "").split(" ")
       if (cmdArg) {
-        const cmd = this.getCommands().find((c) => c.trigger === cmdArg)
-        if (!cmd) return ctx.reply(fmt(() => "Command not found. See /help."))
+        const cmd = this.getCommands().find((c) =>
+          Array.isArray(c.trigger) ? c.trigger.includes(cmdArg) : c.trigger === cmdArg
+        )
+        if (!cmd) return ctx.reply(fmt(() => "Command not found. See /help for available commands."))
 
         return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
       }
@@ -373,7 +375,7 @@ export class ManagedCommands<
 
     const { allowedRoles, excludedRoles } = command.permissions
 
-    if (isAllowedInGroups(command)) {
+    if (isAllowedInGroups(command) && (ctx.chat.type === "group" || ctx.chat.type === "supergroup")) {
       const { allowGroupAdmins, allowedGroupsId, excludedGroupsId } = command.permissions
 
       if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false

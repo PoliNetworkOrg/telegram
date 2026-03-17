@@ -4,9 +4,9 @@ import { ManagedCommands } from "@/lib/managed-commands"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
+import { ephemeral } from "@/utils/messages"
 import type { Role } from "@/utils/types"
 import { printCtxFrom } from "@/utils/users"
-import { wait } from "@/utils/wait"
 import { linkAdminDashboard } from "./link-admin-dashboard"
 import { management } from "./management"
 import { moderation } from "./moderation"
@@ -23,7 +23,7 @@ export const commands = new ManagedCommands<Role>({
   adapter,
   hooks: {
     wrongScope: async ({ context, command }) => {
-      await context.deleteMessage()
+      await context.deleteMessage().catch(() => {})
       logger.info(
         `[ManagedCommands] Command '/${command.trigger}' with scope '${command.scope}' invoked by ${printCtxFrom(context)} in a '${context.chat.type}' chat`
       )
@@ -34,9 +34,8 @@ export const commands = new ManagedCommands<Role>({
         `[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
       )
       // Inform the user of restricted access
-      const reply = await context.reply("You are not allowed to execute this command")
+      void ephemeral(context.reply("You are not allowed to execute this command"))
       await context.deleteMessage()
-      void wait(3000).then(() => reply.delete())
     },
     handlerError: async ({ context, command, error }) => {
       logger.error({ error }, `[ManagedCommands] Error in handler for command '/${command.trigger}'`)
