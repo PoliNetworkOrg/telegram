@@ -14,13 +14,14 @@ export const search = new CommandsCollection<Role>().createCommand({
   scope: "both",
   description: "Search groups by title",
   args: [{ key: "query", optional: false, description: "Search query" }],
-  handler: async ({ context, args }) => {
+  handler: async ({ context, args, repliedTo }) => {
     const res = await api.tg.groups.search.query({ query: args.query, limit: LIMIT })
     if (res.count === 0) {
       await context.reply(
         fmt(({ n, b, i }) => [b`🔎 Group Search`, n`${i`Query:`} ${b`${args.query}`}`, b`❌ No results`], {
           sep: "\n",
-        })
+        }),
+        { reply_parameters: { message_id: repliedTo ? repliedTo.message_id : context.msgId } }
       )
       return
     }
@@ -46,6 +47,10 @@ export const search = new CommandsCollection<Role>().createCommand({
         inlineKeyboard.url(g.title, g.link)
       })
 
-    await context.reply(reply, { link_preview_options: { is_disabled: true }, reply_markup: inlineKeyboard })
+    await context.reply(reply, {
+      link_preview_options: { is_disabled: true },
+      reply_markup: inlineKeyboard,
+      reply_parameters: { message_id: repliedTo ? repliedTo.message_id : context.msgId },
+    })
   },
 })
