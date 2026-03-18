@@ -1,10 +1,8 @@
 import z from "zod"
 import { GroupManagement } from "@/lib/group-management"
 import { CommandsCollection } from "@/lib/managed-commands"
-import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
 import type { Role } from "@/utils/types"
-import { printUsername } from "@/utils/users"
 
 export const groups = new CommandsCollection<Role>("Groups").createCommand({
   trigger: "updategroup",
@@ -38,10 +36,6 @@ export const groups = new CommandsCollection<Role>("Groups").createCommand({
 
     const res = await GroupManagement.update(group.id, context.from)
     if (res.isErr()) {
-      logger.error(
-        { error: res.error, chatId: args.chatId, requestedBy: printUsername(context.from) },
-        "[command:updategroup] could not update or create group"
-      )
       return void context.reply(
         fmt(({ code, n, b, i }) => [b`There was an ERROR`, n`chatId: ${code`${args.chatId}`}`, i`\n${res.error}`], {
           sep: "\n",
@@ -49,10 +43,6 @@ export const groups = new CommandsCollection<Role>("Groups").createCommand({
       )
     }
 
-    logger.info(
-      { chatId: args.chatId, requestedBy: printUsername(context.from) },
-      "[command:updategroup] group updated"
-    )
     await context.reply(
       fmt(({ code, n, b }) => [b`✅ Group Updated`, n`chatId: ${code`${args.chatId}`}`], {
         sep: "\n",

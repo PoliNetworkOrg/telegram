@@ -8,6 +8,7 @@ import { err, ok } from "neverthrow"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
+import { printUsername } from "@/utils/users"
 
 function stripChatInfo(chat: ChatFullInfo) {
   return {
@@ -70,7 +71,10 @@ export const GroupManagement = {
     }
 
     await modules.get("tgLogger").groupManagement({ type: "CREATE", chat, addedBy, inviteLink: chat.invite_link })
-    logger.info({ chat: stripChatInfo(chat), addedBy }, "[GroupManagement] CREATE group success")
+    logger.info(
+      { chat: stripChatInfo(chat), addedBy: printUsername(addedBy) },
+      "[GroupManagement] CREATE group success"
+    )
     return ok(newGroup)
   },
 
@@ -103,7 +107,10 @@ export const GroupManagement = {
     await modules
       .get("tgLogger")
       .groupManagement({ type: "UPDATE", chat, addedBy: requestedBy, inviteLink: chat.invite_link })
-    logger.info({ chat: stripChatInfo(chat), requestedBy }, "[GroupManagement] UPDATE group success")
+    logger.info(
+      { chat: stripChatInfo(chat), requestedBy: printUsername(requestedBy) },
+      "[GroupManagement] UPDATE group success"
+    )
     return ok(updatedGroup)
   },
 
@@ -123,7 +130,10 @@ export const GroupManagement = {
   async checkAdderPermission(chat: Chat, addedBy: User): Promise<boolean> {
     const { allowed } = await api.tg.permissions.canAddBot.query({ userId: addedBy.id })
     if (allowed) {
-      logger.debug({ chat, addedBy, allowed }, `[GroupManagement] checkAdderPermission result: ALLOWED`)
+      logger.debug(
+        { chat, addedBy: printUsername(addedBy), allowed },
+        `[GroupManagement] checkAdderPermission result: ALLOWED`
+      )
       return true
     }
 
@@ -135,7 +145,7 @@ export const GroupManagement = {
         addedBy,
       })
       logger.error(
-        { chat, addedBy, allowed, left },
+        { chat, addedBy: printUsername(addedBy), allowed, left },
         `[GroupManagement] checkAdderPermission result: DENIED. Cannot leave unauthorized group`
       )
       return false
@@ -143,7 +153,7 @@ export const GroupManagement = {
 
     await modules.get("tgLogger").groupManagement({ type: "LEAVE", chat, addedBy: addedBy })
     logger.warn(
-      { chat, addedBy, allowed, left },
+      { chat, addedBy: printUsername(addedBy), allowed, left },
       `[GroupManagement] checkAdderPermission result: DENIED. LEFT unauthorized group`
     )
     return false
