@@ -14,6 +14,7 @@ export const search = new CommandsCollection<Role>().createCommand({
   scope: "both",
   description: "Search groups by title",
   args: [{ key: "query", optional: false, description: "Search query" }],
+  reply: "optional",
   handler: async ({ context, args, repliedTo }) => {
     const res = await api.tg.groups.search.query({ query: args.query, limit: LIMIT })
     if (res.count === 0) {
