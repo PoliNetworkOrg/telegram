@@ -13,6 +13,7 @@ import { AutoModerationStack } from "./middlewares/auto-moderation-stack"
 import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
 import { GroupSpecificActions } from "./middlewares/group-specific-actions"
+import { MentionListener } from "./middlewares/mention-listener"
 import { messageLink } from "./middlewares/message-link"
 import { MessageUserStorage } from "./middlewares/message-user-storage"
 import { modules, sharedDataInit } from "./modules"
@@ -21,7 +22,6 @@ import { redis } from "./redis"
 import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
 import type { Context, ModuleShared } from "./utils/types"
-import { MentionListener } from "./middlewares/mention-listener"
 
 const TEST_CHAT_ID = -1002669533277
 const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
