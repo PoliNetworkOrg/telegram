@@ -67,7 +67,7 @@ export const GroupManagement = {
     const newGroup: GroupDB = { telegramId: chat.id, title: chat.title, link: chat.invite_link, tag: chat.username }
     const res = await api.tg.groups.create.mutate([newGroup])
     if (!res.length || res[0] !== chat.id) {
-      return errorBackend(chat, "CREATE", res[0] !== chat.id)
+      return errorBackend(chat, "CREATE", res.length >= 1 && res[0] !== chat.id)
     }
 
     await modules.get("tgLogger").groupManagement({ type: "CREATE", chat, addedBy, inviteLink: chat.invite_link })
@@ -101,7 +101,7 @@ export const GroupManagement = {
     const updatedGroup: GroupDB = { telegramId: chat.id, title: chat.title, link: chat.invite_link, tag: chat.username }
     const res = await api.tg.groups.create.mutate([updatedGroup])
     if (!res.length || res[0] !== chat.id) {
-      return errorBackend(chat, "UPDATE", res[0] !== chat.id)
+      return errorBackend(chat, "UPDATE", res.length >= 1 && res[0] !== chat.id)
     }
 
     await modules

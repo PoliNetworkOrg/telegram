@@ -7,7 +7,7 @@ import type { Role } from "@/utils/types"
 export const groups = new CommandsCollection<Role>("Groups").createCommand({
   trigger: "updategroup",
   scope: "private",
-  description: "Get the audit log of a user",
+  description: "Trigger group info update to the database (eg. title or tag change)",
   args: [
     {
       key: "chatId",
