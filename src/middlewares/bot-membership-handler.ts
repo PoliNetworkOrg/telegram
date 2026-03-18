@@ -112,6 +112,7 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
     const logChat = {
       id: chat.id,
       title: chat.title,
+      tag: chat.username,
       is_forum: chat.is_forum,
       type: chat.type,
       invite_link: chat.invite_link,

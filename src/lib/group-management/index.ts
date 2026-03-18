@@ -14,7 +14,8 @@ export const GroupManagement = {
       return err(`no invite_link, maybe the user does not have permission to "Invite users via link"`)
     }
 
-    const newGroup: GroupDB = { telegramId: chat.id, title: chat.title, link: chat.invite_link }
+    // chat.username does not start with @
+    const newGroup: GroupDB = { telegramId: chat.id, title: chat.title, link: chat.invite_link, tag: chat.username }
     const res = await api.tg.groups.create.mutate([newGroup])
     if (!res.length || res[0] !== chat.id) {
       return err(`unknown`)
