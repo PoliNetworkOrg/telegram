@@ -22,7 +22,7 @@ const Durations: Record<DurationUnit, number> = {
 }
 const zDuration = z
   .string()
-  .regex(durationRegex)
+  .regex(durationRegex, "Format must be <number><unit> where unit can be m, h, d, w")
   .transform<Duration>((a) => {
     const parsed = parseInt(a.slice(0, -1), 10) * Durations[a.slice(-1) as DurationUnit]
 

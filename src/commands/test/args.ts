@@ -1,6 +1,6 @@
-import { _commandsBase } from "../_base"
+import { CommandsCollection } from "@/lib/managed-commands"
 
-_commandsBase.createCommand({
+export const testargs = new CommandsCollection().createCommand({
   trigger: "test_args",
   scope: "private",
   description: "Test args",

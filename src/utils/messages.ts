@@ -1,4 +1,7 @@
+import type { MessageXFragment } from "@grammyjs/hydrate/out/data/message"
 import type { Message, User } from "grammy/types"
+import type { MaybePromise } from "./types"
+import { wait } from "./wait"
 
 type TextReturn<M extends Message> = M extends { text: string }
   ? { text: string; type: "TEXT" }
@@ -31,4 +34,22 @@ export function createFakeMessage(chatId: number, messageId: number, from: User,
       title: "NO_TITLE",
     },
   }
+}
+
+/**
+ * Deletes a sent message after a specified timeout. Useful for sending ephemeral
+ * messages that should disappear after a while.
+ *
+ * Fails silently if the message cannot be deleted (e.g. due to missing permissions),
+ * so it can be used without awaiting it.
+ *
+ * @param message The message to delete or its promise
+ * @param timeout Timeout in ms, defaults to 5 seconds
+ * @returns a void promise that resolves after the message is deleted (or if the deletion fails)
+ */
+export async function ephemeral(message: MaybePromise<MessageXFragment>, timeout = 5000): Promise<void> {
+  const msg = await Promise.resolve(message)
+  await wait(timeout)
+    .then(() => msg.delete())
+    .catch(() => {})
 }

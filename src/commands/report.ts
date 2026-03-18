@@ -1,15 +1,15 @@
+import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { fmt } from "@/utils/format"
-import { _commandsBase } from "./_base"
+import type { Role } from "@/utils/types"
 
-_commandsBase.createCommand({
-  trigger: "report",
+export const report = new CommandsCollection<Role>().createCommand({
+  trigger: ["report", "admin"],
   description: "Report a message to admins",
   scope: "group",
   reply: "required",
   handler: async ({ context, repliedTo }) => {
-    await context.deleteMessage()
     if (!repliedTo.from) {
       logger.error("report: no repliedTo.from field (the msg was sent in a channel)")
       return

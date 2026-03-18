@@ -1,3 +1,4 @@
+export { CommandsCollection } from "./collection"
 export type { CommandScopedContext } from "./command"
 export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
 export * from "./context"
@@ -8,13 +9,15 @@ import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import type { CommandContext, Context, MiddlewareObj } from "grammy"
 import { Composer, MemorySessionStorage } from "grammy"
-import type { ChatMember, Message } from "grammy/types"
+import type { Message } from "grammy/types"
 import type { Result } from "neverthrow"
 import { err, ok } from "neverthrow"
-import type { LogFn } from "pino"
+import z from "zod"
 import { fmt } from "@/utils/format"
-import { wait } from "@/utils/wait"
+import { ephemeral } from "@/utils/messages"
+import type { CommandsCollection } from "./collection"
 import type {
+  AnyCommand,
   ArgumentMap,
   ArgumentOptions,
   Command,
@@ -25,36 +28,41 @@ import type {
   CommandScopedContext,
   RepliedTo,
 } from "./command"
-import { isTypedArgumentOptions } from "./command"
+import { isAllowedInGroups, isTypedArgumentOptions } from "./command"
 import type { ManagedCommandsFlavor } from "./context"
 
-export type PermissionHandler<TRole extends string, C extends Context> = (arg: {
-  context: CommandContext<C>
-  command: Command<CommandArgs, CommandReplyTo, CommandScope, TRole>
-}) => Promise<boolean>
-
-type DefaultRoles = ChatMember["status"]
-const defaultPermissionHandler: PermissionHandler<string, Context> = async ({ context, command }) => {
-  const { allowedRoles, excludedRoles } = command.permissions ?? {}
-  if (!context.from) return false
-  const member = await context.getChatMember(context.from.id)
-
-  if (allowedRoles && !allowedRoles.includes(member.status)) return false
-  if (excludedRoles?.includes(member.status)) return false
-
-  return true
+export type Hook<C extends Context, TRole extends string = string, Params = unknown> = (
+  params: Params & {
+    context: CommandContext<C>
+    command: AnyCommand<TRole>
+  }
+) => Promise<void>
+export type ManagedCommandsHooks<C extends Context, TRole extends string = string> = {
+  /**
+   * Called when a command is invoked in the wrong scope (e.g. a private-only command is invoked in a group)
+   */
+  wrongScope?: Hook<C, TRole>
+  /**
+   * Called when a user without the required permissions invokes a command
+   */
+  missingPermissions?: Hook<C, TRole>
+  /**
+   * Called when an error is thrown in the command handler
+   */
+  handlerError?: Hook<C, TRole, { error: unknown }>
+  /**
+   * Called before executing the command handler, can be used to implement custom pre-handler logic, for example logging or analytics
+   */
+  beforeHandler?: Hook<C, TRole>
+  /**
+   * A function to override what counts as a "Group Admin", by default it considers users with Telegram Chat Role of
+   * "administrator" or "creator" as group admins, but you can override this to implement your own logic,
+   *  for example by checking an external database of admins
+   */
+  overrideGroupAdminCheck?: (userId: number, chatId: number, context: CommandContext<C>) => Promise<boolean>
 }
 
-interface Logger {
-  info: LogFn
-  error: LogFn
-}
-const defaultLogger: Logger = {
-  info: console.log,
-  error: console.error,
-}
-
-export interface ManagedCommandsOptions<TRole extends string, C extends Context> {
+export interface IManagedCommandsOptions<TRole extends string, C extends Context> {
   /**
    * The storage adapter to use for persisting conversations.
    * - {@link https://grammy.dev/plugins/conversations#persisting-conversations conversations plugin documentation}
@@ -64,52 +72,72 @@ export interface ManagedCommandsOptions<TRole extends string, C extends Context>
   adapter: ConversationStorage<C, ConversationData>
 
   /**
-   * The permission handler to use for checking user permissions.
+   * A function to get externally defined roles for a specific user.
    *
-   * By default, this checks the user's status in the chat (e.g. admin, member,
-   * etc.) against the allowed and excluded roles.
-   *
-   * You can override this to implement your own permission logic.
    * @example
    * ```ts
    * const commands = new ManagedCommands({
-   *   permissionHandler: async ({ command, context }) => {
-   *     const { allowedRoles, excludedRoles } = command.permissions
-   *     if (Math.random() > 0.5) return true // don't gable, kids
-   *     return false
+   *   getUserRoles: async (userId, context) => {
+   *     const roles = await db.getUserRoles(userId) // Array<"admin" | "user">[]
+   *     return roles
    *   },
+   * }).createCommand({
+   *   trigger: "admincmd",
+   *   permissions: {
+   *     allowedRoles: ["admin"],
+   *   },
+   *   handler: async ({ context }) => {
+   *     await context.reply("You are an admin!")
+   *   }),
    * })
    * ```
    */
-  permissionHandler: PermissionHandler<TRole, C>
+  getUserRoles: (userId: number, context: CommandContext<C>) => Promise<TRole[]>
 
   /**
-   * The logger to use for logging messages, you can pass your pino logger here
-   * @example
-   * ```ts
-   * import pino from "pino"
-   * const logger = pino({
-   *   level: "info",
-   * })
-   * const commands = new ManagedCommands({
-   *   logger: logger,
-   * })
-   * ```
-   * @default console.log
+   * Hooks to execute on specific events
    */
-  logger: Logger
+  hooks: ManagedCommandsHooks<C, TRole>
 }
 
+export type ManagedCommandsOptions<TRole extends string, C extends Context> = string extends TRole
+  ? Omit<IManagedCommandsOptions<TRole, C>, "getUserRoles"> & { getUserRoles?: never }
+  : IManagedCommandsOptions<TRole, C>
+
+/**
+ * A class to manage commands in a grammY bot, with support for argument parsing, permission handling, and hooks for various events.
+ * You can create commands with specific triggers, arguments, and permissions, and the class will handle the parsing and execution of the commands, as well as checking permissions and executing hooks.
+ *
+ * To use, create an instance of the class and pass it as middleware to your bot. Then, use the `createCommand` method to add commands to the instance.
+ * @example
+ * ```ts
+ * const commands = new ManagedCommands()
+ * commands.createCommand({
+ *   trigger: "ping",
+ *   description: "Replies with pong",
+ *   handler: async ({ context }) => {
+ *     await context.reply("pong")
+ *   },
+ * })
+ *
+ * bot.use(commands)
+ * ```
+ *
+ * @typeParam TRole A string type representing the possible roles for command permissions. This is used in the `permissions` field of the command options and in the `permissionHandler`.
+ * @typeParam C The context type for the bot, used in the hooks and permission handler. Defaults to `Context`.
+ * @see Command for the options available when creating a command
+ */
 export class ManagedCommands<
-  TRole extends string = DefaultRoles,
+  TRole extends string = string,
   C extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
 > implements MiddlewareObj<C>
 {
   private composer = new Composer<C>()
-  private commands: Command<CommandArgs, CommandReplyTo, CommandScope>[] = []
-  private permissionHandler: PermissionHandler<TRole, C>
-  private logger: Logger
+  private commands: Record<string, AnyCommand<TRole>[]> = {}
+  private getUserRoles: (userId: number, context: CommandContext<C>) => Promise<TRole[]>
+  private hooks: ManagedCommandsHooks<C, TRole>
   private adapter: ConversationStorage<C, ConversationData>
+  private registeredTriggers = new Set<string>()
 
   /**
    * Parses the `reply_to_message` field from the message object
@@ -145,7 +173,7 @@ export class ManagedCommands<
     } else {
       if (isTypedArgumentOptions(argument)) {
         const data = argument.type.safeParse(value)
-        if (!data.success) return err(data.error.message)
+        if (!data.success) return err(z.prettifyError(data.error))
         else return ok(data.data)
       }
       return ok(value)
@@ -205,13 +233,13 @@ export class ManagedCommands<
    * @param cmd The command to print usage for
    * @returns A markdown formatted string representing the usage of the command
    */
-  private static formatCommandUsage(cmd: Command<CommandArgs, CommandReplyTo, CommandScope>): string {
+  private static formatCommandUsage(cmd: AnyCommand): string {
     const args = cmd.args ?? []
     const scope =
       cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
 
     return fmt(({ n, b, i }) => [
-      `/${cmd.trigger}`,
+      typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | "),
       ...args.map(({ key, optional }) => (optional ? n`[${i`${key}`}]` : n`<${i`${key}`}>`)),
       i`\nDesc:`,
       b`${cmd.description ?? "No description"}`,
@@ -221,6 +249,26 @@ export class ManagedCommands<
       args.length ? i`\nArgs:` : ``,
       ...args.flatMap(({ key, description }) => [`\n-`, i`${key}:`, description ?? "No description"]),
     ])
+  }
+
+  private static formatCommandShort(cmd: AnyCommand): string {
+    const args = cmd.args ?? []
+    return fmt(({ i, n }) => [
+      typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | "),
+      ...args.map(({ key, optional }) => (optional ? i` [${key}]` : i` <${key}>`)),
+      n`\n\t${cmd.description ?? "No description"}`,
+    ])
+  }
+
+  /**
+   * Generate a unique ID for a command based on its trigger(s), used for conversation IDs.
+   * @param cmd The command
+   * @returns a unique ID for the command based on its trigger(s)
+   */
+  private static commandID(cmd: AnyCommand) {
+    // only available characters in command triggers are a-z, 0-9 and _
+    // https://core.telegram.org/bots/features#commands
+    return typeof cmd.trigger === "string" ? cmd.trigger : cmd.trigger.join("-")
   }
 
   /**
@@ -268,9 +316,9 @@ export class ManagedCommands<
    *
    * @param options The options to use for the ManagedCommands instance
    */
-  constructor(options?: Partial<ManagedCommandsOptions<TRole, C>>) {
-    this.permissionHandler = options?.permissionHandler ?? defaultPermissionHandler
-    this.logger = options?.logger ?? defaultLogger
+  constructor(options?: ManagedCommandsOptions<TRole, C>) {
+    this.getUserRoles = options?.getUserRoles ?? (async () => [])
+    this.hooks = options?.hooks ?? {}
     this.adapter = options?.adapter ?? new MemorySessionStorage()
 
     this.composer.use(
@@ -291,14 +339,68 @@ export class ManagedCommands<
       const text = ctx.message?.text ?? ""
       const [_, cmdArg] = text.replaceAll("/", "").split(" ")
       if (cmdArg) {
-        const cmd = this.commands.find((c) => c.trigger === cmdArg)
-        if (!cmd) return ctx.reply(fmt(() => "Command not found. See /help."))
+        const cmd = this.getCommands().find((c) =>
+          Array.isArray(c.trigger) ? c.trigger.includes(cmdArg) : c.trigger === cmdArg
+        )
+        if (!cmd) return ctx.reply(fmt(() => "Command not found. See /help for available commands."))
 
         return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
       }
 
-      return ctx.reply(this.commands.map((cmd) => ManagedCommands.formatCommandUsage(cmd)).join("\n\n"))
+      const reply = fmt(
+        ({ u, b, skip, n, code }) => [
+          b`Available commands:`,
+          ...Object.entries(this.commands).flatMap(([collection, cmds]) => [
+            collection === "default" ? "" : u`${b`\n${collection}:`}`,
+            ...cmds.flatMap((cmd) => [skip`${ManagedCommands.formatCommandShort(cmd)}`]),
+          ]),
+          n`\n\nType ${code`\/help <command>`} for more details on a specific command.`,
+        ],
+        { sep: "\n" }
+      )
+
+      return ctx.reply(reply)
     })
+  }
+
+  public getCommands() {
+    const cmds: AnyCommand<TRole>[] = []
+    for (const collection in this.commands) {
+      cmds.push(...this.commands[collection])
+    }
+    return cmds
+  }
+
+  private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<C>): Promise<boolean> {
+    if (!command.permissions) return true
+    if (!ctx.from) return false
+
+    const { allowedRoles, excludedRoles } = command.permissions
+
+    if (isAllowedInGroups(command) && (ctx.chat.type === "group" || ctx.chat.type === "supergroup")) {
+      const { allowGroupAdmins, allowedGroupsId, excludedGroupsId } = command.permissions
+
+      if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
+      if (excludedGroupsId?.includes(ctx.chatId)) return false
+
+      if (allowGroupAdmins) {
+        if (this.hooks.overrideGroupAdminCheck) {
+          const isAdmin = await this.hooks.overrideGroupAdminCheck(ctx.from.id, ctx.chatId, ctx)
+          if (isAdmin) return true
+        } else {
+          const { status: groupRole } = await ctx.getChatMember(ctx.from.id)
+          if (groupRole === "administrator" || groupRole === "creator") return true
+        }
+      }
+    }
+
+    const roles = await this.getUserRoles(ctx.from.id, ctx)
+
+    // blacklist is stronger than whitelist
+    if (allowedRoles?.every((r) => !roles.includes(r))) return false
+    if (excludedRoles?.some((r) => roles.includes(r))) return false
+
+    return true
   }
 
   /**
@@ -307,11 +409,25 @@ export class ManagedCommands<
    * @returns The ManagedCommands instance for chaining
    */
   createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
-    cmd: Command<A, R, S, TRole>
-  ) {
+    cmd: Command<A, R, S, TRole>,
+    collection: string = "default"
+  ): this {
+    const triggers = Array.isArray(cmd.trigger) ? cmd.trigger : [cmd.trigger]
+    for (const trigger of triggers) {
+      if (this.registeredTriggers.has(trigger)) {
+        throw new Error(
+          `[ManagedCommands] Trigger '${trigger}' is already registered (aliases: [${triggers.join(", ")}])`
+        )
+      }
+      this.registeredTriggers.add(trigger)
+    }
+
     cmd.scope = cmd.scope ?? ("both" as S) // default to both
-    this.commands.push(cmd) // add the command to the list
-    this.commands.sort((a, b) => a.trigger.localeCompare(b.trigger)) // sort the commands by alphabetical order of the trigger
+    this.commands[collection] = this.commands[collection] ?? []
+    this.commands[collection].push(cmd)
+    // TODO: rethink sorting
+    // this.commands.sort((a, b) => a.trigger.localeCompare(b.trigger)) // sort the commands by alphabetical order of the trigger
+    const id = ManagedCommands.commandID(cmd)
 
     // create a conversation that handles the command execution
     this.composer.use(
@@ -329,33 +445,37 @@ export class ManagedCommands<
             if (message.chat.type !== "private") await ctx.deleteMessage()
 
             const msg = await ctx.reply(
-              fmt(({ b, skip }) => [
+              fmt(({ b, code }) => [
                 `Error:`,
                 b`${requirements.error.join("\n")}`,
-                `\n\nUsage:`,
-                skip`\n${ManagedCommands.formatCommandUsage(cmd)}`,
+                `\nSee usage with:`,
+                code`/help ${Array.isArray(cmd.trigger) ? cmd.trigger[0] : cmd.trigger}`,
               ])
             )
-            if (ctx.chat.type !== "private") {
-              await wait(5000)
-              await msg.delete()
-            }
+            if (ctx.chat.type !== "private") void ephemeral(msg, 10_000) // delete the error message after some time in groups, no need to keep it
             return
           }
 
           const { args, repliedTo } = requirements.value
 
-          // Fianlly execute the handler
-          await cmd.handler({
-            context: ctx,
-            conversation: conv,
-            args,
-            repliedTo,
-          })
+          if (this.hooks.beforeHandler)
+            await this.hooks.beforeHandler({ context: ctx as CommandContext<C>, command: cmd })
+
+          // Finally execute the handler
+          await cmd
+            .handler({
+              context: ctx,
+              conversation: conv,
+              args: args as ArgumentMap<A>,
+              repliedTo,
+            })
+            .catch(async (error) => {
+              if (this.hooks.handlerError)
+                await this.hooks.handlerError({ context: ctx as CommandContext<C>, command: cmd, error })
+              else throw error
+            })
         },
-        {
-          id: cmd.trigger, // the conversation ID is set to the command trigger
-        }
+        { id }
       )
     )
     this.composer.command(cmd.trigger, async (ctx) => {
@@ -364,44 +484,53 @@ export class ManagedCommands<
         (cmd.scope === "private" && ctx.chat.type !== "private") ||
         (cmd.scope === "group" && ctx.chat.type !== "supergroup" && ctx.chat.type !== "group")
       ) {
-        await ctx.deleteMessage()
-        this.logger.info(
-          `[ManagedCommands] command '/${cmd.trigger}' with scope '${cmd.scope}' invoked by ${this.printUsername(ctx)} in a '${ctx.chat.type}' chat.`
-        )
+        if (this.hooks.wrongScope) await this.hooks.wrongScope({ context: ctx, command: cmd })
         return
       }
 
       // delete the command call if the user is not allowed to use it
       if (cmd.permissions) {
-        const allowed = await this.permissionHandler({ command: cmd, context: ctx })
+        const allowed = await this.checkPermissions(cmd, ctx)
         if (!allowed) {
-          this.logger.info(
-            { command_permissions: cmd.permissions },
-            `[ManagedCommands] command '/${cmd.trigger}' invoked by ${this.printUsername(ctx)} without permissions`
-          )
-          // Inform the user of restricted access
-          const reply = await ctx.reply("You are not allowed to execute this command")
-          await ctx.deleteMessage()
-          setTimeout(() => void reply.delete(), 3000)
+          if (this.hooks.missingPermissions) await this.hooks.missingPermissions({ context: ctx, command: cmd })
           return
         }
       }
 
       // enter the conversation that handles the command execution
-      await ctx.conversation.enter(cmd.trigger)
+      await ctx.conversation.enter(id)
     })
     return this
   }
 
   /**
-   * Creates a string that can be logged with the username and id of the user
-   * who invoked the command
-   * @param ctx The context of the command
-   * @returns a string that can be logged with username and id
+   * Adds all the commands from a CommandsCollection to the ManagedCommands instance
+   * @param collection The CommandsCollection to add
+   * @returns The ManagedCommands instance for chaining
+   * @example
+   * ```ts
+   * const collection = new CommandsCollection()
+   *   .createCommand({
+   *     trigger: "ping",
+   *     description: "Replies with pong",
+   *     handler: async ({ context }) => {
+   *       await context.reply("pong")
+   *     },
+   *   })
+   *
+   * const commands = new ManagedCommands()
+   * commands.withCollection(collection)
+   *
+   * bot.use(commands)
+   * ```
    */
-  private printUsername(ctx: CommandContext<C>) {
-    if (!ctx.from) return "<N/A>"
-    return `@${ctx.from.username ?? "<unset>"} [${ctx.from.id}]`
+  withCollection(...collections: CommandsCollection<TRole>[]): this {
+    collections.forEach((c) => {
+      c.flush().forEach((cmd) => {
+        this.createCommand(cmd, c.name)
+      })
+    })
+    return this
   }
 
   /**
