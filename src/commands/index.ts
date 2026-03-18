@@ -10,7 +10,7 @@ import { printCtxFrom } from "@/utils/users"
 import { linkAdminDashboard } from "./link-admin-dashboard"
 import { management } from "./management"
 import { moderation } from "./moderation"
-import { logReport } from "./report"
+import { report } from "./report"
 import { search } from "./search"
 
 const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
@@ -23,13 +23,13 @@ export const commands = new ManagedCommands<Role>({
   adapter,
   hooks: {
     wrongScope: async ({ context, command }) => {
-      await context.deleteMessage().catch(() => { })
+      await context.deleteMessage().catch(() => {})
       logger.info(
         `[ManagedCommands] Command '/${command.trigger}' with scope '${command.scope}' invoked by ${printCtxFrom(context)} in a '${context.chat.type}' chat`
       )
     },
     missingPermissions: async ({ context, command }) => {
-      await context.deleteMessage().catch(() => { })
+      await context.deleteMessage().catch(() => {})
       logger.info(
         { command_permissions: command.permissions },
         `[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
@@ -45,7 +45,7 @@ export const commands = new ManagedCommands<Role>({
     beforeHandler: async ({ context }) => {
       if (context.chat.type !== "private") {
         // silently delete the command trigger if the command is used in a group, to reduce noise
-        context.deleteMessage().catch(() => { })
+        context.deleteMessage().catch(() => {})
       }
     },
     overrideGroupAdminCheck: async (userId, groupId, ctx) => {
@@ -69,4 +69,4 @@ export const commands = new ManagedCommands<Role>({
       await context.reply("pong")
     },
   })
-  .withCollection(linkAdminDashboard, logReport, search, management, moderation)
+  .withCollection(linkAdminDashboard, report, search, management, moderation)
