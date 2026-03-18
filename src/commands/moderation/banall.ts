@@ -72,7 +72,7 @@ export const banAll = new CommandsCollection<Role>("Ban All")
       {
         key: "username",
         type: numberOrString,
-        description: "The username or the user id of the user you want to update the role",
+        description: "The username or the user id of the user you want to unban from all groups",
       },
     ],
     handler: async ({ args, context }) => {

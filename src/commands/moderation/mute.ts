@@ -17,9 +17,9 @@ export const mute = new CommandsCollection<Role>("Muting")
         key: "duration",
         type: duration.zod,
         optional: false,
-        description: `How long to mutate the user. ${duration.formatDesc}`,
+        description: `How long to mute the user. ${duration.formatDesc}`,
       },
-      { key: "reason", optional: true, description: "Optional reason to mutate the user" },
+      { key: "reason", optional: true, description: "Optional reason to mute the user" },
     ],
     description: "Temporary mute a user from a group",
     scope: "group",
@@ -47,7 +47,7 @@ export const mute = new CommandsCollection<Role>("Muting")
   })
   .createCommand({
     trigger: "mute",
-    args: [{ key: "reason", optional: true, description: "Optional reason to mutate the user" }],
+    args: [{ key: "reason", optional: true, description: "Optional reason to mute the user" }],
     description: "Permanently mute a user from a group",
     scope: "group",
     reply: "required",
