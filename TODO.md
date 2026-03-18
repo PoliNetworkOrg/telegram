@@ -14,14 +14,15 @@
   - [x] create (or update) group in backend when the bot becomes admin of a group
   - [x] delete group from backend when the bot leaves a group
   - [x] search
+  - [x] updategroup command (force group info update in db)
 - [x] advanced moderation
   - [x] ban_all
   - [x] unban_all
   - [x] /report to allow user to report
   - [x] track ban, mute and kick done via telegram UI (not by command)
-- [ ] controlled moderation flow (see #42)
-  - [x] audit log (implemented, need to audit every mod action)
-  - [ ] send in-chat action log (deprived of chat ids and stuff)
+- [x] controlled moderation flow (see #42)
+  - [x] audit log
+  - [x] send in-chat action log (deprived of chat ids and stuff)
 - [x] automatic moderation
   - [x] delete non-latin alphabet characters 
   - [x] check spam links
