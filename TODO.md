@@ -17,7 +17,7 @@
 - [x] advanced moderation
   - [x] ban_all
   - [x] unban_all
-  - [x] /report to allow user to report (@admin is not implemented)
+  - [x] /report to allow user to report
   - [x] track ban, mute and kick done via telegram UI (not by command)
 - [ ] controlled moderation flow (see #42)
   - [x] audit log (implemented, need to audit every mod action)
