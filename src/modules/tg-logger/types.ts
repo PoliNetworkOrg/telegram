@@ -45,12 +45,12 @@ export type GroupManagement = {
       type: "DELETE"
     }
   | {
-      type: "CREATE"
+      type: "CREATE" | "UPDATE"
       addedBy: User
       inviteLink: string
     }
   | {
-      type: "CREATE_FAIL"
+      type: "UPDATE_FAIL" | "CREATE_FAIL"
       reason: string
       inviteLink?: string
     }

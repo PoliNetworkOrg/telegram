@@ -320,11 +320,12 @@ export class TgLogger extends Module<ModuleShared> {
         break
 
       case "CREATE":
+      case "UPDATE":
         msg = fmt(
           ({ b, n }) => [
-            b`✳ Create`,
+            props.type === "CREATE" ? b`✳ Create` : b`🔄 Update`,
             n`${b`Group:`} ${fmtChat(props.chat)}`,
-            n`${b`Added by:`} ${fmtUser(props.addedBy)}`,
+            n`${props.type === "CREATE" ? b`Added by:` : b`Requested by:`} ${fmtUser(props.addedBy)}`,
           ],
           {
             sep: "\n",
@@ -333,10 +334,11 @@ export class TgLogger extends Module<ModuleShared> {
         reply_markup = new InlineKeyboard().url("Join Group", props.inviteLink)
         break
 
+      case "UPDATE_FAIL":
       case "CREATE_FAIL":
         msg = fmt(
           ({ b, n, i }) => [
-            b`! Cannot Create`,
+            b`! Cannot ${props.type === "CREATE_FAIL" ? "Create" : "Update"}`,
             n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Reason`}: ${props.reason}`,
             i`Check logs for more details`,
