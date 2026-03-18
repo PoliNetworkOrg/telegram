@@ -1,15 +1,12 @@
 import type { Context, Filter } from "grammy"
 import type { Message } from "grammy/types"
-import type { ConversationContext } from "@/lib/managed-commands"
+import type { CommandScopedContext } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { fmt } from "@/utils/format"
 import { _commandsBase } from "./_base"
 
-export const report = async (
-  context: Filter<Context, "message"> | ConversationContext<"group"> | ConversationContext<"supergroup">,
-  repliedTo: Message
-) => {
+export const report = async (context: Filter<Context, "message"> | CommandScopedContext, repliedTo: Message) => {
   const reportSent = await modules.get("tgLogger").report(repliedTo, context.from)
   await context.reply(
     reportSent
