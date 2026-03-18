@@ -1,12 +1,12 @@
 import type { ConversationMenuContext } from "@grammyjs/conversations"
 import { api } from "@/backend"
 import type { ConversationContext } from "@/lib/managed-commands"
+import { CommandsCollection } from "@/lib/managed-commands"
 import type { CommandConversation } from "@/lib/managed-commands/command"
 import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
+import type { Role } from "@/utils/types"
 import { wait } from "@/utils/wait"
-
-import { _commandsBase } from "./_base"
 
 const mainMsg = fmt(({ b }) => [b`🔗 Admin dashboard link`, b`\nStatus: ⏳ WAITING FOR CODE`], { sep: "\n" })
 
@@ -30,18 +30,15 @@ async function cancel(
   ctx: ConversationMenuContext<ConversationContext<"private">>
 ) {
   await ctx.editMessageText(fmt(({ n, code }) => n`Linking procedure was canceled. Send ${code`/link`} to restart it.`))
-  await wait(4000)
-  await ctx.deleteMessage()
   ctx.menu.close()
   await conv.halt()
 }
 
-_commandsBase.createCommand({
+export const linkAdminDashboard = new CommandsCollection<Role>().createCommand({
   trigger: "link",
   scope: "private",
   description: "Verify the login code for the admin dashboard",
   handler: async ({ context, conversation }) => {
-    await context.deleteMessage()
     // we need username
     if (context.from.username === undefined) {
       await context.reply(fmt(() => `You need to set a username to use this command`))
@@ -112,7 +109,6 @@ _commandsBase.createCommand({
       )
     }
 
-    await wait(4000)
-    await msg.delete()
+    void wait(5000).then(async () => msg.delete())
   },
 })

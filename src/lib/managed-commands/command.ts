@@ -2,6 +2,7 @@ import type { Conversation } from "@grammyjs/conversations"
 import type { Context } from "grammy"
 import type { Message } from "grammy/types"
 import type { z } from "zod"
+import type { MaybeArray } from "@/utils/types"
 import type { ConversationContext } from "./context"
 
 interface BaseArgumentOptions {
@@ -43,12 +44,22 @@ export type CommandReplyTo = "required" | "optional" | undefined
 export type CommandScope = "private" | "group" | "both"
 
 interface PrivatePermissions<TRole extends string> {
+  /** The roles that are allowed to use the command */
   allowedRoles?: TRole[]
+  /** The roles that are excluded from using the command */
   excludedRoles?: TRole[]
 }
 interface GroupPermissions<TRole extends string> extends PrivatePermissions<TRole> {
-  allowedGroupAdmins: boolean
+  /**
+   * Whether to allow group admins to use the command, without considering their external role
+   *
+   * You can use hooks to override what is considered a group admin, by default it considers users with
+   * Telegram Chat Role of "administrator" or "creator" as group admins
+   */
+  allowGroupAdmins: boolean
+  /** Group IDs where the command is allowed */
   allowedGroupsId?: number[]
+  /** Group IDs where the command is not allowed, if a group ID is in both allowedGroupsId and excludedGroupsId, the exclusion takes precedence */
   excludedGroupsId?: number[]
 }
 type Permissions<TRole extends string, S extends CommandScope> = S extends "private"
@@ -66,6 +77,14 @@ export type CommandConversation<S extends CommandScope = CommandScope, C extends
   CommandScopedContext<S>
 >
 
+/**
+ * Represents a command that can be registered in the ManagedCommands collection.
+ *
+ * @template A The type of the command arguments, this should be an array of {@link ArgumentOptions}
+ * @template R The type of the command reply, this should be "required", "optional" or undefined
+ * @template S The scope of the command, this should be "private", "group" or "both"
+ * @template TRole The type of the roles used in permissions, this should be a string literal type representing the possible roles in the bot (e.g. "admin" | "moderator" | "user")
+ */
 export interface Command<
   A extends CommandArgs,
   R extends CommandReplyTo,
@@ -74,8 +93,9 @@ export interface Command<
 > {
   /**
    * The command trigger, the string that will be used to call the command.
+   * If an array is provided, all entries will be used as aliases for the command
    */
-  trigger: string
+  trigger: MaybeArray<string>
   /**
    * The scope of the command, can be "private", "group" or "both".
    * @default "both"
@@ -132,6 +152,8 @@ export interface Command<
     repliedTo: RepliedTo<R>
   }) => Promise<void>
 }
+
+export type AnyCommand<TRole extends string = string> = Command<CommandArgs, CommandReplyTo, CommandScope, TRole>
 
 /**
  * Type guard to check if a command is allowed in groups.

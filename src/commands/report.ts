@@ -1,12 +1,13 @@
 import type { Context, Filter } from "grammy"
 import type { Message } from "grammy/types"
 import type { CommandScopedContext } from "@/lib/managed-commands"
+import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { fmt } from "@/utils/format"
-import { _commandsBase } from "./_base"
+import type { Role } from "@/utils/types"
 
-export const report = async (context: Filter<Context, "message"> | CommandScopedContext, repliedTo: Message) => {
+export const logReport = async (context: Filter<Context, "message"> | CommandScopedContext, repliedTo: Message) => {
   const reportSent = await modules.get("tgLogger").report(repliedTo, context.from)
   await context.reply(
     reportSent
@@ -19,18 +20,17 @@ export const report = async (context: Filter<Context, "message"> | CommandScoped
   )
 }
 
-_commandsBase.createCommand({
-  trigger: "report",
+export const report = new CommandsCollection<Role>().createCommand({
+  trigger: ["report", "admin"],
   description: "Report a message to admins",
   scope: "group",
   reply: "required",
   handler: async ({ context, repliedTo }) => {
-    await context.deleteMessage()
     if (!repliedTo.from) {
       logger.error("report: no repliedTo.from field (the msg was sent in a channel)")
       return
     }
 
-    await report(context, repliedTo)
+    await logReport(context, repliedTo)
   },
 })

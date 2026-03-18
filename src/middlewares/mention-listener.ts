@@ -1,5 +1,5 @@
 import { Composer, type Filter, type MiddlewareObj } from "grammy"
-import { report } from "@/commands/report"
+import { logReport } from "@/commands/report"
 import { logger } from "@/logger"
 import type { Context } from "@/utils/types"
 
@@ -29,6 +29,6 @@ export class MentionListener<C extends Context> implements MiddlewareObj<C> {
       return
     }
 
-    await report(ctx, repliedTo)
+    await logReport(ctx, repliedTo)
   }
 }
