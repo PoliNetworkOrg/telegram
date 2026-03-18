@@ -266,7 +266,9 @@ export class ManagedCommands<
    * @returns a unique ID for the command based on its trigger(s)
    */
   private static commandID(cmd: AnyCommand) {
-    return typeof cmd.trigger === "string" ? cmd.trigger : cmd.trigger.join("_")
+    // only available characters in command triggers are a-z, 0-9 and _
+    // https://core.telegram.org/bots/features#commands
+    return typeof cmd.trigger === "string" ? cmd.trigger : cmd.trigger.join("-")
   }
 
   /**

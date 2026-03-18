@@ -29,13 +29,13 @@ export const commands = new ManagedCommands<Role>({
       )
     },
     missingPermissions: async ({ context, command }) => {
+      await context.deleteMessage().catch(() => {})
       logger.info(
         { command_permissions: command.permissions },
         `[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
       )
       // Inform the user of restricted access
       void ephemeral(context.reply("You are not allowed to execute this command"))
-      await context.deleteMessage()
     },
     handlerError: async ({ context, command, error }) => {
       logger.error({ error }, `[ManagedCommands] Error in handler for command '/${command.trigger}'`)
