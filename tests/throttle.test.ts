@@ -9,15 +9,19 @@ async function callNTimes(n: number, ms: number, fn: () => void) {
   }
 }
 
-const testobj = {
-  foo(i: number = 0) {
-    return 42 + i
-  },
+function testObject() {
+  const testobj = {
+    foo(i: number = 0) {
+      return 42 + i
+    },
+  }
+  const spy = vi.spyOn(testobj, "foo")
+  return { testobj, spy }
 }
 
 describe("throttle function", () => {
   it("test 1", async () => {
-    const spy = vi.spyOn(testobj, "foo")
+    const { testobj, spy } = testObject()
     const limitms = 100
     const throttled = throttle(() => testobj.foo(), limitms)
     await callNTimes(11, 10, throttled)
@@ -25,7 +29,7 @@ describe("throttle function", () => {
     expect(spy).toHaveBeenCalledTimes(3)
   })
   it("test 2", async () => {
-    const spy = vi.spyOn(testobj, "foo")
+    const { testobj, spy } = testObject()
     const limitms = 50
     const throttled = throttle(() => testobj.foo(), limitms)
     await callNTimes(3, 100, throttled)
@@ -33,7 +37,7 @@ describe("throttle function", () => {
     expect(spy).toHaveBeenCalledTimes(3)
   })
   it("test 3", async () => {
-    const spy = vi.spyOn(testobj, "foo")
+    const { testobj, spy } = testObject()
     const limitms = 500
     const throttled = throttle((i: number) => testobj.foo(i), limitms)
     for (let i = 0; i < 50; i++) {
@@ -45,7 +49,7 @@ describe("throttle function", () => {
     expect(spy).toHaveBeenLastCalledWith(49)
   })
   it("test 4", async () => {
-    const spy = vi.spyOn(testobj, "foo")
+    const { testobj, spy } = testObject()
     const limitms = 10
     const throttled = throttle(() => testobj.foo(), limitms)
     throttled()
