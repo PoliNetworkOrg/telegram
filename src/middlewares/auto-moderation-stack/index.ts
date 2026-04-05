@@ -117,12 +117,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * Handles messages containing links.
    * If a link is not allowed, mutes the user for 1 minute and deletes the message.
    */
-  private async linkHandler(
-    ctx: Filter<
-      ModerationContext<C>,
-      "message::url" | "message::text_link" | "edited_message::url" | "edited_message::text_link"
-    >
-  ) {
+  private async linkHandler(ctx: Filter<ModerationContext<C>, "::url" | "::text_link">) {
     const message = ctx.msg
     // extract all links from the message, might be inside entities, or inside the message text body
     const links = ctx
@@ -156,26 +151,25 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       "Shared link not allowed"
     )
 
-    const msg = await ctx.reply(
-      res.isOk()
-        ? fmt(({ b }) => [
-            b`${fmtUser(ctx.from)}`,
-            "The link you shared is not allowed.",
-            "Please refrain from sharing links that could be considered spam",
-          ])
-        : res.error.fmtError
+    void ephemeral(
+      ctx.reply(
+        res.isOk()
+          ? fmt(({ b }) => [
+              b`${fmtUser(ctx.from)}`,
+              "The link you shared is not allowed.",
+              "Please refrain from sharing links that could be considered spam",
+            ])
+          : res.error.fmtError
+      )
     )
-    await wait(5000)
-    await msg.delete()
-    return
   }
 
   /**
    * Checks messages for harmful content using AI moderation.
    * If harmful content is detected, mutes the user and deletes the message.
    */
-  private async harmfulContentHandler(ctx: Filter<ModerationContext<C>, "message">) {
-    const message = ctx.message
+  private async harmfulContentHandler(ctx: ModerationContext<C>) {
+    const message = ctx.msg
     const flaggedCategories = await this.aiModeration.checkForHarmfulContent(ctx)
 
     if (flaggedCategories.length > 0) {
@@ -202,16 +196,16 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
             `Automatic moderation detected harmful content\n${reasons}`
           )
 
-          const msg = await ctx.reply(
-            res.isOk()
-              ? fmt(({ i, b }) => [
-                  b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
-                  i`If you think this is a mistake, please contact the group administrators.`,
-                ])
-              : res.error.fmtError
+          void ephemeral(
+            ctx.reply(
+              res.isOk()
+                ? fmt(({ i, b }) => [
+                    b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
+                    i`If you think this is a mistake, please contact the group administrators.`,
+                  ])
+                : res.error.fmtError
+            )
           )
-          await wait(5000)
-          await msg.delete()
         }
       } else {
         // no flagged category is above the threshold, still log it for manual review
@@ -230,7 +224,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * Handles messages containing a high percentage of non-latin characters to avoid most spam bots.
    * If the percentage of non-latin characters is too high, mutes the user for 10 minutes and deletes the message.
    */
-  private async nonLatinHandler(ctx: Filter<ModerationContext<C>, "message:text" | "message:caption">) {
+  private async nonLatinHandler(ctx: Filter<ModerationContext<C>, ":text" | ":caption">) {
     const text = ctx.message.caption ?? ctx.message.text
     const match = text.match(NON_LATIN.REGEX)
 
