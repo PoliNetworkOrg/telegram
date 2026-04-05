@@ -13,6 +13,7 @@ import type { Message } from "grammy/types"
 import type { Result } from "neverthrow"
 import { err, ok } from "neverthrow"
 import z from "zod"
+import { isFromGroupChat, isFromPrivateChat } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { CommandsCollection } from "./collection"
@@ -432,36 +433,13 @@ export class ManagedCommands<
     // create a conversation that handles the command execution
     this.composer.use(
       createConversation(
-        async (conv: CommandConversation<S>, ctx: CommandScopedContext<S>) => {
-          // check for the requirements in the command invocation
-          // biome-ignore lint/style/noNonNullAssertion: conversations cannot start without a message
-          const message = ctx.message!
-          const requirements = ManagedCommands.parseCommand(message, cmd)
-          if (requirements.isErr()) {
-            // Command messages that don't meet requirements
-            // AND are sent in a group/supergroup are deleted from here because
-            // they don't reach command handler so they would remain in chat.
-            // In private chats we keep them, we don't care
-            if (message.chat.type !== "private") await ctx.deleteMessage()
-
-            const msg = await ctx.reply(
-              fmt(({ b, code }) => [
-                `Error:`,
-                b`${requirements.error.join("\n")}`,
-                `\nSee usage with:`,
-                code`/help ${Array.isArray(cmd.trigger) ? cmd.trigger[0] : cmd.trigger}`,
-              ])
-            )
-            if (ctx.chat.type !== "private") void ephemeral(msg, 10_000) // delete the error message after some time in groups, no need to keep it
-            return
-          }
-
-          const { args, repliedTo } = requirements.value
-
-          if (this.hooks.beforeHandler)
-            await this.hooks.beforeHandler({ context: ctx as CommandContext<C>, command: cmd })
-
-          // Finally execute the handler
+        async (
+          conv: CommandConversation<S>,
+          ctx: CommandScopedContext<S>,
+          args: ArgumentMap<A>,
+          repliedTo: RepliedTo<R>
+        ) => {
+          // execute the handler
           await cmd
             .handler({
               context: ctx,
@@ -470,6 +448,7 @@ export class ManagedCommands<
               repliedTo,
             })
             .catch(async (error) => {
+              // errors should be handled by the hook, if not rethrow them to avoid silent failures
               if (this.hooks.handlerError)
                 await this.hooks.handlerError({ context: ctx as CommandContext<C>, command: cmd, error })
               else throw error
@@ -480,10 +459,8 @@ export class ManagedCommands<
     )
     this.composer.command(cmd.trigger, async (ctx) => {
       // silently delete the command call if the scope is invalid
-      if (
-        (cmd.scope === "private" && ctx.chat.type !== "private") ||
-        (cmd.scope === "group" && ctx.chat.type !== "supergroup" && ctx.chat.type !== "group")
-      ) {
+      const isPrivate = isFromPrivateChat(ctx)
+      if ((cmd.scope === "private" && !isPrivate) || (cmd.scope === "group" && !isFromGroupChat(ctx))) {
         if (this.hooks.wrongScope) await this.hooks.wrongScope({ context: ctx, command: cmd })
         return
       }
@@ -497,8 +474,31 @@ export class ManagedCommands<
         }
       }
 
+      // check for the requirements in the command invocation
+      const requirements = ManagedCommands.parseCommand(ctx.msg, cmd)
+      if (requirements.isErr()) {
+        // Command messages that don't meet requirements
+        // AND are sent in a group/supergroup are deleted from here because
+        // they don't reach command handler so they would remain in chat.
+        // In private chats we keep them, we don't care
+        if (isPrivate) await ctx.deleteMessage()
+
+        const msg = await ctx.reply(
+          fmt(({ b, code }) => [
+            `Error:`,
+            b`${requirements.error.join("\n")}`,
+            `\nSee usage with:`,
+            code`/help ${Array.isArray(cmd.trigger) ? cmd.trigger[0] : cmd.trigger}`,
+          ])
+        )
+        if (!isPrivate) void ephemeral(msg, 10_000) // delete the error message after some time in groups, no need to keep it
+        return
+      }
+
+      const { args, repliedTo } = requirements.value
+
       // enter the conversation that handles the command execution
-      await ctx.conversation.enter(id)
+      await ctx.conversation.enter(id, args, repliedTo)
     })
     return this
   }
