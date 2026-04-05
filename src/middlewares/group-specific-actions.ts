@@ -1,8 +1,9 @@
-import { Composer, type Filter, type MiddlewareObj } from "grammy"
+import type { Filter } from "grammy"
 import { err, ok, type Result } from "neverthrow"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
+import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { fmt, fmtUser } from "@/utils/format"
 import type { Context } from "@/utils/types"
 import { wait } from "@/utils/wait"
@@ -28,10 +29,9 @@ function groupSpecificHashtags(groupId: number): string[] {
   }
 }
 
-export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C> {
-  private composer = new Composer<C>()
-
+export class GroupSpecificActions<C extends TelemetryContextFlavor<Context>> extends TrackedMiddleware<C> {
   constructor() {
+    super("group_specific_actions")
     this.composer
       .filter((ctx) => !!ctx.chatId && TARGET_GROUP_IDS_SET.has(ctx.chatId))
       .on("message", async (ctx, next) => {
@@ -41,6 +41,7 @@ export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C>
 
         const chatMember = await ctx.getChatMember(ctx.from.id)
         if (chatMember.status === "administrator" || chatMember.status === "creator") return next() // skip if group-admin
+        ctx.point.tag("group_specific_chat_id", ctx.chatId.toString())
 
         let check: Result<void, string>
         switch (ctx.chatId) {
@@ -109,9 +110,5 @@ export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C>
       return err(`You must include one of the following hashtags in your message: ${requiredHashtags.join(", ")}`)
     }
     return ok()
-  }
-
-  middleware() {
-    return this.composer.middleware()
   }
 }

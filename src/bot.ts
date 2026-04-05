@@ -18,6 +18,7 @@ import { messageLink } from "./middlewares/message-link"
 import { MessageUserStorage } from "./middlewares/message-user-storage"
 import { modules, sharedDataInit } from "./modules"
 import { Moderation } from "./modules/moderation"
+import { telemetry } from "./modules/telemetry/middleware"
 import { redis } from "./redis"
 import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
@@ -63,6 +64,7 @@ bot.use(
     return [ctx.chat?.id, ctx.from?.id].filter((e) => e !== undefined).map((e) => e.toString())
   })
 )
+bot.use(telemetry())
 
 bot.init().then(() => {
   const sharedData: ModuleShared = {

@@ -1,19 +1,17 @@
-import type { Filter, MiddlewareObj } from "grammy"
-import { Composer } from "grammy"
+import type { Filter } from "grammy"
 import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { Moderation } from "@/modules/moderation"
+import { measureDuration, type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { redis } from "@/redis"
-import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
-import { createFakeMessage, getText } from "@/utils/messages"
+import { createFakeMessage, ephemeral, getText } from "@/utils/messages"
 import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
-import { wait } from "@/utils/wait"
 import { MessageUserStorage } from "../message-user-storage"
 import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
@@ -23,9 +21,10 @@ export type WhitelistType = {
   role: "creator" | "admin" | "user"
 }
 
-type ModerationContext<C extends Context> = Filter<C, "message" | "edited_message"> & {
+type ModerationFlavor<C extends Context> = C & {
   whitelisted?: WhitelistType
 }
+type ModerationContext<C extends Context> = Filter<ModerationFlavor<C>, "message" | "edited_message">
 
 const debouncedError = throttle((error: unknown, msg: string) => {
   logger.error({ error }, msg)
@@ -45,16 +44,18 @@ const debouncedError = throttle((error: unknown, msg: string) => {
  * - [ ] Avoid deletion for messages explicitly allowed by Direttivo or from privileged users
  * - [x] handle non-latin characters
  */
-export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> {
-  // the composer that holds all middlewares
-  private composer = new Composer<ModerationContext<C>>()
+export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> extends TrackedMiddleware<
+  ModerationFlavor<C>
+> {
   // AI moderation instance
   private aiModeration: AIModeration<C> = new AIModeration<C>()
 
   constructor() {
-    this.composer
+    super("auto_moderation_stack")
+    const filtered = this.composer
       .on(["message", "edited_message"])
       .fork() // fork the processing, this stack executes in parallel to the rest of the bot
+      .use(measureDuration("auto_moderation_total_duration")) // track total duration of the stack
       .filter(async (ctx) => {
         if (ctx.from.id === ctx.me.id) return false // skip messages from the bot itself
         const whitelistType = await this.isWhitelisted(ctx)
@@ -65,23 +66,27 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         }
         return true
       }) // skip if the message is whitelisted
-      // register all middlewares
-      .on(
-        ["message::url", "message::text_link", "edited_message::url", "edited_message::text_link"],
-        defer((ctx) => this.linkHandler(ctx))
-      )
-      .on(
-        "message",
-        defer((ctx) => this.harmfulContentHandler(ctx))
-      )
-      .on(
-        ["message:text", "message:caption"],
-        defer((ctx) => this.nonLatinHandler(ctx))
-      )
-      .on(
-        ["message:text", "message:media"],
-        defer((ctx) => this.multichatSpamHandler(ctx))
-      )
+
+    // register all middlewares
+    filtered
+      .on(["::url", "::text_link"])
+      .fork()
+      .use(measureDuration("auto_moderation_link_duration"))
+      .use((ctx) => this.linkHandler(ctx))
+    filtered
+      .fork()
+      .use(measureDuration("auto_moderation_ai_duration"))
+      .use((ctx) => this.harmfulContentHandler(ctx))
+    filtered
+      .on([":text", ":caption"])
+      .fork()
+      .use(measureDuration("auto_moderation_nonlatin_duration"))
+      .use((ctx) => this.nonLatinHandler(ctx))
+    filtered
+      .on(["message:text", "message:media"])
+      .fork()
+      .use(measureDuration("auto_moderation_multichat_duration"))
+      .use((ctx) => this.multichatSpamHandler(ctx))
   }
 
   /**
@@ -296,9 +301,5 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         logger.error({ error: res.error }, "Cannot execute moderation action for MULTI_CHAT_SPAM")
       }
     }
-  }
-
-  middleware() {
-    return (this.composer as MiddlewareObj<C>).middleware()
   }
 }

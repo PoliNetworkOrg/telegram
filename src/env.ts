@@ -12,6 +12,8 @@ export const env = createEnv({
     REDIS_PASSWORD: z.string().min(1).optional(),
     NODE_ENV: z.enum(["development", "production"]).default("development"),
     OPENAI_API_KEY: z.string().optional(),
+    INFLUXDB_TOKEN: z.string().optional(),
+    INFLUXDB_URL: z.string().default("http://localhost:8086"),
   },
 
   runtimeEnv: process.env,

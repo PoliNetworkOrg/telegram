@@ -2,6 +2,7 @@ import type { Filter, MiddlewareFn } from "grammy"
 import { logger } from "@/logger"
 import { RestrictPermissions } from "@/utils/chat"
 import { fmt } from "@/utils/format"
+import { ephemeral } from "@/utils/messages"
 import type { Context } from "@/utils/types"
 
 export const checkUsername: MiddlewareFn<Filter<Context, "message">> = async (ctx, next) => {
@@ -17,9 +18,8 @@ export const checkUsername: MiddlewareFn<Filter<Context, "message">> = async (ct
       `\n\nYou must set an username in Telegram settings to write in PoliNetwork's groups`,
     ])
 
-    const reply = await ctx.reply(msg)
     await ctx.deleteMessage()
-    setTimeout(() => void reply.delete(), 10_000)
+    void ephemeral(ctx.reply(msg), 10_000)
   }
   await next()
 }

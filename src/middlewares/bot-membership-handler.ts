@@ -1,5 +1,6 @@
-import { Composer, type Filter, type MiddlewareObj } from "grammy"
+import type { Filter } from "grammy"
 import { GroupManagement } from "@/lib/group-management"
+import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry/middleware"
 import type { Context } from "@/utils/types"
 
 type ChatType = "group" | "supergroup" | "private" | "channel"
@@ -27,10 +28,9 @@ const joinEvent: Record<ChatType, StatusType[]> = {
 }
 
 type MemberContext<C extends Context> = Filter<C, "my_chat_member">
-export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C> {
-  private composer = new Composer<C>()
-
+export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> extends TrackedMiddleware<C> {
   constructor() {
+    super("bot_membership_handler")
     this.composer.on("my_chat_member", async (ctx, next) => {
       const chat = ctx.myChatMember.chat
       const newStatus = ctx.myChatMember.new_chat_member.status
@@ -52,10 +52,6 @@ export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C>
 
       await next()
     })
-  }
-
-  middleware() {
-    return this.composer.middleware()
   }
 
   private static isJoin<C extends Context>(ctx: MemberContext<C>): boolean {
