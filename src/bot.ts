@@ -2,6 +2,7 @@ import { autoRetry } from "@grammyjs/auto-retry"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import { run, sequentialize } from "@grammyjs/runner"
+import { Point } from "@influxdata/influxdb-client"
 import { Bot, GrammyError, HttpError } from "grammy"
 import type { Update } from "grammy/types"
 import { apiTestQuery } from "./backend"
@@ -19,6 +20,7 @@ import { MessageUserStorage } from "./middlewares/message-user-storage"
 import { modules, sharedDataInit } from "./modules"
 import { Moderation } from "./modules/moderation"
 import { telemetry } from "./modules/telemetry/middleware"
+import type { ExceptionLog } from "./modules/tg-logger/types"
 import { redis } from "./redis"
 import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
@@ -74,8 +76,6 @@ bot.init().then(() => {
   sharedDataInit.resolve(sharedData)
 })
 
-const tgLogger = modules.get("tgLogger")
-
 bot.use(MenuGenerator.getInstance())
 bot.use(commands)
 bot.use(new BotMembershipHandler())
@@ -96,16 +96,29 @@ bot.on("message", MessageUserStorage.getInstance())
 bot.on("message", checkUsername)
 // bot.on("message", async (ctx, next) => { console.log(ctx.message); return await next() })
 
+async function logException(props: ExceptionLog, context: string) {
+  const tgLogger = modules.get("tgLogger")
+  const influx = modules.get("influx")
+  influx.writePoint(
+    new Point("exception")
+      .tag("context", context)
+      .tag("type", props.type)
+      .stringField("error", String(props.error))
+      .timestamp(new Date())
+  )
+  await tgLogger.exception(props, context).catch(() => {})
+}
+
 bot.catch(async (err) => {
   const { error } = err
   if (error instanceof GrammyError) {
-    await tgLogger.exception({ type: "BOT_ERROR", error }, "bot.catch() -- middleware stack")
+    await logException({ type: "BOT_ERROR", error }, "bot.catch() -- middleware stack")
   } else if (error instanceof HttpError) {
-    await tgLogger.exception({ type: "HTTP_ERROR", error }, "bot.catch() -- middleware stack")
+    await logException({ type: "HTTP_ERROR", error }, "bot.catch() -- middleware stack")
   } else if (error instanceof Error) {
-    await tgLogger.exception({ type: "GENERIC", error }, "bot.catch() -- middleware stack")
+    await logException({ type: "GENERIC", error }, "bot.catch() -- middleware stack")
   } else {
-    await tgLogger.exception({ type: "UNKNOWN", error }, "bot.catch() -- middleware stack")
+    await logException({ type: "UNKNOWN", error }, "bot.catch() -- middleware stack")
   }
 
   const e = err as { ctx: { api?: unknown } }
@@ -123,11 +136,12 @@ const runner = run(bot, {
 
 const terminate = once(async (signal: NodeJS.Signals) => {
   logger.warn(`Received ${signal}, shutting down...`)
-  const p1 = MessageUserStorage.getInstance().sync()
-  const p2 = redis.quit()
-  const p3 = runner.isRunning() && runner.stop()
-  const p4 = modules.stop()
-  await Promise.all([p1, p2, p3, p4])
+  await Promise.all([
+    MessageUserStorage.getInstance().sync(),
+    redis.quit(),
+    runner.isRunning() && runner.stop(),
+    modules.stop(),
+  ])
   logger.info("Bot stopped!")
   process.exit(0)
 })
@@ -137,5 +151,5 @@ process.on("SIGTERM", () => terminate("SIGTERM"))
 
 process.on("unhandledRejection", (reason: Error, promise) => {
   logger.fatal({ reason, promise }, "UNHANDLED PROMISE REJECTION")
-  void tgLogger.exception({ type: "UNHANDLED_PROMISE", error: reason, promise })
+  void logException({ type: "UNHANDLED_PROMISE", error: reason, promise }, "unhandledRejection -- global")
 })

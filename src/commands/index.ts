@@ -65,7 +65,7 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       logger.error({ error }, `[ManagedCommands] Error in handler for command '/${command.trigger}'`)
       await modules
         .get("tgLogger")
-        .exception({ type: "UNKNOWN", error })
+        .exception({ type: "UNKNOWN", error }, "managedCommands.handlerError() -- command handler")
         .catch(() => {})
       // TODO: we should figure out what to tell the user, maybe if we have some telemetry we can produce an error report id here?
       await context.reply(`An error occurred: ${String(error)}`).catch(() => {})
