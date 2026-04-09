@@ -1,6 +1,7 @@
 import { CommandsCollection } from "@/lib/managed-commands"
 import { MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
+import type { Role } from "@/utils/types"
 
 const generateMenu = MenuGenerator.getInstance().create<{
   messageId: number
@@ -34,7 +35,7 @@ const generateMenu = MenuGenerator.getInstance().create<{
   ],
 ])
 
-export const testmenu = new CommandsCollection().createCommand({
+export const testmenu = new CommandsCollection<Role>().createCommand({
   trigger: "testmenu",
   scope: "private",
   description: "Quick conversation",

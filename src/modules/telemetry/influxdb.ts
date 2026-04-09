@@ -26,6 +26,7 @@ export class InfluxClient extends Module<ModuleShared> {
     if (token) {
       this.client = new InfluxDB({ url, token })
       this.writeApi = this.client.getWriteApi("polinetwork", "telegram_bot")
+      logger.info("[InfluxDB] Client initialized successfully")
       this.flush = throttle(async () => {
         if (!this.writeApi) return
         try {

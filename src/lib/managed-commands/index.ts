@@ -72,6 +72,16 @@ export type ManagedCommandsHooks<OC extends Context, C extends Context, TRole ex
    *  for example by checking an external database of admins
    */
   overrideGroupAdminCheck?: (userId: number, chatId: number, context: CommandContext<OC>) => Promise<boolean>
+  /**
+   * Called when a command is invoked, before any processing is done, can be used to implement custom logic that should
+   * run before checking permissions or requirements, for example logging or analytics
+   */
+  commandMiddlewareStart?: Hook<OC, TRole>
+  /**
+   * Called when a command is invoked, after the conversation has entered and the first update is fully processed
+   * (i.e after `await ctx.conversation.enter()` returns)
+   */
+  commandMiddlewareEnd?: Hook<OC, TRole>
 }
 
 export interface IManagedCommandsOptions<TRole extends string, OC extends Context, C extends Context> {
@@ -486,6 +496,8 @@ export class ManagedCommands<
       )
     )
     this.composer.command(cmd.trigger, async (ctx) => {
+      if (this.hooks.commandMiddlewareStart) await this.hooks.commandMiddlewareStart({ context: ctx, command: cmd })
+
       // silently delete the command call if the scope is invalid
       const isPrivate = isFromPrivateChat(ctx)
       if ((cmd.scope === "private" && !isPrivate) || (cmd.scope === "group" && !isFromGroupChat(ctx))) {
@@ -527,6 +539,7 @@ export class ManagedCommands<
 
       // enter the conversation that handles the command execution
       await ctx.conversation.enter(id, args, repliedTo)
+      if (this.hooks.commandMiddlewareEnd) await this.hooks.commandMiddlewareEnd({ context: ctx, command: cmd })
     })
     return this
   }

@@ -47,14 +47,14 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       void ephemeral(context.reply("You are not allowed to execute this command"))
     },
     conversationBegin: async ({ context, command, conversation }) => {
-      const now = await conversation.external(() => Date.now())
+      const now = await conversation.now()
       context.point
         .tag("command", ManagedCommands.commandID(command))
         .tag("chat_type", context.chat.type)
         .tag("invoked_by", context.from.id.toString(10))
         .tag("invoked_from", context.chat.id.toString(10))
-        .timestamp(now)
-      context.stackTimes.managedCommands = now
+        .timestamp(new Date(now))
+      context.stackTimes = { managedCommands: now }
       if (context.chat.type !== "private") {
         // silently delete the command trigger if the command is used in a group, to reduce noise
         await context.deleteMessage().catch(() => {})
@@ -70,8 +70,11 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       // TODO: we should figure out what to tell the user, maybe if we have some telemetry we can produce an error report id here?
       await context.reply(`An error occurred: ${String(error)}`).catch(() => {})
     },
-    conversationEnd: async ({ context }) => {
-      context.point.intField("duration", Date.now() - context.stackTimes.managedCommands)
+    conversationEnd: async ({ context, command, conversation }) => {
+      logger.debug(
+        `[ManagedCommands] ${ManagedCommands.commandID(command)} execution finished for ${printCtxFrom(context)}}`
+      )
+      context.point.intField("duration", (await conversation.now()) - context.stackTimes.managedCommands)
       modules.get("influx").writePoint(context.point)
     },
     overrideGroupAdminCheck: async (userId, groupId, ctx) => {
@@ -79,6 +82,14 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       if (groupRole === "administrator" || groupRole === "creator") return true
       const isDbAdmin = await api.tg.permissions.checkGroup.query({ userId, groupId })
       return isDbAdmin
+    },
+    commandMiddlewareStart: async ({ context, command }) => {
+      context.stackTimes = { managedCommands: Date.now() }
+      context.point.tag("command", ManagedCommands.commandID(command)).tag("chat_type", context.chat.type)
+    },
+    commandMiddlewareEnd: async ({ context, command }) => {
+      logger.debug(`[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)}`)
+      context.point.intField("managed_commands_duration", Date.now() - context.stackTimes.managedCommands)
     },
   },
   getUserRoles: async (userId) => {
