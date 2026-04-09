@@ -38,7 +38,7 @@ export function telemetry<C extends TelemetryContextFlavor<Context>>(): Middlewa
  * if you have a middleware stack for handling commands and another for handling messages, you can use `stackName = "command"`
  * for the first and `stackName = "message"` for the second, and the telemetry points will have fields `command_duration` and `message_duration` respectively.
  */
-export class TrackedMiddleware<C extends TelemetryContextFlavor<Context>> implements MiddlewareObj<C> {
+export abstract class TrackedMiddleware<C extends TelemetryContextFlavor<Context>> implements MiddlewareObj<C> {
   private trackingComposer = new Composer<C>()
   protected composer = new Composer<C>()
 
