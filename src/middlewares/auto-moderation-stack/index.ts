@@ -5,7 +5,7 @@ import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { Moderation } from "@/modules/moderation"
-import { measureDuration, type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
+import { measureForkDuration, type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { redis } from "@/redis"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
@@ -55,7 +55,7 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
     const filtered = this.composer
       .on(["message", "edited_message"])
       .fork() // fork the processing, this stack executes in parallel to the rest of the bot
-      .use(measureDuration("auto_moderation_total_duration")) // track total duration of the stack
+      .use(measureForkDuration("auto_moderation_total_duration")) // track total duration of the stack
       .filter(async (ctx) => {
         if (ctx.from.id === ctx.me.id) return false // skip messages from the bot itself
         const whitelistType = await this.isWhitelisted(ctx)
@@ -71,21 +71,21 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
     filtered
       .on(["::url", "::text_link"])
       .fork()
-      .use(measureDuration("auto_moderation_link_duration"))
+      .use(measureForkDuration("auto_moderation_link_duration"))
       .use((ctx) => this.linkHandler(ctx))
     filtered
       .fork()
-      .use(measureDuration("auto_moderation_ai_duration"))
+      .use(measureForkDuration("auto_moderation_ai_duration"))
       .use((ctx) => this.harmfulContentHandler(ctx))
     filtered
       .on([":text", ":caption"])
       .fork()
-      .use(measureDuration("auto_moderation_nonlatin_duration"))
+      .use(measureForkDuration("auto_moderation_nonlatin_duration"))
       .use((ctx) => this.nonLatinHandler(ctx))
     filtered
       .on(["message:text", "message:media"])
       .fork()
-      .use(measureDuration("auto_moderation_multichat_duration"))
+      .use(measureForkDuration("auto_moderation_multichat_duration"))
       .use((ctx) => this.multichatSpamHandler(ctx))
   }
 
