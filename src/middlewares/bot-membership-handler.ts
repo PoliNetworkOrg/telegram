@@ -1,6 +1,6 @@
 import type { Filter } from "grammy"
 import { GroupManagement } from "@/lib/group-management"
-import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry/middleware"
+import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import type { Context } from "@/utils/types"
 
 type ChatType = "group" | "supergroup" | "private" | "channel"

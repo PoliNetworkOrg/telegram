@@ -7,7 +7,7 @@ import type { ConversationData, ConversationStorage } from "@grammyjs/conversati
 import { conversations, createConversation } from "@grammyjs/conversations"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
-import type { CommandContext, Context, MiddlewareObj } from "grammy"
+import type { CommandContext, Context, Middleware, MiddlewareObj } from "grammy"
 import { Composer, MemorySessionStorage } from "grammy"
 import type { Message } from "grammy/types"
 import type { Result } from "neverthrow"
@@ -38,39 +38,50 @@ export type Hook<C extends Context, TRole extends string = string, Params = unkn
     command: AnyCommand<TRole>
   }
 ) => Promise<void>
-export type ManagedCommandsHooks<C extends Context, TRole extends string = string> = {
+export type InternalHook<C extends Context, TRole extends string = string, Params = unknown> = (
+  params: Params & {
+    context: CommandContext<C>
+    command: AnyCommand<TRole>
+    conversation: CommandConversation
+  }
+) => Promise<void> | void
+export type ManagedCommandsHooks<OC extends Context, C extends Context, TRole extends string = string> = {
   /**
    * Called when a command is invoked in the wrong scope (e.g. a private-only command is invoked in a group)
    */
-  wrongScope?: Hook<C, TRole>
+  wrongScope?: Hook<OC, TRole>
   /**
    * Called when a user without the required permissions invokes a command
    */
-  missingPermissions?: Hook<C, TRole>
-  /**
-   * Called when an error is thrown in the command handler
-   */
-  handlerError?: Hook<C, TRole, { error: unknown }>
+  missingPermissions?: Hook<OC, TRole>
   /**
    * Called before executing the command handler, can be used to implement custom pre-handler logic, for example logging or analytics
    */
-  beforeHandler?: Hook<C, TRole>
+  conversationBegin?: InternalHook<C, TRole>
+  /**
+   * Called when an error is thrown in the command handler
+   */
+  handlerError?: InternalHook<C, TRole, { error: unknown }>
+  /**
+   * Called after executing the command handler, can be used to implement custom post-handler logic, for example logging or analytics
+   */
+  conversationEnd?: InternalHook<C, TRole>
   /**
    * A function to override what counts as a "Group Admin", by default it considers users with Telegram Chat Role of
    * "administrator" or "creator" as group admins, but you can override this to implement your own logic,
    *  for example by checking an external database of admins
    */
-  overrideGroupAdminCheck?: (userId: number, chatId: number, context: CommandContext<C>) => Promise<boolean>
+  overrideGroupAdminCheck?: (userId: number, chatId: number, context: CommandContext<OC>) => Promise<boolean>
 }
 
-export interface IManagedCommandsOptions<TRole extends string, C extends Context> {
+export interface IManagedCommandsOptions<TRole extends string, OC extends Context, C extends Context> {
   /**
    * The storage adapter to use for persisting conversations.
    * - {@link https://grammy.dev/plugins/conversations#persisting-conversations conversations plugin documentation}
    * - {@link https://grammy.dev/plugins/session sessions documentation}
    * @default MemorySessionStorage
    */
-  adapter: ConversationStorage<C, ConversationData>
+  adapter: ConversationStorage<OC, ConversationData>
 
   /**
    * A function to get externally defined roles for a specific user.
@@ -93,17 +104,22 @@ export interface IManagedCommandsOptions<TRole extends string, C extends Context
    * })
    * ```
    */
-  getUserRoles: (userId: number, context: CommandContext<C>) => Promise<TRole[]>
+  getUserRoles: (userId: number, context: CommandContext<OC>) => Promise<TRole[]>
+
+  /**
+   * Additional plugins to apply to the conversation inner composer.
+   */
+  plugins?: Middleware<C>[]
 
   /**
    * Hooks to execute on specific events
    */
-  hooks: ManagedCommandsHooks<C, TRole>
+  hooks: ManagedCommandsHooks<OC, C, TRole>
 }
 
-export type ManagedCommandsOptions<TRole extends string, C extends Context> = string extends TRole
-  ? Omit<IManagedCommandsOptions<TRole, C>, "getUserRoles"> & { getUserRoles?: never }
-  : IManagedCommandsOptions<TRole, C>
+export type ManagedCommandsOptions<TRole extends string, OC extends Context, C extends Context> = string extends TRole
+  ? Omit<IManagedCommandsOptions<TRole, OC, C>, "getUserRoles"> & { getUserRoles?: never }
+  : IManagedCommandsOptions<TRole, OC, C>
 
 /**
  * A class to manage commands in a grammY bot, with support for argument parsing, permission handling, and hooks for various events.
@@ -130,14 +146,15 @@ export type ManagedCommandsOptions<TRole extends string, C extends Context> = st
  */
 export class ManagedCommands<
   TRole extends string = string,
-  C extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
-> implements MiddlewareObj<C>
+  OC extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
+  C extends CommandScopedContext = CommandScopedContext,
+> implements MiddlewareObj<OC>
 {
-  private composer = new Composer<C>()
+  private composer = new Composer<OC>()
   private commands: Record<string, AnyCommand<TRole>[]> = {}
-  private getUserRoles: (userId: number, context: CommandContext<C>) => Promise<TRole[]>
-  private hooks: ManagedCommandsHooks<C, TRole>
-  private adapter: ConversationStorage<C, ConversationData>
+  private getUserRoles: (userId: number, context: CommandContext<OC>) => Promise<TRole[]>
+  private hooks: ManagedCommandsHooks<OC, C, TRole>
+  private adapter: ConversationStorage<OC, ConversationData>
   private registeredTriggers = new Set<string>()
 
   /**
@@ -266,7 +283,7 @@ export class ManagedCommands<
    * @param cmd The command
    * @returns a unique ID for the command based on its trigger(s)
    */
-  private static commandID(cmd: AnyCommand) {
+  public static commandID(cmd: AnyCommand) {
     // only available characters in command triggers are a-z, 0-9 and _
     // https://core.telegram.org/bots/features#commands
     return typeof cmd.trigger === "string" ? cmd.trigger : cmd.trigger.join("-")
@@ -317,13 +334,13 @@ export class ManagedCommands<
    *
    * @param options The options to use for the ManagedCommands instance
    */
-  constructor(options?: ManagedCommandsOptions<TRole, C>) {
+  constructor(options?: ManagedCommandsOptions<TRole, OC, C>) {
     this.getUserRoles = options?.getUserRoles ?? (async () => [])
     this.hooks = options?.hooks ?? {}
     this.adapter = options?.adapter ?? new MemorySessionStorage()
 
     this.composer.use(
-      conversations<C, CommandScopedContext>({
+      conversations<OC, C>({
         storage: this.adapter,
         plugins: [
           hydrate<CommandScopedContext>(),
@@ -332,6 +349,7 @@ export class ManagedCommands<
             ctx.api.config.use(parseMode("MarkdownV2"))
             await next()
           },
+          ...(options?.plugins ?? []),
         ],
       })
     )
@@ -372,7 +390,7 @@ export class ManagedCommands<
     return cmds
   }
 
-  private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<C>): Promise<boolean> {
+  private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<OC>): Promise<boolean> {
     if (!command.permissions) return true
     if (!ctx.from) return false
 
@@ -439,6 +457,15 @@ export class ManagedCommands<
           args: ArgumentMap<A>,
           repliedTo: RepliedTo<R>
         ) => {
+          const hookParams: Parameters<InternalHook<C, TRole>>[0] = {
+            context: ctx as CommandContext<C>,
+            command: cmd,
+            // We cast the conversation type to unknown cause hooks cannot be aware of the scope of the specific command
+            conversation: conv as unknown as CommandConversation,
+          }
+
+          if (this.hooks.conversationBegin) await this.hooks.conversationBegin(hookParams)
+
           // execute the handler
           await cmd
             .handler({
@@ -449,10 +476,11 @@ export class ManagedCommands<
             })
             .catch(async (error) => {
               // errors should be handled by the hook, if not rethrow them to avoid silent failures
-              if (this.hooks.handlerError)
-                await this.hooks.handlerError({ context: ctx as CommandContext<C>, command: cmd, error })
+              if (this.hooks.handlerError) await this.hooks.handlerError({ ...hookParams, error })
               else throw error
             })
+
+          if (this.hooks.conversationEnd) await this.hooks.conversationEnd(hookParams)
         },
         { id }
       )

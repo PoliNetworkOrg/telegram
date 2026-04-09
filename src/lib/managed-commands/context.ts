@@ -7,6 +7,6 @@ import type { Chat } from "grammy/types"
 // NOTE: ParseModeFlavor must stay as the outer one
 
 export type ManagedCommandsFlavor<C extends Context = Context> = ParseModeFlavor<HydrateFlavor<ConversationFlavor<C>>>
-export type ConversationContext<CT extends Chat["type"]> = ParseModeFlavor<
-  HydrateFlavor<CommandContext<ChatTypeContext<Context, CT>>>
+export type ConversationContext<CT extends Chat["type"], C extends Context = Context> = ParseModeFlavor<
+  HydrateFlavor<CommandContext<ChatTypeContext<C, CT>>>
 >

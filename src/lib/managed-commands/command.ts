@@ -66,15 +66,18 @@ type Permissions<TRole extends string, S extends CommandScope> = S extends "priv
   ? PrivatePermissions<TRole>
   : GroupPermissions<TRole>
 
-export type CommandScopedContext<S extends CommandScope = CommandScope> = S extends "private"
-  ? ConversationContext<"private">
+export type CommandScopedContext<
+  S extends CommandScope = CommandScope,
+  C extends Context = Context,
+> = S extends "private"
+  ? ConversationContext<"private", C>
   : S extends "group"
-    ? ConversationContext<"group"> | ConversationContext<"supergroup">
-    : ConversationContext<"private"> | ConversationContext<"group"> | ConversationContext<"supergroup">
+    ? ConversationContext<"group", C> | ConversationContext<"supergroup", C>
+    : ConversationContext<"private", C> | ConversationContext<"group", C> | ConversationContext<"supergroup", C>
 
 export type CommandConversation<S extends CommandScope = CommandScope, C extends Context = Context> = Conversation<
   C,
-  CommandScopedContext<S>
+  CommandScopedContext<S, C>
 >
 
 /**
@@ -90,6 +93,7 @@ export interface Command<
   R extends CommandReplyTo,
   S extends CommandScope,
   TRole extends string = string,
+  C extends Context = Context,
 > {
   /**
    * The command trigger, the string that will be used to call the command.
@@ -132,13 +136,13 @@ export interface Command<
      *
      * See {@link https://grammy.dev/ref/core/context Context}
      */
-    context: CommandScopedContext<S>
+    context: CommandScopedContext<S, C>
     /**
      * A conversation object to handle complex interactions.
      *
      * See {@link https://grammy.dev/plugins/conversations Conversation}
      */
-    conversation: CommandConversation<S>
+    conversation: CommandConversation<S, C>
     /**
      * The arguments passed to the command, this is an object with the keys as the argument keys.
      *
@@ -153,7 +157,16 @@ export interface Command<
   }) => Promise<void>
 }
 
-export type AnyCommand<TRole extends string = string> = Command<CommandArgs, CommandReplyTo, CommandScope, TRole>
+/**
+ * A generic command
+ */
+export type AnyCommand<TRole extends string = string, C extends Context = Context> = Command<
+  CommandArgs,
+  CommandReplyTo,
+  CommandScope,
+  TRole,
+  C
+>
 
 /**
  * Type guard to check if a command is allowed in groups.
@@ -173,9 +186,12 @@ export type AnyCommand<TRole extends string = string> = Command<CommandArgs, Com
  * })
  * ```
  */
-export function isAllowedInGroups<A extends CommandArgs, R extends CommandReplyTo, TRole extends string = string>(
-  cmd: Command<A, R, CommandScope, TRole>
-): cmd is Command<A, R, "group" | "both", TRole> {
+export function isAllowedInGroups<
+  A extends CommandArgs,
+  R extends CommandReplyTo,
+  TRole extends string = string,
+  C extends Context = Context,
+>(cmd: Command<A, R, CommandScope, TRole, C>): cmd is Command<A, R, "group" | "both", TRole, C> {
   return cmd.scope !== "private"
 }
 
@@ -197,8 +213,11 @@ export function isAllowedInGroups<A extends CommandArgs, R extends CommandReplyT
  * })
  * ```
  */
-export function isAllowedInPrivateOnly<A extends CommandArgs, R extends CommandReplyTo, TRole extends string = string>(
-  cmd: Command<A, R, CommandScope, TRole>
-): cmd is Command<A, R, "private", TRole> {
+export function isAllowedInPrivateOnly<
+  A extends CommandArgs,
+  R extends CommandReplyTo,
+  TRole extends string = string,
+  C extends Context = Context,
+>(cmd: Command<A, R, CommandScope, TRole, C>): cmd is Command<A, R, "private", TRole, C> {
   return cmd.scope === "private"
 }
