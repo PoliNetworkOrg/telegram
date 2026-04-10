@@ -20,6 +20,7 @@ import { MessageUserStorage } from "./middlewares/message-user-storage"
 import { modules, sharedDataInit } from "./modules"
 import { Moderation } from "./modules/moderation"
 import { telemetry } from "./modules/telemetry/middleware"
+import { tgApiTelemetry } from "./modules/telemetry/transformer"
 import type { ExceptionLog } from "./modules/tg-logger/types"
 import { redis } from "./redis"
 import { once } from "./utils/once"
@@ -61,6 +62,7 @@ bot.use(hydrateReply)
 
 bot.api.config.use(autoRetry())
 bot.api.config.use(parseMode("MarkdownV2"))
+bot.api.config.use(tgApiTelemetry())
 bot.use(
   sequentialize((ctx) => {
     return [ctx.chat?.id, ctx.from?.id].filter((e) => e !== undefined).map((e) => e.toString())
