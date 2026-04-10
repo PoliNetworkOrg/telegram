@@ -72,7 +72,7 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
     },
     conversationEnd: async ({ context, command, conversation }) => {
       logger.debug(
-        `[ManagedCommands] ${ManagedCommands.commandID(command)} execution finished for ${printCtxFrom(context)}}`
+        `[ManagedCommands] ${ManagedCommands.commandID(command)} execution finished for ${printCtxFrom(context)}`
       )
       context.point.intField("duration", (await conversation.now()) - context.stackTimes.managedCommands)
       modules.get("influx").writePoint(context.point)
