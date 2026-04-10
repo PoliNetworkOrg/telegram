@@ -17,6 +17,7 @@ export const ban = new CommandsCollection<Role>("Banning")
     scope: "group",
     reply: "required",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
@@ -45,6 +46,7 @@ export const ban = new CommandsCollection<Role>("Banning")
     scope: "group",
     reply: "required",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
@@ -71,6 +73,7 @@ export const ban = new CommandsCollection<Role>("Banning")
     description: "Unban a user from a group",
     scope: "group",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
