@@ -27,7 +27,7 @@ export const ban = new CommandsCollection<Role>("Banning")
       }
 
       const res = await Moderation.ban(repliedTo.from, context.chat, context.from, null, [repliedTo], args.reason)
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) await ephemeral(context.reply(res.error.fmtError))
     },
   })
   .createCommand({
@@ -62,7 +62,7 @@ export const ban = new CommandsCollection<Role>("Banning")
         [repliedTo],
         args.reason
       )
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) await ephemeral(context.reply(res.error.fmtError))
     },
   })
   .createCommand({
@@ -81,7 +81,7 @@ export const ban = new CommandsCollection<Role>("Banning")
       if (!userId) {
         logger.debug(`unban: no userId for username ${args.username}`)
         const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
-        void wait(5000).then(() => msg.delete())
+        await wait(5000).then(() => msg.delete())
         return
       }
 
@@ -89,11 +89,11 @@ export const ban = new CommandsCollection<Role>("Banning")
       if (!user) {
         const msg = await context.reply("Error: cannot find this user")
         logger.error({ userId }, "UNBAN: cannot retrieve the user")
-        void wait(5000).then(() => msg.delete())
+        await wait(5000).then(() => msg.delete())
         return
       }
 
       const res = await Moderation.unban(user, context.chat, context.from)
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) await ephemeral(context.reply(res.error.fmtError))
     },
   })

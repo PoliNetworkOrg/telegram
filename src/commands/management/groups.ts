@@ -21,26 +21,31 @@ export const groups = new CommandsCollection<Role>("Groups").createCommand({
   },
   handler: async ({ context, args }) => {
     const group = await context.api.getChat(args.chatId).catch(() => null)
-    if (!group)
-      return void context.reply(
+    if (!group) {
+      await context.reply(
         fmt(
           ({ code, n }) =>
             n`Group with chatId ${code`${args.chatId}`} does not exists or the bot is not an administrator.`
         )
       )
+      return
+    }
 
-    if (group.type === "private")
-      return void context.reply(
+    if (group.type === "private") {
+      await context.reply(
         fmt(({ code, n }) => n`Chat with chatId ${code`${args.chatId}`} is a private chat, not a group.`)
       )
+      return
+    }
 
     const res = await GroupManagement.update(group.id, context.from)
     if (res.isErr()) {
-      return void context.reply(
+      await context.reply(
         fmt(({ code, n, b, i }) => [b`There was an ERROR`, n`chatId: ${code`${args.chatId}`}`, i`\n${res.error}`], {
           sep: "\n",
         })
       )
+      return
     }
 
     await context.reply(
