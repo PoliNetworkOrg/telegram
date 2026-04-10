@@ -5,9 +5,12 @@ import { SuperJSON } from "superjson"
 
 import { env } from "./env"
 import { logger } from "./logger"
+import { trpcTelemetryLink } from "./modules/telemetry/trpc"
 
 const url = `http://${env.BACKEND_URL}${TRPC_PATH}`
-export const api = createTRPCClient<AppRouter>({ links: [httpBatchLink({ url, transformer: SuperJSON })] })
+export const api = createTRPCClient<AppRouter>({
+  links: [trpcTelemetryLink, httpBatchLink({ url, transformer: SuperJSON })],
+})
 
 export type ApiOutput = inferRouterOutputs<AppRouter>
 export type ApiInput = inferRouterInputs<AppRouter>

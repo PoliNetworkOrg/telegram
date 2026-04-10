@@ -61,3 +61,5 @@ export class InfluxClient extends Module<ModuleShared> {
     }
   }
 }
+
+export const influxClient = new InfluxClient()

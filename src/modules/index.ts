@@ -3,7 +3,7 @@ import { WebSocketClient } from "@/modules/websocket"
 import type { ModuleShared } from "@/utils/types"
 import { Awaiter } from "@/utils/wait"
 import { BanAllQueue } from "./moderation/ban-all"
-import { InfluxClient } from "./telemetry/influxdb"
+import { influxClient } from "./telemetry/influxdb"
 import { TgLogger } from "./tg-logger"
 
 export const sharedDataInit = new Awaiter<ModuleShared>()
@@ -22,7 +22,7 @@ export const modules = new ModuleCoordinator(
     }),
     webSocket: new WebSocketClient(),
     banAll: new BanAllQueue(),
-    influx: new InfluxClient(),
+    influx: influxClient,
   },
   async () => {
     return await sharedDataInit
