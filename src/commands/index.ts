@@ -37,6 +37,14 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       logger.info(
         `[ManagedCommands] Command '/${command.trigger}' with scope '${command.scope}' invoked by ${printCtxFrom(context)} in a '${context.chat.type}' chat`
       )
+      await ephemeral(
+        context.reply(
+          fmt(
+            ({ n }) =>
+              n`This command must be run in ${command.scope === "private" ? "private chat with the bot" : "groups"}.`
+          )
+        )
+      )
     },
     missingPermissions: async ({ context, command }) => {
       await context.deleteMessage().catch(() => {})
