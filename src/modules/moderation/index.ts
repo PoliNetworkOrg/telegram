@@ -159,7 +159,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
           })
           .catch(() => false)
       case "UNBAN":
-        return modules.shared.api.unbanChatMember(p.chat.id, p.target.id).catch(() => false)
+        return modules.shared.api.unbanChatMember(p.chat.id, p.target.id, { only_if_banned: true }).catch(() => false)
       case "MUTE":
         return modules.shared.api
           .restrictChatMember(p.chat.id, p.target.id, RestrictPermissions.mute, {
