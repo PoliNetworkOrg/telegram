@@ -33,6 +33,7 @@ export class AIModeration<C extends Context> extends EventEmitter<{
    * @returns An array of {@link FlaggedCategory} containing each category that was flagged by OpenAI
    */
   static parseFlaggedCategories(results: ModerationResult[]): FlaggedCategory[] {
+    if (results.length === 0) return []
     const categories = new Set(
       results
         .map((result) => result.categories)
