@@ -1,24 +1,17 @@
-import { Composer, type Filter, type MiddlewareObj } from "grammy"
+import type { Filter } from "grammy"
 import { logReport } from "@/commands/report"
 import { logger } from "@/logger"
+import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import type { Context } from "@/utils/types"
 
 type MentionContext<C extends Context> = Filter<C, "message:entities:mention">
-export class MentionListener<C extends Context> implements MiddlewareObj<C> {
-  private composer = new Composer<C>()
-
+export class MentionListener<C extends TelemetryContextFlavor<Context>> extends TrackedMiddleware<C> {
   constructor() {
-    this.composer
-      .on("message:entities:mention")
-      .fork()
-      .filter(
-        (ctx) => ctx.entities("mention").some((m) => m.text === "@admin"),
-        (ctx) => this.handleReport(ctx)
-      )
-  }
-
-  middleware() {
-    return this.composer.middleware()
+    super("mention_listener")
+    this.composer.on("message:entities:mention").filter(
+      (ctx) => ctx.entities("mention").some((m) => m.text === "@admin"),
+      (ctx) => this.handleReport(ctx)
+    )
   }
 
   private async handleReport(ctx: MentionContext<C>) {

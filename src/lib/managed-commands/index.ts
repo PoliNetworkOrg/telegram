@@ -7,12 +7,13 @@ import type { ConversationData, ConversationStorage } from "@grammyjs/conversati
 import { conversations, createConversation } from "@grammyjs/conversations"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
-import type { CommandContext, Context, MiddlewareObj } from "grammy"
+import type { CommandContext, Context, Middleware, MiddlewareObj } from "grammy"
 import { Composer, MemorySessionStorage } from "grammy"
 import type { Message } from "grammy/types"
 import type { Result } from "neverthrow"
 import { err, ok } from "neverthrow"
 import z from "zod"
+import { isFromGroupChat, isFromPrivateChat } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { CommandsCollection } from "./collection"
@@ -37,39 +38,60 @@ export type Hook<C extends Context, TRole extends string = string, Params = unkn
     command: AnyCommand<TRole>
   }
 ) => Promise<void>
-export type ManagedCommandsHooks<C extends Context, TRole extends string = string> = {
+export type InternalHook<C extends Context, TRole extends string = string, Params = unknown> = (
+  params: Params & {
+    context: CommandContext<C>
+    command: AnyCommand<TRole>
+    conversation: CommandConversation
+  }
+) => Promise<void> | void
+export type ManagedCommandsHooks<OC extends Context, C extends Context, TRole extends string = string> = {
   /**
    * Called when a command is invoked in the wrong scope (e.g. a private-only command is invoked in a group)
    */
-  wrongScope?: Hook<C, TRole>
+  wrongScope?: Hook<OC, TRole>
   /**
    * Called when a user without the required permissions invokes a command
    */
-  missingPermissions?: Hook<C, TRole>
-  /**
-   * Called when an error is thrown in the command handler
-   */
-  handlerError?: Hook<C, TRole, { error: unknown }>
+  missingPermissions?: Hook<OC, TRole>
   /**
    * Called before executing the command handler, can be used to implement custom pre-handler logic, for example logging or analytics
    */
-  beforeHandler?: Hook<C, TRole>
+  conversationBegin?: InternalHook<C, TRole>
+  /**
+   * Called when an error is thrown in the command handler
+   */
+  handlerError?: InternalHook<C, TRole, { error: unknown }>
+  /**
+   * Called after executing the command handler, can be used to implement custom post-handler logic, for example logging or analytics
+   */
+  conversationEnd?: InternalHook<C, TRole>
   /**
    * A function to override what counts as a "Group Admin", by default it considers users with Telegram Chat Role of
    * "administrator" or "creator" as group admins, but you can override this to implement your own logic,
    *  for example by checking an external database of admins
    */
-  overrideGroupAdminCheck?: (userId: number, chatId: number, context: CommandContext<C>) => Promise<boolean>
+  overrideGroupAdminCheck?: (userId: number, chatId: number, context: CommandContext<OC>) => Promise<boolean>
+  /**
+   * Called when a command is invoked, before any processing is done, can be used to implement custom logic that should
+   * run before checking permissions or requirements, for example logging or analytics
+   */
+  commandMiddlewareStart?: Hook<OC, TRole>
+  /**
+   * Called when a command is invoked, after the conversation has entered and the first update is fully processed
+   * (i.e after `await ctx.conversation.enter()` returns)
+   */
+  commandMiddlewareEnd?: Hook<OC, TRole>
 }
 
-export interface IManagedCommandsOptions<TRole extends string, C extends Context> {
+export interface IManagedCommandsOptions<TRole extends string, OC extends Context, C extends Context> {
   /**
    * The storage adapter to use for persisting conversations.
    * - {@link https://grammy.dev/plugins/conversations#persisting-conversations conversations plugin documentation}
    * - {@link https://grammy.dev/plugins/session sessions documentation}
    * @default MemorySessionStorage
    */
-  adapter: ConversationStorage<C, ConversationData>
+  adapter: ConversationStorage<OC, ConversationData>
 
   /**
    * A function to get externally defined roles for a specific user.
@@ -92,17 +114,22 @@ export interface IManagedCommandsOptions<TRole extends string, C extends Context
    * })
    * ```
    */
-  getUserRoles: (userId: number, context: CommandContext<C>) => Promise<TRole[]>
+  getUserRoles: (userId: number, context: CommandContext<OC>) => Promise<TRole[]>
+
+  /**
+   * Additional plugins to apply to the conversation inner composer.
+   */
+  plugins?: Middleware<C>[]
 
   /**
    * Hooks to execute on specific events
    */
-  hooks: ManagedCommandsHooks<C, TRole>
+  hooks: ManagedCommandsHooks<OC, C, TRole>
 }
 
-export type ManagedCommandsOptions<TRole extends string, C extends Context> = string extends TRole
-  ? Omit<IManagedCommandsOptions<TRole, C>, "getUserRoles"> & { getUserRoles?: never }
-  : IManagedCommandsOptions<TRole, C>
+export type ManagedCommandsOptions<TRole extends string, OC extends Context, C extends Context> = string extends TRole
+  ? Omit<IManagedCommandsOptions<TRole, OC, C>, "getUserRoles"> & { getUserRoles?: never }
+  : IManagedCommandsOptions<TRole, OC, C>
 
 /**
  * A class to manage commands in a grammY bot, with support for argument parsing, permission handling, and hooks for various events.
@@ -129,14 +156,15 @@ export type ManagedCommandsOptions<TRole extends string, C extends Context> = st
  */
 export class ManagedCommands<
   TRole extends string = string,
-  C extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
-> implements MiddlewareObj<C>
+  OC extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
+  C extends CommandScopedContext = CommandScopedContext,
+> implements MiddlewareObj<OC>
 {
-  private composer = new Composer<C>()
+  private composer = new Composer<OC>()
   private commands: Record<string, AnyCommand<TRole>[]> = {}
-  private getUserRoles: (userId: number, context: CommandContext<C>) => Promise<TRole[]>
-  private hooks: ManagedCommandsHooks<C, TRole>
-  private adapter: ConversationStorage<C, ConversationData>
+  private getUserRoles: (userId: number, context: CommandContext<OC>) => Promise<TRole[]>
+  private hooks: ManagedCommandsHooks<OC, C, TRole>
+  private adapter: ConversationStorage<OC, ConversationData>
   private registeredTriggers = new Set<string>()
 
   /**
@@ -265,7 +293,7 @@ export class ManagedCommands<
    * @param cmd The command
    * @returns a unique ID for the command based on its trigger(s)
    */
-  private static commandID(cmd: AnyCommand) {
+  public static commandID(cmd: AnyCommand) {
     // only available characters in command triggers are a-z, 0-9 and _
     // https://core.telegram.org/bots/features#commands
     return typeof cmd.trigger === "string" ? cmd.trigger : cmd.trigger.join("-")
@@ -316,13 +344,13 @@ export class ManagedCommands<
    *
    * @param options The options to use for the ManagedCommands instance
    */
-  constructor(options?: ManagedCommandsOptions<TRole, C>) {
+  constructor(options?: ManagedCommandsOptions<TRole, OC, C>) {
     this.getUserRoles = options?.getUserRoles ?? (async () => [])
     this.hooks = options?.hooks ?? {}
     this.adapter = options?.adapter ?? new MemorySessionStorage()
 
     this.composer.use(
-      conversations<C, CommandScopedContext>({
+      conversations<OC, C>({
         storage: this.adapter,
         plugins: [
           hydrate<CommandScopedContext>(),
@@ -331,6 +359,7 @@ export class ManagedCommands<
             ctx.api.config.use(parseMode("MarkdownV2"))
             await next()
           },
+          ...(options?.plugins ?? []),
         ],
       })
     )
@@ -371,7 +400,7 @@ export class ManagedCommands<
     return cmds
   }
 
-  private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<C>): Promise<boolean> {
+  private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<OC>): Promise<boolean> {
     if (!command.permissions) return true
     if (!ctx.from) return false
 
@@ -432,36 +461,22 @@ export class ManagedCommands<
     // create a conversation that handles the command execution
     this.composer.use(
       createConversation(
-        async (conv: CommandConversation<S>, ctx: CommandScopedContext<S>) => {
-          // check for the requirements in the command invocation
-          // biome-ignore lint/style/noNonNullAssertion: conversations cannot start without a message
-          const message = ctx.message!
-          const requirements = ManagedCommands.parseCommand(message, cmd)
-          if (requirements.isErr()) {
-            // Command messages that don't meet requirements
-            // AND are sent in a group/supergroup are deleted from here because
-            // they don't reach command handler so they would remain in chat.
-            // In private chats we keep them, we don't care
-            if (message.chat.type !== "private") await ctx.deleteMessage()
-
-            const msg = await ctx.reply(
-              fmt(({ b, code }) => [
-                `Error:`,
-                b`${requirements.error.join("\n")}`,
-                `\nSee usage with:`,
-                code`/help ${Array.isArray(cmd.trigger) ? cmd.trigger[0] : cmd.trigger}`,
-              ])
-            )
-            if (ctx.chat.type !== "private") void ephemeral(msg, 10_000) // delete the error message after some time in groups, no need to keep it
-            return
+        async (
+          conv: CommandConversation<S>,
+          ctx: CommandScopedContext<S>,
+          args: ArgumentMap<A>,
+          repliedTo: RepliedTo<R>
+        ) => {
+          const hookParams: Parameters<InternalHook<C, TRole>>[0] = {
+            context: ctx as CommandContext<C>,
+            command: cmd,
+            // We cast the conversation type to unknown cause hooks cannot be aware of the scope of the specific command
+            conversation: conv as unknown as CommandConversation,
           }
 
-          const { args, repliedTo } = requirements.value
+          if (this.hooks.conversationBegin) await this.hooks.conversationBegin(hookParams)
 
-          if (this.hooks.beforeHandler)
-            await this.hooks.beforeHandler({ context: ctx as CommandContext<C>, command: cmd })
-
-          // Finally execute the handler
+          // execute the handler
           await cmd
             .handler({
               context: ctx,
@@ -470,20 +485,22 @@ export class ManagedCommands<
               repliedTo,
             })
             .catch(async (error) => {
-              if (this.hooks.handlerError)
-                await this.hooks.handlerError({ context: ctx as CommandContext<C>, command: cmd, error })
+              // errors should be handled by the hook, if not rethrow them to avoid silent failures
+              if (this.hooks.handlerError) await this.hooks.handlerError({ ...hookParams, error })
               else throw error
             })
+
+          if (this.hooks.conversationEnd) await this.hooks.conversationEnd(hookParams)
         },
         { id }
       )
     )
     this.composer.command(cmd.trigger, async (ctx) => {
+      if (this.hooks.commandMiddlewareStart) await this.hooks.commandMiddlewareStart({ context: ctx, command: cmd })
+
       // silently delete the command call if the scope is invalid
-      if (
-        (cmd.scope === "private" && ctx.chat.type !== "private") ||
-        (cmd.scope === "group" && ctx.chat.type !== "supergroup" && ctx.chat.type !== "group")
-      ) {
+      const isPrivate = isFromPrivateChat(ctx)
+      if ((cmd.scope === "private" && !isPrivate) || (cmd.scope === "group" && !isFromGroupChat(ctx))) {
         if (this.hooks.wrongScope) await this.hooks.wrongScope({ context: ctx, command: cmd })
         return
       }
@@ -497,8 +514,32 @@ export class ManagedCommands<
         }
       }
 
+      // check for the requirements in the command invocation
+      const requirements = ManagedCommands.parseCommand(ctx.msg, cmd)
+      if (requirements.isErr()) {
+        // Command messages that don't meet requirements
+        // AND are sent in a group/supergroup are deleted from here because
+        // they don't reach command handler so they would remain in chat.
+        // In private chats we keep them, we don't care
+        if (!isPrivate) await ctx.deleteMessage().catch(() => {})
+
+        const msg = await ctx.reply(
+          fmt(({ b, code }) => [
+            `Error:`,
+            b`${requirements.error.join("\n")}`,
+            `\nSee usage with:`,
+            code`/help ${Array.isArray(cmd.trigger) ? cmd.trigger[0] : cmd.trigger}`,
+          ])
+        )
+        if (!isPrivate) void ephemeral(msg, 10_000) // delete the error message after some time in groups, no need to keep it
+        return
+      }
+
+      const { args, repliedTo } = requirements.value
+
       // enter the conversation that handles the command execution
-      await ctx.conversation.enter(id)
+      await ctx.conversation.enter(id, args, repliedTo)
+      if (this.hooks.commandMiddlewareEnd) await this.hooks.commandMiddlewareEnd({ context: ctx, command: cmd })
     })
     return this
   }

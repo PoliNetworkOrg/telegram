@@ -1,10 +1,10 @@
 import { type TelegramSocket, WS_PATH } from "@polinetwork/backend"
 import { io } from "socket.io-client"
-import { env } from "./env"
-import { Module } from "./lib/modules"
-import { logger } from "./logger"
-import { duration } from "./utils/duration"
-import type { ModuleShared } from "./utils/types"
+import { env } from "@/env"
+import { Module } from "@/lib/modules"
+import { logger } from "@/logger"
+import { duration } from "@/utils/duration"
+import type { ModuleShared } from "@/utils/types"
 
 type SocketError = {
   name: string

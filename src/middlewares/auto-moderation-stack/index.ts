@@ -1,19 +1,17 @@
-import type { Filter, MiddlewareObj } from "grammy"
-import { Composer } from "grammy"
+import type { Filter } from "grammy"
 import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { Moderation } from "@/modules/moderation"
+import { measureForkDuration, type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { redis } from "@/redis"
-import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
-import { createFakeMessage, getText } from "@/utils/messages"
+import { createFakeMessage, ephemeral, getText } from "@/utils/messages"
 import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
-import { wait } from "@/utils/wait"
 import { MessageUserStorage } from "../message-user-storage"
 import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
@@ -23,9 +21,10 @@ export type WhitelistType = {
   role: "creator" | "admin" | "user"
 }
 
-type ModerationContext<C extends Context> = Filter<C, "message" | "edited_message"> & {
+type ModerationFlavor<C extends Context> = C & {
   whitelisted?: WhitelistType
 }
+type ModerationContext<C extends Context> = Filter<ModerationFlavor<C>, "message" | "edited_message">
 
 const debouncedError = throttle((error: unknown, msg: string) => {
   logger.error({ error }, msg)
@@ -45,16 +44,18 @@ const debouncedError = throttle((error: unknown, msg: string) => {
  * - [ ] Avoid deletion for messages explicitly allowed by Direttivo or from privileged users
  * - [x] handle non-latin characters
  */
-export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> {
-  // the composer that holds all middlewares
-  private composer = new Composer<ModerationContext<C>>()
+export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> extends TrackedMiddleware<
+  ModerationFlavor<C>
+> {
   // AI moderation instance
   private aiModeration: AIModeration<C> = new AIModeration<C>()
 
   constructor() {
-    this.composer
+    super("auto_moderation_stack")
+    const filtered = this.composer
       .on(["message", "edited_message"])
       .fork() // fork the processing, this stack executes in parallel to the rest of the bot
+      .use(measureForkDuration("auto_moderation_total_duration")) // track total duration of the stack
       .filter(async (ctx) => {
         if (ctx.from.id === ctx.me.id) return false // skip messages from the bot itself
         const whitelistType = await this.isWhitelisted(ctx)
@@ -65,23 +66,27 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         }
         return true
       }) // skip if the message is whitelisted
-      // register all middlewares
-      .on(
-        ["message::url", "message::text_link", "edited_message::url", "edited_message::text_link"],
-        defer((ctx) => this.linkHandler(ctx))
-      )
-      .on(
-        "message",
-        defer((ctx) => this.harmfulContentHandler(ctx))
-      )
-      .on(
-        ["message:text", "message:caption"],
-        defer((ctx) => this.nonLatinHandler(ctx))
-      )
-      .on(
-        ["message:text", "message:media"],
-        defer((ctx) => this.multichatSpamHandler(ctx))
-      )
+
+    // register all middlewares
+    filtered
+      .on(["::url", "::text_link"])
+      .fork()
+      .use(measureForkDuration("auto_moderation_link_duration"))
+      .use((ctx) => this.linkHandler(ctx))
+    filtered
+      .fork()
+      .use(measureForkDuration("auto_moderation_ai_duration"))
+      .use((ctx) => this.harmfulContentHandler(ctx))
+    filtered
+      .on([":text", ":caption"])
+      .fork()
+      .use(measureForkDuration("auto_moderation_nonlatin_duration"))
+      .use((ctx) => this.nonLatinHandler(ctx))
+    filtered
+      .on(["message:text", "message:media"])
+      .fork()
+      .use(measureForkDuration("auto_moderation_multichat_duration"))
+      .use((ctx) => this.multichatSpamHandler(ctx))
   }
 
   /**
@@ -117,12 +122,7 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * Handles messages containing links.
    * If a link is not allowed, mutes the user for 1 minute and deletes the message.
    */
-  private async linkHandler(
-    ctx: Filter<
-      ModerationContext<C>,
-      "message::url" | "message::text_link" | "edited_message::url" | "edited_message::text_link"
-    >
-  ) {
+  private async linkHandler(ctx: Filter<ModerationContext<C>, "::url" | "::text_link">) {
     const message = ctx.msg
     // extract all links from the message, might be inside entities, or inside the message text body
     const links = ctx
@@ -156,26 +156,25 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
       "Shared link not allowed"
     )
 
-    const msg = await ctx.reply(
-      res.isOk()
-        ? fmt(({ b }) => [
-            b`${fmtUser(ctx.from)}`,
-            "The link you shared is not allowed.",
-            "Please refrain from sharing links that could be considered spam",
-          ])
-        : res.error.fmtError
+    void ephemeral(
+      ctx.reply(
+        res.isOk()
+          ? fmt(({ b }) => [
+              b`${fmtUser(ctx.from)}`,
+              "The link you shared is not allowed.",
+              "Please refrain from sharing links that could be considered spam",
+            ])
+          : res.error.fmtError
+      )
     )
-    await wait(5000)
-    await msg.delete()
-    return
   }
 
   /**
    * Checks messages for harmful content using AI moderation.
    * If harmful content is detected, mutes the user and deletes the message.
    */
-  private async harmfulContentHandler(ctx: Filter<ModerationContext<C>, "message">) {
-    const message = ctx.message
+  private async harmfulContentHandler(ctx: ModerationContext<C>) {
+    const message = ctx.msg
     const flaggedCategories = await this.aiModeration.checkForHarmfulContent(ctx)
 
     if (flaggedCategories.length > 0) {
@@ -202,16 +201,16 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
             `Automatic moderation detected harmful content\n${reasons}`
           )
 
-          const msg = await ctx.reply(
-            res.isOk()
-              ? fmt(({ i, b }) => [
-                  b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
-                  i`If you think this is a mistake, please contact the group administrators.`,
-                ])
-              : res.error.fmtError
+          void ephemeral(
+            ctx.reply(
+              res.isOk()
+                ? fmt(({ i, b }) => [
+                    b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
+                    i`If you think this is a mistake, please contact the group administrators.`,
+                  ])
+                : res.error.fmtError
+            )
           )
-          await wait(5000)
-          await msg.delete()
         }
       } else {
         // no flagged category is above the threshold, still log it for manual review
@@ -230,8 +229,8 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
    * Handles messages containing a high percentage of non-latin characters to avoid most spam bots.
    * If the percentage of non-latin characters is too high, mutes the user for 10 minutes and deletes the message.
    */
-  private async nonLatinHandler(ctx: Filter<ModerationContext<C>, "message:text" | "message:caption">) {
-    const text = ctx.message.caption ?? ctx.message.text
+  private async nonLatinHandler(ctx: Filter<ModerationContext<C>, ":text" | ":caption">) {
+    const text = ctx.msg.caption ?? ctx.msg.text
     const match = text.match(NON_LATIN.REGEX)
 
     // 1. there are non latin characters
@@ -247,12 +246,12 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         ctx.chat,
         ctx.me,
         duration.zod.parse(NON_LATIN.MUTE_DURATION),
-        [ctx.message],
+        [ctx.msg],
         "Message contains non-latin characters"
       )
       if (res.isErr()) {
         logger.error(
-          { from: ctx.from, chat: ctx.chat, messageId: ctx.message.message_id },
+          { from: ctx.from, chat: ctx.chat, messageId: ctx.msg.message_id },
           "AUTOMOD: nonLatinHandler - Cannot mute"
         )
       }
@@ -302,9 +301,5 @@ export class AutoModerationStack<C extends Context> implements MiddlewareObj<C> 
         logger.error({ error: res.error }, "Cannot execute moderation action for MULTI_CHAT_SPAM")
       }
     }
-  }
-
-  middleware() {
-    return (this.composer as MiddlewareObj<C>).middleware()
   }
 }

@@ -1,3 +1,4 @@
+import type { Context } from "grammy"
 import type { ChatPermissions, Message } from "grammy/types"
 
 export function padChatId(chatId: number): number {
@@ -55,4 +56,24 @@ export function groupMessagesByChat(messages: Message[]): Map<number, number[]> 
   })
 
   return chatsMap
+}
+
+/**
+ * Checks if an update is from a private chat.
+ * If chat is undefined (the update is not related to a chat) it returns false
+ * @param ctx - the context of the update
+ * @returns true if the message is from a private chat, false otherwise
+ */
+export function isFromPrivateChat(ctx: Context): boolean {
+  return ctx.chat?.type === "private"
+}
+
+/**
+ * Checks if an update is from a group or supergroup chat.
+ * * If chat is undefined (the update is not related to a chat) it returns false
+ * @param ctx - the context of the update
+ * @returns true if the message is from a group or supergroup chat, false otherwise
+ */
+export function isFromGroupChat(ctx: Context): boolean {
+  return ctx.chat?.type === "group" || ctx.chat?.type === "supergroup"
 }

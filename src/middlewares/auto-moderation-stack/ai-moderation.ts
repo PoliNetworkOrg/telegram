@@ -134,13 +134,13 @@ export class AIModeration<C extends Context> extends EventEmitter<{
    * @param context the message context to check
    * @returns A list of flagged categories found in the message
    */
-  async checkForHarmfulContent(context: Filter<C, "message">): Promise<FlaggedCategory[]> {
+  async checkForHarmfulContent(context: Filter<C, "message" | "edited_message">): Promise<FlaggedCategory[]> {
     if (!this.client) return []
     const candidates: ModerationCandidate[] = []
-    const { text } = getText(context.message)
+    const { text } = getText(context.msg)
     if (text) candidates.push({ text, type: "text" })
-    if (context.message.photo) {
-      const photo = context.message.photo[0]
+    if (context.msg.photo) {
+      const photo = context.msg.photo[0]
       const file = await context.api.getFile(photo.file_id)
       const url = `https://api.telegram.org/file/bot${context.api.token}/${file.file_path}`
 

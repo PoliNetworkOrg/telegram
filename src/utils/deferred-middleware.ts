@@ -7,8 +7,5 @@ import type { Context, MiddlewareFn } from "grammy"
  * @param middleware The middleware to be executed outside of the main middleware stack.
  */
 export function defer<C extends Context>(middleware: (ctx: C) => Promise<void>): MiddlewareFn<C> {
-  return (context, next) => {
-    void middleware(context)
-    return next()
-  }
+  return (context, next) => Promise.all([middleware(context), next()])
 }
