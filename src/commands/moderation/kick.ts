@@ -21,6 +21,6 @@ export const kick = new CommandsCollection<Role>("Kicking").createCommand({
     }
 
     const res = await Moderation.kick(repliedTo.from, context.chat, context.from, [repliedTo], args.reason)
-    if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+    if (res.isErr()) await ephemeral(context.reply(res.error.fmtError))
   },
 })

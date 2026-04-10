@@ -5,8 +5,8 @@ import { CommandsCollection } from "@/lib/managed-commands"
 import type { CommandConversation } from "@/lib/managed-commands/command"
 import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
+import { ephemeral } from "@/utils/messages"
 import type { Role } from "@/utils/types"
-import { wait } from "@/utils/wait"
 
 const mainMsg = fmt(({ b }) => [b`🔗 Admin dashboard link`, b`\nStatus: ⏳ WAITING FOR CODE`], { sep: "\n" })
 
@@ -58,7 +58,7 @@ export const linkAdminDashboard = new CommandsCollection<Role>().createCommand({
     let failed = false
     let codeMsg = await conversation.waitFor("message:text")
     while (!/^\d{6}$/.test(codeMsg.message.text)) {
-      void codeMsg.deleteMessage()
+      await codeMsg.deleteMessage()
       if (!failed) {
         // first time invalid
         await msg.editText(
@@ -109,6 +109,6 @@ export const linkAdminDashboard = new CommandsCollection<Role>().createCommand({
       )
     }
 
-    void wait(5000).then(async () => msg.delete())
+    await ephemeral(msg)
   },
 })
