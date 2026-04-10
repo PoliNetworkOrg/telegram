@@ -51,17 +51,17 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       context.point
         .tag("command", ManagedCommands.commandID(command))
         .tag("chat_type", context.chat.type)
-        .tag("invoked_by", context.from.id.toString(10))
-        .tag("invoked_from", context.chat.id.toString(10))
+        .intField("invoked_by", context.from.id)
+        .intField("invoked_from", context.chat.id)
         .timestamp(new Date(now))
-      context.stackTimes = { managedCommands: now }
+      context.stackTimes = { ...context.stackTimes, managedCommands: now }
       if (context.chat.type !== "private") {
         // silently delete the command trigger if the command is used in a group, to reduce noise
         await context.deleteMessage().catch(() => {})
       }
     },
     handlerError: async ({ context, command, error }) => {
-      context.point.tag("error", String(error))
+      context.point.tag("error", "UNKNOWN").stringField("error", String(error))
       logger.error({ error }, `[ManagedCommands] Error in handler for command '/${command.trigger}'`)
       await modules
         .get("tgLogger")

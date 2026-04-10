@@ -521,7 +521,7 @@ export class ManagedCommands<
         // AND are sent in a group/supergroup are deleted from here because
         // they don't reach command handler so they would remain in chat.
         // In private chats we keep them, we don't care
-        if (isPrivate) await ctx.deleteMessage()
+        if (!isPrivate) await ctx.deleteMessage().catch(() => {})
 
         const msg = await ctx.reply(
           fmt(({ b, code }) => [
