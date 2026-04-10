@@ -90,7 +90,7 @@ export const ban = new CommandsCollection<Role>("Banning")
 
       const user = await getUser(userId, context)
       if (!user) {
-        const msg = await context.reply("Error: cannot find this user")
+        const msg = await context.reply(fmt(({ n }) => n`Error: cannot find this user`))
         logger.error({ userId }, "UNBAN: cannot retrieve the user")
         await wait(5000).then(() => msg.delete())
         return

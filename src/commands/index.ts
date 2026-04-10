@@ -45,7 +45,7 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
         `[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
       )
       // Inform the user of restricted access
-      await ephemeral(context.reply("You are not allowed to execute this command"))
+      await ephemeral(context.reply(fmt(({ n }) => n`You are not allowed to execute this command`)))
     },
     conversationBegin: async ({ context, command, conversation }) => {
       const now = await conversation.now()
