@@ -51,8 +51,8 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       context.point
         .tag("command", ManagedCommands.commandID(command))
         .tag("chat_type", context.chat.type)
-        .intField("invoked_by", context.from.id)
-        .intField("invoked_from", context.chat.id)
+        .stringField("invoked_by", context.from.id.toString(10))
+        .stringField("invoked_from", context.chat.id.toString(10))
         .timestamp(new Date(now))
       context.stackTimes = { ...context.stackTimes, managedCommands: now }
       if (context.chat.type !== "private") {

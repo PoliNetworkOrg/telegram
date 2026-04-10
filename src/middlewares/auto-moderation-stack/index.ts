@@ -230,7 +230,7 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
    * If the percentage of non-latin characters is too high, mutes the user for 10 minutes and deletes the message.
    */
   private async nonLatinHandler(ctx: Filter<ModerationContext<C>, ":text" | ":caption">) {
-    const text = ctx.message.caption ?? ctx.message.text
+    const text = ctx.msg.caption ?? ctx.msg.text
     const match = text.match(NON_LATIN.REGEX)
 
     // 1. there are non latin characters
@@ -246,12 +246,12 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
         ctx.chat,
         ctx.me,
         duration.zod.parse(NON_LATIN.MUTE_DURATION),
-        [ctx.message],
+        [ctx.msg],
         "Message contains non-latin characters"
       )
       if (res.isErr()) {
         logger.error(
-          { from: ctx.from, chat: ctx.chat, messageId: ctx.message.message_id },
+          { from: ctx.from, chat: ctx.chat, messageId: ctx.msg.message_id },
           "AUTOMOD: nonLatinHandler - Cannot mute"
         )
       }

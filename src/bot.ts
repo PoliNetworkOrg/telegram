@@ -138,7 +138,7 @@ const runner = run(bot, {
 
 const terminate = once(async (signal: NodeJS.Signals) => {
   logger.warn(`Received ${signal}, shutting down...`)
-  await Promise.all([
+  await Promise.allSettled([
     MessageUserStorage.getInstance().sync(),
     redis.quit(),
     runner.isRunning() && runner.stop(),

@@ -14,14 +14,28 @@ export function tgApiTelemetry(): Transformer {
     const point = new Point("tg_api_call").tag("method", method)
     const start = Date.now()
     point.timestamp(new Date(start))
-    const res = await prev(method, payload, signal)
-    point.intField("duration_ms", Date.now() - start)
-    if (res.ok) {
-      point.booleanField("success", true)
-    } else {
-      point.booleanField("success", false).stringField("error_code", res.error_code.toString())
-    }
-    modules.get("influx").writePoint(point)
-    return res
+    return prev(method, payload, signal)
+      .then((res) => {
+        if (res.ok) {
+          point.booleanField("success", true)
+        } else {
+          point
+            .booleanField("success", false)
+            .stringField("error_code", res.error_code.toString(10))
+            .stringField("error_message", res.description)
+        }
+        return res
+      })
+      .catch((error) => {
+        point
+          .booleanField("success", false)
+          .stringField("error_code", "unknown_error")
+          .stringField("error_message", String(error))
+        return Promise.reject(error)
+      })
+      .finally(() => {
+        point.intField("duration_ms", Date.now() - start)
+        modules.get("influx").writePoint(point)
+      })
   }
 }
