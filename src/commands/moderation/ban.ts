@@ -7,7 +7,6 @@ import { ephemeral } from "@/utils/messages"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
 import { getUser } from "@/utils/users"
-import { wait } from "@/utils/wait"
 
 export const ban = new CommandsCollection<Role>("Banning")
   .createCommand({
@@ -80,16 +79,14 @@ export const ban = new CommandsCollection<Role>("Banning")
 
       if (!userId) {
         logger.debug(`unban: no userId for username ${args.username}`)
-        const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
-        await wait(5000).then(() => msg.delete())
+        await ephemeral(context.reply(fmt(({ b }) => b`@${context.from.username} user not found`)))
         return
       }
 
       const user = await getUser(userId, context)
       if (!user) {
-        const msg = await context.reply("Error: cannot find this user")
         logger.error({ userId }, "UNBAN: cannot retrieve the user")
-        await wait(5000).then(() => msg.delete())
+        await ephemeral(context.reply("Error: cannot find this user"))
         return
       }
 

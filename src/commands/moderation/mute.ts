@@ -7,7 +7,6 @@ import { ephemeral } from "@/utils/messages"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
 import { getUser } from "@/utils/users"
-import { wait } from "@/utils/wait"
 
 export const mute = new CommandsCollection<Role>("Muting")
   .createCommand({
