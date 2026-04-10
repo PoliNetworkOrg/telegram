@@ -11,6 +11,7 @@ export const kick = new CommandsCollection<Role>("Kicking").createCommand({
   scope: "group",
   reply: "required",
   permissions: {
+    allowedRoles: ["owner", "direttivo"],
     excludedRoles: ["creator"],
     allowGroupAdmins: true,
   },

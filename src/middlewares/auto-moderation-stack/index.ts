@@ -7,6 +7,7 @@ import { modules } from "@/modules"
 import { Moderation } from "@/modules/moderation"
 import { measureForkDuration, type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { redis } from "@/redis"
+import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { createFakeMessage, ephemeral, getText } from "@/utils/messages"
@@ -73,10 +74,8 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
       .fork()
       .use(measureForkDuration("auto_moderation_link_duration"))
       .use((ctx) => this.linkHandler(ctx))
-    filtered
-      .fork()
-      .use(measureForkDuration("auto_moderation_ai_duration"))
-      .use((ctx) => this.harmfulContentHandler(ctx))
+    // AI takes too long to measure, completely defer it to avoid blocking the main stack, and just log any errors
+    filtered.fork().use(defer((ctx) => this.harmfulContentHandler(ctx)))
     filtered
       .on([":text", ":caption"])
       .fork()

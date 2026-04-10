@@ -19,7 +19,7 @@ export const audit = new CommandsCollection<Role>("Auditing").createCommand({
     }
 
     if (userId === null) {
-      await context.reply("Not a valid userId or username not in our cache")
+      await context.reply(fmt(({ n }) => n`Not a valid userId or username not in our cache`))
       return
     }
 

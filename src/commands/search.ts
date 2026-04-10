@@ -22,7 +22,7 @@ export const search = new CommandsCollection<Role>().createCommand({
         fmt(({ n, b, i }) => [b`🔎 Group Search`, n`${i`Query:`} ${b`${args.query}`}`, b`❌ No results`], {
           sep: "\n",
         }),
-        { reply_parameters: { message_id: repliedTo ? repliedTo.message_id : context.msgId } }
+        { reply_parameters: repliedTo ? { message_id: repliedTo.message_id } : undefined }
       )
       return
     }
@@ -51,7 +51,7 @@ export const search = new CommandsCollection<Role>().createCommand({
     await context.reply(reply, {
       link_preview_options: { is_disabled: true },
       reply_markup: inlineKeyboard,
-      reply_parameters: { message_id: repliedTo ? repliedTo.message_id : context.msgId },
+      reply_parameters: repliedTo ? { message_id: repliedTo.message_id } : undefined,
     })
   },
 })

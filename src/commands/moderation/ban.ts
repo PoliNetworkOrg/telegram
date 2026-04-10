@@ -16,6 +16,7 @@ export const ban = new CommandsCollection<Role>("Banning")
     scope: "group",
     reply: "required",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
@@ -44,6 +45,7 @@ export const ban = new CommandsCollection<Role>("Banning")
     scope: "group",
     reply: "required",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
@@ -70,6 +72,7 @@ export const ban = new CommandsCollection<Role>("Banning")
     description: "Unban a user from a group",
     scope: "group",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
@@ -85,6 +88,10 @@ export const ban = new CommandsCollection<Role>("Banning")
 
       const user = await getUser(userId, context)
       if (!user) {
+<<<<<<< fix-ephemeral
+=======
+        const msg = await context.reply(fmt(({ n }) => n`Error: cannot find this user`))
+>>>>>>> main
         logger.error({ userId }, "UNBAN: cannot retrieve the user")
         await ephemeral(context.reply("Error: cannot find this user"))
         return

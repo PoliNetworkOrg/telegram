@@ -3,6 +3,7 @@ import z from "zod"
 import { api } from "@/backend"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { modules } from "@/modules"
+import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
 
@@ -33,19 +34,19 @@ export const banAll = new CommandsCollection<Role>("Ban All")
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 
       if (userId === null) {
-        await context.reply("Not a valid userId or username not in our cache")
+        await context.reply(fmt(({ n }) => n`Not a valid userId or username not in our cache`))
         return
       }
 
       const dbUser = await api.tg.users.get.query({ userId })
       const { roles } = await api.tg.permissions.getRoles.query({ userId })
       if (roles?.some((r) => BYPASS_ROLES.includes(r))) {
-        await context.reply("This user has special roles so cannot be banned.")
+        await context.reply(fmt(({ n }) => n`This user has special roles so cannot be banned.`))
         return
       }
 
       if (!dbUser || dbUser.error) {
-        await context.reply("This user is not in our cache, we cannot proceed.")
+        await context.reply(fmt(({ n }) => n`This user is not in our cache, we cannot proceed.`))
         return
       }
 
@@ -80,13 +81,13 @@ export const banAll = new CommandsCollection<Role>("Ban All")
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 
       if (userId === null) {
-        await context.reply("Not a valid userId or username not in our cache")
+        await context.reply(fmt(({ n }) => n`Not a valid userId or username not in our cache`))
         return
       }
 
       const dbUser = await api.tg.users.get.query({ userId })
       if (!dbUser || dbUser.error) {
-        await context.reply("This user is not in our cache, we cannot proceed.")
+        await context.reply(fmt(({ n }) => n`This user is not in our cache, we cannot proceed.`))
         return
       }
 

@@ -24,6 +24,7 @@ export const mute = new CommandsCollection<Role>("Muting")
     scope: "group",
     reply: "required",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
@@ -51,6 +52,7 @@ export const mute = new CommandsCollection<Role>("Muting")
     scope: "group",
     reply: "required",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
@@ -70,6 +72,7 @@ export const mute = new CommandsCollection<Role>("Muting")
     description: "Unmute a user from a group",
     scope: "group",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
@@ -85,7 +88,7 @@ export const mute = new CommandsCollection<Role>("Muting")
 
       const user = await getUser(userId, context)
       if (!user) {
-        const msg = await context.reply("Error: cannot find this user")
+        const msg = await context.reply(fmt(({ n }) => n`Error: cannot find this user`))
         logger.error({ userId }, "UNMUTE: cannot retrieve the user")
         await ephemeral(msg)
         return

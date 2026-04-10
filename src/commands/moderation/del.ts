@@ -1,6 +1,7 @@
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
+import { fmt } from "@/utils/format"
 import { ephemeral, getText } from "@/utils/messages"
 import type { Role } from "@/utils/types"
 
@@ -23,6 +24,6 @@ export const del = new CommandsCollection<Role>("Deletion").createCommand({
     })
 
     const res = await Moderation.deleteMessages([repliedTo], context.from, "Command /del")
-    if (res.isErr()) await ephemeral(context.reply("Cannot delete the message"))
+    if (res.isErr()) await ephemeral(context.reply(fmt(({ n }) => n`Cannot delete the message`)))
   },
 })

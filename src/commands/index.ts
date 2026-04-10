@@ -7,6 +7,7 @@ import { logger } from "@/logger"
 import { modules } from "@/modules"
 import type { TelemetryContextFlavor } from "@/modules/telemetry"
 import { redis } from "@/redis"
+import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { Context, Role } from "@/utils/types"
 import { printCtxFrom } from "@/utils/users"
@@ -36,6 +37,14 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       logger.info(
         `[ManagedCommands] Command '/${command.trigger}' with scope '${command.scope}' invoked by ${printCtxFrom(context)} in a '${context.chat.type}' chat`
       )
+      await ephemeral(
+        context.reply(
+          fmt(
+            ({ n }) =>
+              n`This command must be run in ${command.scope === "private" ? "private chat with the bot" : "groups"}.`
+          )
+        )
+      )
     },
     missingPermissions: async ({ context, command }) => {
       await context.deleteMessage().catch(() => {})
@@ -44,7 +53,7 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
         `[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
       )
       // Inform the user of restricted access
-      await ephemeral(context.reply("You are not allowed to execute this command"))
+      await ephemeral(context.reply(fmt(({ n }) => n`You are not allowed to execute this command`)))
     },
     conversationBegin: async ({ context, command, conversation }) => {
       const now = await conversation.now()
@@ -104,6 +113,27 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
     description: "Replies with pong",
     handler: async ({ context }) => {
       await context.reply("pong")
+    },
+  })
+  .createCommand({
+    trigger: "start",
+    scope: "private",
+    description: "Start the bot",
+    handler: async ({ context }) => {
+      await context.reply(
+        fmt(
+          ({ n }) => [
+            n`Welcome to PoliNetwork! 💙`,
+            n`I'm here to help you navigate the network and our services.\n`,
+            n`🔍 /search [keyword]`,
+            n`Find specific groups, bots, or tools.\n`,
+            n`🚩 /report`,
+            n`Reply to a message with this command to notify our team about spam or issues.\n`,
+            n`Glad to have you with us!`,
+          ],
+          { sep: "\n" }
+        )
+      )
     },
   })
   .withCollection(linkAdminDashboard, report, search, management, moderation)
