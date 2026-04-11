@@ -98,7 +98,7 @@ export class BanAllQueue extends Module<ModuleShared> {
       switch (job.name) {
         case "ban": {
           const [success] = await Promise.all([
-            await this.shared.api
+            this.shared.api
               .banChatMember(job.data.chatId, job.data.targetId, { revoke_messages: true })
               .catch(() => false),
             Moderation.deleteAllLastMessages(job.data.targetId, job.data.chatId),
