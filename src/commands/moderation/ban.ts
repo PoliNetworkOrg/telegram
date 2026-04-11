@@ -32,7 +32,7 @@ export const ban = new CommandsCollection<Role>("Banning")
     handler: async ({ args, context, repliedTo }) => {
       const userOverload = await getOverloadUser(context, repliedTo, args.reasonOrUser, args.reason)
       if (userOverload.isErr()) {
-        await ephemeral(
+        void ephemeral(
           context.reply(
             repliedTo
               ? fmt(({ n }) => n`There was an error`)
@@ -53,7 +53,7 @@ export const ban = new CommandsCollection<Role>("Banning")
         repliedTo ? [repliedTo] : undefined,
         reason
       )
-      if (res.isErr()) await ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })
   .createCommand({
@@ -89,7 +89,7 @@ export const ban = new CommandsCollection<Role>("Banning")
         [repliedTo],
         args.reason
       )
-      if (res.isErr()) await ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })
   .createCommand({
@@ -108,18 +108,16 @@ export const ban = new CommandsCollection<Role>("Banning")
 
       if (!userId) {
         logger.debug(`unban: no userId for username ${args.username}`)
-        await ephemeral(context.reply(fmt(({ b }) => b`@${context.from.username} user not found`)))
-        return
+        return void ephemeral(context.reply(fmt(({ b }) => b`@${context.from.username} user not found`)))
       }
 
       const user = await getUser(userId, context)
       if (!user) {
         logger.error({ userId }, "UNBAN: cannot retrieve the user")
-        await ephemeral(context.reply(fmt(({ n }) => [n`Error: cannot find this user`])))
-        return
+        return void ephemeral(context.reply(fmt(({ n }) => [n`Error: cannot find this user`])))
       }
 
       const res = await Moderation.unban(user, context.chat, context.from)
-      if (res.isErr()) await ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })

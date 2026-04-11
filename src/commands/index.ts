@@ -39,7 +39,7 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       logger.info(
         `[ManagedCommands] Command '/${command.trigger}' with scope '${command.scope}' invoked by ${printCtxFrom(context)} in a '${context.chat.type}' chat`
       )
-      await ephemeral(
+      void ephemeral(
         context.reply(
           fmt(
             ({ n }) =>
@@ -55,7 +55,7 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
         `[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
       )
       // Inform the user of restricted access
-      await ephemeral(context.reply(fmt(({ n }) => n`You are not allowed to execute this command`)))
+      void ephemeral(context.reply(fmt(({ n }) => n`You are not allowed to execute this command`)))
     },
     conversationBegin: async ({ context, command, conversation }) => {
       const now = await conversation.now()

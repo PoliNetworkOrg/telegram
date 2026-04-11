@@ -42,3 +42,8 @@ export const toGrammyUser = (apiUser: Exclude<ApiOutput["tg"]["users"]["get"]["u
   is_premium: undefined,
   added_to_attachment_menu: undefined,
 })
+
+export type PartialMessage = {
+  message_id: number
+  chat: { id: number }
+}

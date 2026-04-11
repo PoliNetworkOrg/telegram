@@ -1,7 +1,6 @@
 import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
 import { Err, Ok, type Result } from "neverthrow"
-import { logger } from "@/logger"
 import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { getTelegramId } from "./telegram-id"
 

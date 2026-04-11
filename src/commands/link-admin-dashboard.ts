@@ -109,6 +109,6 @@ export const linkAdminDashboard = new CommandsCollection<Role>().createCommand({
       )
     }
 
-    await ephemeral(msg)
+    void ephemeral(msg)
   },
 })

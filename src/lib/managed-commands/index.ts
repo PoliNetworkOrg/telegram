@@ -365,13 +365,11 @@ export class ManagedCommands<
     )
 
     this.composer.command("help", async (ctx) => {
-      if (ctx.chat.type !== "private") {
-        await ephemeral(
+      if (ctx.chat.type !== "private")
+        return void ephemeral(
           ctx.reply(fmt(({ n, code }) => n`You can only send ${code`/help`} in private chat with the bot.`)),
           10_000
         )
-        return
-      }
 
       const text = ctx.message?.text ?? ""
 
