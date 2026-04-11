@@ -94,7 +94,7 @@ export const GroupManagement = {
       .catch(() => ({ status: null }))
     if (status !== "administrator") {
       const reason = "The bot is not an administrator"
-      logger.error({ chatId, reason }, "[GroupManagement] Cannot CREATE group")
+      logger.error({ chatId, reason }, "[GroupManagement] Cannot UPDATE group")
       return err(reason)
     }
 
