@@ -3,10 +3,8 @@ import type { Chat } from "grammy/types"
 import { GroupManagement } from "@/lib/group-management"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
-import { modules } from "@/modules"
 import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { redis } from "@/redis"
-import { fmtChat } from "@/utils/format"
 import type { Context } from "@/utils/types"
 
 type ChatType = "group" | "supergroup" | "private" | "channel"
@@ -55,9 +53,6 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
 
       const me = await ctx.getChatMember(ctx.me.id).catch(() => ({ status: "undefined" }))
       if (me.status !== "administrator") {
-        modules
-          .get("tgLogger")
-          .exception({ type: "GENERIC", error: new Error(`Bot is NOT admin in group ${fmtChat(ctx.chat)}`) })
         logger.warn({ chat: ctx.chat }, "Cannot create group because bot is not admin")
         return next()
       }
