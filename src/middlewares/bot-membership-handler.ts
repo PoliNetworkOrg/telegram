@@ -1,5 +1,6 @@
 import type { Filter } from "grammy"
 import type { Chat } from "grammy/types"
+import { api } from "@/backend"
 import { GroupManagement } from "@/lib/group-management"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
@@ -47,9 +48,14 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
     super("bot_membership_handler")
 
     // TEMP: this is for initial migration from previous bot
-    this.composer.filter(predicate, async (ctx, next) => {
+    this.composer.fork().filter(predicate, async (ctx, next) => {
       if (ctx.chat.type === "private") return next()
-      if (await this.TEMP_redis.has(ctx.chat.id.toString())) return next()
+
+      const redisCheck = await this.TEMP_redis.has(ctx.chat.id.toString())
+      if (redisCheck) {
+        const backendGroup = await api.tg.groups.getById.query({ telegramId: ctx.chat.id }).catch(() => null)
+        if (backendGroup !== null) return next()
+      }
 
       const me = await ctx.getChatMember(ctx.me.id).catch(() => ({ status: "undefined" }))
       if (me.status !== "administrator") {

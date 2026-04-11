@@ -8,7 +8,7 @@ import type { Context } from "@/utils/types"
 export const checkUsername: MiddlewareFn<Filter<Context, "message">> = async (ctx, next) => {
   if (ctx.from.username === undefined) {
     const res = await ctx
-      .restrictAuthor(RestrictPermissions.mute, { until_date: Date.now() + 300_000 })
+      .restrictAuthor(RestrictPermissions.mute, { until_date: Date.now() + 60_000 })
       .catch(() => false)
 
     if (!res) logger.warn(`checkUsername: cannot restrict user ${ctx.from.id}`)
@@ -16,10 +16,11 @@ export const checkUsername: MiddlewareFn<Filter<Context, "message">> = async (ct
     const msg = fmt(({ i, link }) => [
       i`[Message for ${link(ctx.from.first_name, `tg://user?id=${ctx.from.id}`)}]`,
       `\n\nYou must set an username in Telegram settings to write in PoliNetwork's groups`,
+      `Please set an username and try again in 60 seconds!`,
     ])
 
     await ctx.deleteMessage()
-    void ephemeral(ctx.reply(msg), 10_000)
+    void ephemeral(ctx.reply(msg), 30_000)
   }
   await next()
 }
