@@ -6,7 +6,6 @@ import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { redis } from "@/redis"
-import { stripChatId } from "@/utils/chat"
 import { fmtChat } from "@/utils/format"
 import type { Context } from "@/utils/types"
 
@@ -55,7 +54,7 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
       if (await this.TEMP_redis.has(ctx.chat.id.toString())) return next()
 
       const me = await ctx.getChatMember(ctx.me.id).catch(() => ({ status: "undefined" }))
-      if (me.status !== "creator" && me.status !== "administrator") {
+      if (me.status !== "administrator") {
         modules
           .get("tgLogger")
           .exception({ type: "GENERIC", error: new Error(`Bot is NOT admin in group ${fmtChat(ctx.chat)}`) })
