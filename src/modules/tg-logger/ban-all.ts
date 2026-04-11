@@ -2,6 +2,14 @@ import type { User } from "grammy/types"
 import { fmt, fmtUser } from "@/utils/format"
 import { unicodeProgressBar } from "@/utils/progress"
 
+// NOTE
+// Previously this was using a voting system made in @/utils/vote.ts.
+// Since banAll is a urgent moderation action to execute, we decided to remove it,
+// giving priority to common sense over formality.
+// If in the future we decide to reintroduce it, check the following PR
+//  https://github.com/PoliNetworkOrg/telegram/pull/94
+// to understand how to reimplement it
+
 export type BanAllState = {
   jobCount: number
   successCount: number
