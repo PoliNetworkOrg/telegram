@@ -72,7 +72,7 @@ export const mute = new CommandsCollection<Role>("Muting")
           context.reply(
             repliedTo
               ? fmt(({ n }) => n`There was an error`)
-              : fmt(({ n }) => n`Target user not found, please try replying to a their message`)
+              : fmt(({ n }) => n`Target user not found, please try replying to their message`)
           )
         )
         logger.error({ args, repliedTo }, `MUTE: ${userOverload.error}`)
