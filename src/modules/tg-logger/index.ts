@@ -279,7 +279,7 @@ export class TgLogger extends Module<ModuleShared> {
       ? new InlineKeyboard().url("See Deleted Message", props.preDeleteRes.link)
       : undefined
     await this.log(isAutoModeration ? this.topics.autoModeration : this.topics.adminActions, mainMsg, { reply_markup })
-    if (!isAutoModeration) await this.logModActionInChat(props)
+    if (!isAutoModeration) void this.logModActionInChat(props)
     return mainMsg
   }
 
