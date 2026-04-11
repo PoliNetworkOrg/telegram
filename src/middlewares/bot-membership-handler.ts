@@ -34,7 +34,7 @@ const joinEvent: Record<ChatType, StatusType[]> = {
 }
 
 function predicate<C extends Context>(ctx: C): ctx is C & { chat: Chat } {
-  return ctx.chat !== undefined
+  return ctx.chat !== undefined && ctx.update.my_chat_member === undefined
 }
 
 type MemberContext<C extends Context> = Filter<C, "my_chat_member">
@@ -50,7 +50,7 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
 
     // TEMP: this is for initial migration from previous bot
     this.composer.filter(predicate, async (ctx, next) => {
-      if (ctx.chat.type === "private") return
+      if (ctx.chat.type === "private") return next()
       if (await this.TEMP_redis.has(ctx.chat.id.toString())) return next()
 
       const me = await ctx.getChatMember(ctx.me.id).catch(() => ({ status: "undefined" }))
