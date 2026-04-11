@@ -7,6 +7,7 @@ import { throttle } from "@/utils/throttle"
 import type { ModuleShared } from "@/utils/types"
 import { modules } from ".."
 import { type BanAll, type BanAllState, isBanAllState } from "../tg-logger/ban-all"
+import { Moderation } from "."
 
 /**
  * Utility type that get the Worker type for a Job
@@ -169,6 +170,15 @@ export class BanAllQueue extends Module<ModuleShared> {
     const allGroups = await api.tg.groups.getAll.query()
     const chats = allGroups.map((g) => g.telegramId)
     const banType = banAll.type === "BAN" ? "ban" : "unban"
+
+    await api.tg.auditLog.create.mutate({
+      adminId: banAll.reporter.id,
+      targetId: banAll.target.id,
+      type: banAll.type === "BAN" ? "ban_all" : "unban_all",
+      reason: banAll.reason,
+      groupId: null,
+      until: null,
+    })
 
     const job = await this.flowProducer.add({
       name: `${banType}_all`,
