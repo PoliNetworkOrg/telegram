@@ -150,6 +150,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
         return modules.shared.api
           .banChatMember(p.chat.id, p.target.id, {
             until_date: Date.now() / 1000 + duration.values.m,
+            revoke_messages: true,
           })
           .catch(() => false)
       case "BAN":
