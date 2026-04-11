@@ -11,6 +11,7 @@ import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { Context, Role } from "@/utils/types"
 import { printCtxFrom } from "@/utils/users"
+import { invite } from "./invite"
 import { linkAdminDashboard } from "./link-admin-dashboard"
 import { management } from "./management"
 import { moderation } from "./moderation"
@@ -137,4 +138,4 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       )
     },
   })
-  .withCollection(linkAdminDashboard, report, search, management, moderation, pin)
+  .withCollection(linkAdminDashboard, report, search, management, moderation, pin, invite)
