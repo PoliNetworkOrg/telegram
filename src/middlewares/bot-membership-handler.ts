@@ -48,7 +48,7 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
     super("bot_membership_handler")
 
     // TEMP: this is for initial migration from previous bot
-    this.composer.filter(predicate, async (ctx, next) => {
+    this.composer.fork().filter(predicate, async (ctx, next) => {
       if (ctx.chat.type === "private") return next()
 
       const redisCheck = await this.TEMP_redis.has(ctx.chat.id.toString())
