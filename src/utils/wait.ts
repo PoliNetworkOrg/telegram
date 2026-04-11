@@ -17,6 +17,31 @@ export function wait(time_ms: number): Promise<void> {
 }
 
 /**
+ * A utility function that returns a function which, when called with a value, waits for a specified
+ * amount of time and then resolves with that value. This is useful for chaining in promise-based code
+ * where you want to introduce a delay before the next step.
+ *
+ * @param time_ms The time to wait in milliseconds before resolving with the provided value
+ * @returns A function that takes a value and returns a promise that resolves with that value after the specified time
+ *
+ * @example
+ * ```ts
+ * // Usage in a promise chain
+ * someAsyncFunction()
+ *   .then(after(1000)) // Waits for 1 second before passing the result to the next then
+ *   .then((result) => {
+ *     console.log(result); // This will log the result of someAsyncFunction after a 1 second delay
+ *   });
+ * ```
+ */
+export function after(time_ms: number): <T>(value: T) => Promise<T> {
+  return async <T>(value: T): Promise<T> => {
+    await wait(time_ms)
+    return value
+  }
+}
+
+/**
  * A utility class that implements PromiseLike<T> and allows manual resolution of the promise.
  * This is useful when you need to await a value that will be provided later, outside of the
  * current execution context.
