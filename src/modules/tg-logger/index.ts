@@ -7,6 +7,7 @@ import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
 import { after } from "@/utils/wait"
+import { modules } from ".."
 import type { ModerationAction, PreDeleteResult } from "../moderation/types"
 import { type BanAll, banAllMenu, getBanAllText } from "./ban-all"
 import { grantCreatedMenu, grantMessageMenu } from "./grants"
@@ -161,55 +162,11 @@ export class TgLogger extends Module<ModuleShared> {
   }
 
   public async banAll(target: User, reporter: User, type: "BAN" | "UNBAN", reason?: string): Promise<string | null> {
-    const direttivo = await api.tg.permissions.getDirettivo.query()
-
-    switch (direttivo.error) {
-      case "EMPTY":
-        return fmt(({ n }) => n`Error: Direttivo is not set`)
-
-      case "NOT_ENOUGH_MEMBERS":
-        return fmt(({ n }) => n`Error: Direttivo has not enough members!`)
-
-      case "TOO_MANY_MEMBERS":
-        return fmt(({ n }) => n`Error: Direttivo has too many members!`)
-
-      case "INTERNAL_SERVER_ERROR":
-        return fmt(({ n }) => n`Error: there was an internal error while fetching members of Direttivo.`)
-
-      case null:
-        break
-    }
-
-    const voters = direttivo.members.map((m) => ({
-      user: m.user
-        ? {
-            id: m.userId,
-            first_name: m.user.firstName,
-            last_name: m.user.lastName,
-            username: m.user.username,
-            is_bot: m.user.isBot,
-            language_code: m.user.langCode,
-          }
-        : { id: m.userId },
-      isPresident: m.isPresident,
-      vote: undefined,
-    }))
-
-    if (!voters.some((v) => v.isPresident))
-      return fmt(
-        ({ n, b }) => [b`Error: No member is President!`, n`${b`Members:`} ${voters.map((v) => v.user.id).join(" ")}`],
-        {
-          sep: "\n",
-        }
-      )
-
     const banAll: BanAll = {
       type,
-      outcome: "waiting",
       reporter: reporter,
       reason,
       target,
-      voters,
       state: {
         successCount: 0,
         failedCount: 0,
@@ -220,9 +177,23 @@ export class TgLogger extends Module<ModuleShared> {
     const menu = await banAllMenu(banAll)
     await this.log(this.topics.banAll, "———————————————")
     const msg = await this.log(this.topics.banAll, getBanAllText(banAll), { reply_markup: menu })
+
+    if (!msg?.message_id) {
+      logger.error("[banall] There was an error when initiating banall, no msg.msgId")
+      return fmt(
+        ({ n, b }) => [
+          b`${type} All ERROR!`,
+          n`Cannot log the message in tgLogger, therefore cannot start the procedure`,
+          n`This should be inspected as it should not never happen`,
+        ],
+        { sep: "\n" }
+      )
+    }
+
+    await modules.get("banAll").initiateBanAll(banAll, msg.message_id)
     return fmt(
       ({ n, b, link }) => [
-        b`${type} All requested!`,
+        b`${type} All started!`,
         msg
           ? n`Check ${link("here", `https://t.me/c/${this.groupId}/${this.topics.banAll}/${msg.message_id}`)}`
           : undefined,
