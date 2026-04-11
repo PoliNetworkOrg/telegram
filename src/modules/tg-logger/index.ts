@@ -498,13 +498,14 @@ export class TgLogger extends Module<ModuleShared> {
         disable_notification: false,
         link_preview_options: { is_disabled: true },
       })
-      .then(after(120_000))
-      .then((sent) => this.shared.api.deleteMessage(p.chat.id, sent.message_id))
       .catch((error: unknown) => {
         logger.warn(
           { error, action: p.action },
           "[Moderation:logActionInChat] Failed to post moderation action in chat"
         )
+        return null
       })
+      .then(after(120_000))
+      .then((sent) => sent && this.shared.api.deleteMessage(p.chat.id, sent.message_id))
   }
 }
