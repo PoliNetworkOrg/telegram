@@ -143,6 +143,30 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
     })
   }
 
+  /**
+   * Mass deletes the last 100 messages of a user in a specific chat, on best effort basis.
+   *
+   * Used when banning a user to delete all their messages in the chat
+   */
+  private async deleteLastMessages(userId: number, chatId: number): Promise<void> {
+    await MessageUserStorage.getInstance()
+      .sync()
+      .catch(() => {})
+
+    // both the limit of tRPC endpoint and Telegram API hard limit: https://core.telegram.org/bots/api#deletemessages
+    const messages = await api.tg.messages.getLastByUser
+      .query({ userId, chatId, limit: 100 })
+      .then((res) => res.messages ?? [])
+      .catch(() => [])
+
+    await modules.shared.api
+      .deleteMessages(
+        chatId,
+        messages.map((m) => m.messageId)
+      )
+      .catch(() => {})
+  }
+
   private async perform(p: ModerationAction) {
     switch (p.action) {
       case "SILENT":
@@ -155,32 +179,13 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
           })
           .catch(() => false)
       case "BAN": {
-        await MessageUserStorage.getInstance()
-          .sync()
-          .catch(() => {})
-
-        const messages = await api.tg.messages.getLastByUser
-          .query({
-            userId: p.target.id,
-            chatId: p.chat.id,
-            limit: 100, // both the limit of tRPC endpoint and Telegram API hard limit: https://core.telegram.org/bots/api#deletemessages
-          })
-          .then((res) => res.messages ?? [])
-          .catch(() => [])
-
-        await modules.shared.api
-          .deleteMessages(
-            p.chat.id,
-            messages.map((m) => m.messageId)
-          )
-          .catch(() => {})
-
-        return modules.shared.api
-          .banChatMember(p.chat.id, p.target.id, {
-            until_date: p.duration?.timestamp_s,
-            revoke_messages: true,
-          })
-          .catch(() => false)
+        const [success] = await Promise.all([
+          modules.shared.api
+            .banChatMember(p.chat.id, p.target.id, { until_date: p.duration?.timestamp_s })
+            .catch(() => false),
+          this.deleteLastMessages(p.target.id, p.chat.id),
+        ])
+        return success
       }
 
       case "UNBAN":
