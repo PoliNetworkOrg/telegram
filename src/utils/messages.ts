@@ -1,6 +1,6 @@
-import type { MessageXFragment } from "@grammyjs/hydrate/out/data/message"
 import type { Message, User } from "grammy/types"
-import type { MaybePromise } from "./types"
+import { modules } from "@/modules"
+import type { MaybePromise, PartialMessage } from "./types"
 import { wait } from "./wait"
 
 type TextReturn<M extends Message> = M extends { text: string }
@@ -47,9 +47,9 @@ export function createFakeMessage(chatId: number, messageId: number, from: User,
  * @param timeout Timeout in ms, defaults to 20 seconds
  * @returns a void promise that resolves after the message is deleted (or if the deletion fails)
  */
-export async function ephemeral(message: MaybePromise<MessageXFragment>, timeout = 20000): Promise<void> {
+export async function ephemeral(message: MaybePromise<PartialMessage>, timeout = 20000): Promise<void> {
   const msg = await Promise.resolve(message)
   await wait(timeout)
-    .then(() => msg.delete())
+    .then(() => modules.shared.api.deleteMessage(msg.chat.id, msg.message_id))
     .catch(() => {})
 }

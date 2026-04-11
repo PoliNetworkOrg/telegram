@@ -42,7 +42,7 @@ export const mute = new CommandsCollection<Role>("Muting")
         [repliedTo],
         args.reason
       )
-      if (res.isErr()) await ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })
   .createCommand({
@@ -68,7 +68,7 @@ export const mute = new CommandsCollection<Role>("Muting")
     handler: async ({ args, context, repliedTo }) => {
       const userOverload = await getOverloadUser(context, repliedTo, args.reasonOrUser, args.reason)
       if (userOverload.isErr()) {
-        await ephemeral(
+        void ephemeral(
           context.reply(
             repliedTo
               ? fmt(({ n }) => n`There was an error`)
@@ -89,7 +89,7 @@ export const mute = new CommandsCollection<Role>("Muting")
         repliedTo ? [repliedTo] : undefined,
         reason
       )
-      if (res.isErr()) await ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })
   .createCommand({
@@ -108,19 +108,17 @@ export const mute = new CommandsCollection<Role>("Muting")
       if (!userId) {
         logger.debug(`unmute: no userId for username ${args.username}`)
         const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
-        await ephemeral(msg)
-        return
+        return void ephemeral(msg)
       }
 
       const user = await getUser(userId, context)
       if (!user) {
         const msg = await context.reply(fmt(({ n }) => n`Error: cannot find this user`))
         logger.error({ userId }, "UNMUTE: cannot retrieve the user")
-        await ephemeral(msg)
-        return
+        return void ephemeral(msg)
       }
 
       const res = await Moderation.unmute(user, context.chat, context.from)
-      if (res.isErr()) await ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })
