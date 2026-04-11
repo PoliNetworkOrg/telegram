@@ -166,10 +166,6 @@ export class BanAllQueue extends Module<ModuleShared> {
   private flowProducer = new FlowProducer({ connection })
 
   public async initiateBanAll(banAll: BanAll, messageId: number) {
-    if (banAll.outcome !== "approved") {
-      throw new Error("Cannot initiate ban all for a non-approved BanAll")
-    }
-
     const allGroups = await api.tg.groups.getAll.query()
     const chats = allGroups.map((g) => g.telegramId)
     const banType = banAll.type === "BAN" ? "ban" : "unban"

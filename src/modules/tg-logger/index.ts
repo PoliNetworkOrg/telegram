@@ -1,6 +1,5 @@
 import { GrammyError, InlineKeyboard } from "grammy"
 import type { Message, User } from "grammy/types"
-import { api } from "@/backend"
 import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
@@ -9,7 +8,7 @@ import type { ModuleShared } from "@/utils/types"
 import { after } from "@/utils/wait"
 import { modules } from ".."
 import type { ModerationAction, PreDeleteResult } from "../moderation/types"
-import { type BanAll, banAllMenu, getBanAllText } from "./ban-all"
+import { type BanAll, getBanAllText } from "./ban-all"
 import { grantCreatedMenu, grantMessageMenu } from "./grants"
 import { getReportText, type Report, reportMenu } from "./report"
 import type * as Types from "./types"
@@ -174,9 +173,8 @@ export class TgLogger extends Module<ModuleShared> {
       },
     }
 
-    const menu = await banAllMenu(banAll)
     await this.log(this.topics.banAll, "———————————————")
-    const msg = await this.log(this.topics.banAll, getBanAllText(banAll), { reply_markup: menu })
+    const msg = await this.log(this.topics.banAll, getBanAllText(banAll))
 
     if (!msg?.message_id) {
       logger.error("[banall] There was an error when initiating banall, no msg.msgId")
