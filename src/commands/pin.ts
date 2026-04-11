@@ -15,11 +15,6 @@ export const pin = new CommandsCollection<Role>()
       allowedRoles: ["direttivo", "owner"],
     },
     handler: async ({ context, repliedTo }) => {
-      if (!repliedTo.from) {
-        logger.error("report: no repliedTo.from field (the msg was sent in a channel)")
-        return
-      }
-
       const member = await context.getChatMember(context.me.id)
       if (member.status !== "administrator")
         return await ephemeral(context.reply(fmt(({ n }) => n`❌ The bot is not an admin`)), 10_000)
@@ -46,11 +41,6 @@ export const pin = new CommandsCollection<Role>()
       allowedRoles: ["direttivo", "owner"],
     },
     handler: async ({ context, repliedTo }) => {
-      if (!repliedTo.from) {
-        logger.error("report: no repliedTo.from field (the msg was sent in a channel)")
-        return
-      }
-
       const member = await context.getChatMember(context.me.id)
       if (member.status !== "administrator")
         return await ephemeral(context.reply(fmt(({ n }) => n`❌ The bot is not an admin`)), 10_000)
@@ -64,6 +54,6 @@ export const pin = new CommandsCollection<Role>()
       const res = await context.unpinChatMessage(repliedTo.message_id).catch(() => false)
       if (!res) return await ephemeral(context.reply(fmt(({ n }) => n`❌ Cannot unpin the message`)), 10_000)
 
-      await ephemeral(context.reply(fmt(({ n }) => n`✅ Message pinned`)), 10_000)
+      await ephemeral(context.reply(fmt(({ n }) => n`✅ Message unpinned`)), 10_000)
     },
   })
