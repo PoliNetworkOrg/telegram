@@ -175,14 +175,18 @@ export class BanAllQueue extends Module<ModuleShared> {
     const chats = allGroups.map((g) => g.telegramId)
     const banType = banAll.type === "BAN" ? "ban" : "unban"
 
-    await api.tg.auditLog.create.mutate({
-      adminId: banAll.reporter.id,
-      targetId: banAll.target.id,
-      type: banAll.type === "BAN" ? "ban_all" : "unban_all",
-      reason: banAll.reason,
-      groupId: null,
-      until: null,
-    })
+    await api.tg.auditLog.create
+      .mutate({
+        adminId: banAll.reporter.id,
+        targetId: banAll.target.id,
+        type: banAll.type === "BAN" ? "ban_all" : "unban_all",
+        reason: banAll.reason,
+        groupId: null,
+        until: null,
+      })
+      .catch(() => {
+        logger.warn("[BanAllQueue] Failed to create audit log for ban all command")
+      })
 
     const job = await this.flowProducer.add({
       name: `${banType}_all`,

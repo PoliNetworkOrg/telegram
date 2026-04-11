@@ -34,7 +34,7 @@ function deduceModerationAction(oldMember: ChatMember, newMember: ChatMember): M
 }
 
 const MAP_ACTIONS: Record<
-  Exclude<ModerationAction["action"], "SILENT" | "MULTI_CHAT_SPAM"> | "BAN_ALL" | "MUTE_ALL",
+  Exclude<ModerationAction["action"], "SILENT" | "MULTI_CHAT_SPAM"> | "BAN_ALL" | "UNBAN_ALL",
   ApiInput["tg"]["auditLog"]["create"]["type"]
 > = {
   MUTE: "mute",
@@ -43,7 +43,7 @@ const MAP_ACTIONS: Record<
   UNBAN: "unban",
   UNMUTE: "unmute",
   BAN_ALL: "ban_all",
-  MUTE_ALL: "mute_all",
+  UNBAN_ALL: "unban_all",
 }
 
 class ModerationClass<C extends Context> implements MiddlewareObj<C> {
