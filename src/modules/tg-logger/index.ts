@@ -6,6 +6,7 @@ import { logger } from "@/logger"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
+import { after } from "@/utils/wait"
 import type { ModerationAction, PreDeleteResult } from "../moderation/types"
 import { type BanAll, banAllMenu, getBanAllText } from "./ban-all"
 import { grantCreatedMenu, grantMessageMenu } from "./grants"
@@ -278,7 +279,7 @@ export class TgLogger extends Module<ModuleShared> {
       ? new InlineKeyboard().url("See Deleted Message", props.preDeleteRes.link)
       : undefined
     await this.log(isAutoModeration ? this.topics.autoModeration : this.topics.adminActions, mainMsg, { reply_markup })
-    if (!isAutoModeration) await this.logModActionInChat(props)
+    if (!isAutoModeration) void this.logModActionInChat(props)
     return mainMsg
   }
 
@@ -528,6 +529,8 @@ export class TgLogger extends Module<ModuleShared> {
         disable_notification: false,
         link_preview_options: { is_disabled: true },
       })
+      .then(after(120_000))
+      .then((sent) => this.shared.api.deleteMessage(p.chat.id, sent.message_id))
       .catch((error: unknown) => {
         logger.warn(
           { error, action: p.action },
