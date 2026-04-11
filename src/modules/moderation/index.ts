@@ -3,6 +3,7 @@ import type { Chat, ChatMember, Message, User } from "grammy/types"
 import { err, ok, type Result } from "neverthrow"
 import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
+import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { type Duration, duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
@@ -153,13 +154,35 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
             revoke_messages: true,
           })
           .catch(() => false)
-      case "BAN":
+      case "BAN": {
+        await MessageUserStorage.getInstance()
+          .sync()
+          .catch(() => {})
+
+        const messages = await api.tg.messages.getLastByUser
+          .query({
+            userId: p.target.id,
+            chatId: p.chat.id,
+            limit: 100, // both the limit of tRPC endpoint and Telegram API hard limit: https://core.telegram.org/bots/api#deletemessages
+          })
+          .then((res) => res.messages ?? [])
+          .catch(() => [])
+
+        await modules.shared.api
+          .deleteMessages(
+            p.chat.id,
+            messages.map((m) => m.messageId)
+          )
+          .catch(() => {})
+
         return modules.shared.api
           .banChatMember(p.chat.id, p.target.id, {
             until_date: p.duration?.timestamp_s,
             revoke_messages: true,
           })
           .catch(() => false)
+      }
+
       case "UNBAN":
         return modules.shared.api.unbanChatMember(p.chat.id, p.target.id, { only_if_banned: true }).catch(() => false)
       case "MUTE":
