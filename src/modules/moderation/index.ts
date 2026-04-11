@@ -34,7 +34,7 @@ function deduceModerationAction(oldMember: ChatMember, newMember: ChatMember): M
 }
 
 const MAP_ACTIONS: Record<
-  Exclude<ModerationAction["action"], "SILENT" | "MULTI_CHAT_SPAM"> | "BAN_ALL" | "MUTE_ALL",
+  Exclude<ModerationAction["action"], "SILENT" | "MULTI_CHAT_SPAM"> | "BAN_ALL" | "UNBAN_ALL",
   ApiInput["tg"]["auditLog"]["create"]["type"]
 > = {
   MUTE: "mute",
@@ -43,7 +43,7 @@ const MAP_ACTIONS: Record<
   UNBAN: "unban",
   UNMUTE: "unmute",
   BAN_ALL: "ban_all",
-  MUTE_ALL: "mute_all",
+  UNBAN_ALL: "unban_all",
 }
 
 class ModerationClass<C extends Context> implements MiddlewareObj<C> {
@@ -148,7 +148,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
    *
    * Used when banning a user to delete all their messages in the chat
    */
-  private async deleteLastMessages(userId: number, chatId: number): Promise<void> {
+  public async deleteAllLastMessages(userId: number, chatId: number): Promise<void> {
     await MessageUserStorage.getInstance()
       .sync()
       .catch(() => {})
@@ -183,7 +183,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
           modules.shared.api
             .banChatMember(p.chat.id, p.target.id, { until_date: p.duration?.timestamp_s })
             .catch(() => false),
-          this.deleteLastMessages(p.target.id, p.chat.id),
+          this.deleteAllLastMessages(p.target.id, p.chat.id),
         ])
         return success
       }

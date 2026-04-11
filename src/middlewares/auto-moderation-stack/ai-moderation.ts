@@ -1,10 +1,10 @@
-import { EventEmitter } from "node:events"
 import type { Filter } from "grammy"
 import OpenAI from "openai"
 import { env } from "@/env"
 import { logger } from "@/logger"
 import { getText } from "@/utils/messages"
 import type { Context } from "@/utils/types"
+import { Awaiter } from "@/utils/wait"
 import { DELETION_THRESHOLDS } from "./constants"
 import type { Category, FlaggedCategory, ModerationCandidate, ModerationResult } from "./types"
 
@@ -22,9 +22,7 @@ import type { Category, FlaggedCategory, ModerationCandidate, ModerationResult }
  *
  * More info on the API here: https://platform.openai.com/docs/guides/moderation
  */
-export class AIModeration<C extends Context> extends EventEmitter<{
-  results: [ModerationResult[]]
-}> {
+export class AIModeration<C extends Context> {
   /**
    * Takes each category, and for the flagged ones takes the score (highest among related results) and
    * confronts it with predefined thresholds
@@ -64,10 +62,11 @@ export class AIModeration<C extends Context> extends EventEmitter<{
   private client: OpenAI | null
   private checkQueue: ModerationCandidate[] = []
   private timeout: NodeJS.Timeout | null = null
+  private responseAwaiter: Awaiter<ModerationResult[]> = new Awaiter()
 
   constructor() {
-    super()
     this.client = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null
+    this.responseAwaiter.resolve([]) // initialize it as resolved with empty results
 
     if (!this.client) logger.warn("[AI Mod] Missing env OPENAI_API_KEY, automatic moderation will not work.")
     else logger.debug("[AI Mod] OpenAI client initialized for moderation.")
@@ -82,33 +81,18 @@ export class AIModeration<C extends Context> extends EventEmitter<{
     if (!this.client) return
     if (this.checkQueue.length === 0) return
 
+    this.responseAwaiter = new Awaiter() // reset the awaiter for the next batch
     const candidates = this.checkQueue.splice(0, this.checkQueue.length)
 
     void this.client.moderations
       .create({ input: candidates, model: "omni-moderation-latest" })
       .then((response) => {
-        this.emit("results", response.results)
+        this.responseAwaiter.resolve(response.results)
       })
       .catch((error: unknown) => {
         logger.error({ error }, "[AI Mod] Error during moderation check")
+        this.responseAwaiter.resolve([]) // fail open: return empty results on error
       })
-  }
-
-  /**
-   * Wait for the moderation results to be emitted.
-   *
-   * This is done to allow batching of moderation checks.
-   * @returns A promise that resolves with the moderation results, mapped as they were queued.
-   */
-  private waitForResults(): Promise<ModerationResult[]> {
-    return new Promise((resolve, reject) => {
-      this.once("results", (results) => {
-        resolve(results)
-      })
-      setTimeout(() => {
-        reject(new Error("Moderation Check timed out"))
-      }, 1000 * 30)
-    })
   }
 
   /**
@@ -116,7 +100,8 @@ export class AIModeration<C extends Context> extends EventEmitter<{
    * @param candidate the candidate to add to the queue, either text or image
    * @returns A promise that resolves with the moderation result, or null if not found or timed out.
    */
-  private addToCheckQueue(candidate: ModerationCandidate): Promise<ModerationResult | null> {
+  private async addToCheckQueue(candidate: ModerationCandidate): Promise<ModerationResult | null> {
+    await this.responseAwaiter // wait for the previous batch to be processed
     const index = this.checkQueue.push(candidate) - 1
     if (this.timeout === null) {
       // throttle a check every 10 seconds
@@ -125,9 +110,7 @@ export class AIModeration<C extends Context> extends EventEmitter<{
         this.timeout = null
       }, 10 * 1000)
     }
-    return this.waitForResults()
-      .then((results) => results[index] ?? null)
-      .catch(() => null) // check timed out
+    return this.responseAwaiter.then((results) => results[index] ?? null)
   }
 
   /**
