@@ -53,7 +53,7 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
 
       const redisCheck = await this.TEMP_redis.has(ctx.chat.id.toString())
       if (redisCheck) {
-        const backendGroup = await api.tg.groups.getById.query({ telegramId: ctx.chat.id })
+        const backendGroup = await api.tg.groups.getById.query({ telegramId: ctx.chat.id }).catch(() => null)
         if (backendGroup !== null) return next()
       }
 
