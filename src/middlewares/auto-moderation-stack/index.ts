@@ -7,14 +7,14 @@ import { modules } from "@/modules"
 import { Moderation } from "@/modules/moderation"
 import { measureForkDuration, type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { redis } from "@/redis"
-import { defer } from "@/utils/deferred-middleware"
+// import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { createFakeMessage, ephemeral, getText } from "@/utils/messages"
 import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
 import { MessageUserStorage } from "../message-user-storage"
-import { AIModeration } from "./ai-moderation"
+// import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
 import { checkForAllowedLinks } from "./functions"
 
@@ -42,14 +42,14 @@ const debouncedError = throttle((error: unknown, msg: string) => {
  * - [x] Links handler
  * - [x] Harmful content handler
  * - [x] Multichat spam handler for similar messages
- * - [ ] Avoid deletion for messages explicitly allowed by Direttivo or from privileged users
+ * - [x] Avoid deletion for messages explicitly allowed by Direttivo or from privileged users
  * - [x] handle non-latin characters
  */
 export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> extends TrackedMiddleware<
   ModerationFlavor<C>
 > {
   // AI moderation instance
-  private aiModeration: AIModeration<C> = new AIModeration<C>()
+  // private aiModeration: AIModeration<C> = new AIModeration<C>()
 
   constructor() {
     super("auto_moderation_stack")
@@ -75,7 +75,7 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
       .use(measureForkDuration("auto_moderation_link_duration"))
       .use((ctx) => this.linkHandler(ctx))
     // AI takes too long to measure, completely defer it to avoid blocking the main stack, and just log any errors
-    filtered.fork().use(defer((ctx) => this.harmfulContentHandler(ctx)))
+    // filtered.fork().use(defer((ctx) => this.harmfulContentHandler(ctx)))
     filtered
       .on([":text", ":caption"])
       .fork()
@@ -168,61 +168,61 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
     )
   }
 
-  /**
-   * Checks messages for harmful content using AI moderation.
-   * If harmful content is detected, mutes the user and deletes the message.
-   */
-  private async harmfulContentHandler(ctx: ModerationContext<C>) {
-    const message = ctx.msg
-    const flaggedCategories = await this.aiModeration.checkForHarmfulContent(ctx)
+  // /**
+  //  * Checks messages for harmful content using AI moderation.
+  //  * If harmful content is detected, mutes the user and deletes the message.
+  //  */
+  // private async harmfulContentHandler(ctx: ModerationContext<C>) {
+  //   const message = ctx.msg
+  //   const flaggedCategories = await this.aiModeration.checkForHarmfulContent(ctx)
 
-    if (flaggedCategories.length > 0) {
-      const reasons = flaggedCategories.map((cat) => ` - ${cat.category} (${(cat.score * 100).toFixed(1)}%)`).join("\n")
+  //   if (flaggedCategories.length > 0) {
+  //     const reasons = flaggedCategories.map((cat) => ` - ${cat.category} (${(cat.score * 100).toFixed(1)}%)`).join("\n")
 
-      if (flaggedCategories.some((cat) => cat.aboveThreshold)) {
-        if (ctx.whitelisted) {
-          // log the action but do not mute
-          if (ctx.whitelisted.role === "user")
-            await modules.get("tgLogger").grants({
-              action: "USAGE",
-              from: ctx.from,
-              chat: ctx.chat,
-              message,
-            })
-        } else {
-          // above threshold, mute user and delete the message
-          const res = await Moderation.mute(
-            ctx.from,
-            ctx.chat,
-            ctx.me,
-            duration.zod.parse("1d"),
-            [message],
-            `Automatic moderation detected harmful content\n${reasons}`
-          )
+  //     if (flaggedCategories.some((cat) => cat.aboveThreshold)) {
+  //       if (ctx.whitelisted) {
+  //         // log the action but do not mute
+  //         if (ctx.whitelisted.role === "user")
+  //           await modules.get("tgLogger").grants({
+  //             action: "USAGE",
+  //             from: ctx.from,
+  //             chat: ctx.chat,
+  //             message,
+  //           })
+  //       } else {
+  //         // above threshold, mute user and delete the message
+  //         const res = await Moderation.mute(
+  //           ctx.from,
+  //           ctx.chat,
+  //           ctx.me,
+  //           duration.zod.parse("1d"),
+  //           [message],
+  //           `Automatic moderation detected harmful content\n${reasons}`
+  //         )
 
-          void ephemeral(
-            ctx.reply(
-              res.isOk()
-                ? fmt(({ i, b }) => [
-                    b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
-                    i`If you think this is a mistake, please contact the group administrators.`,
-                  ])
-                : res.error.fmtError
-            )
-          )
-        }
-      } else {
-        // no flagged category is above the threshold, still log it for manual review
-        await modules.get("tgLogger").moderationAction({
-          action: "SILENT",
-          from: ctx.me,
-          chat: ctx.chat,
-          target: ctx.from,
-          reason: `Message flagged for moderation: \n${reasons}`,
-        })
-      }
-    }
-  }
+  //         void ephemeral(
+  //           ctx.reply(
+  //             res.isOk()
+  //               ? fmt(({ i, b }) => [
+  //                   b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
+  //                   i`If you think this is a mistake, please contact the group administrators.`,
+  //                 ])
+  //               : res.error.fmtError
+  //           )
+  //         )
+  //       }
+  //     } else {
+  //       // no flagged category is above the threshold, still log it for manual review
+  //       await modules.get("tgLogger").moderationAction({
+  //         action: "SILENT",
+  //         from: ctx.me,
+  //         chat: ctx.chat,
+  //         target: ctx.from,
+  //         reason: `Message flagged for moderation: \n${reasons}`,
+  //       })
+  //     }
+  //   }
+  // }
 
   /**
    * Handles messages containing a high percentage of non-latin characters to avoid most spam bots.
