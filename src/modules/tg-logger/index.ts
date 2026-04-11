@@ -1,7 +1,9 @@
 import { GrammyError, InlineKeyboard } from "grammy"
 import type { Message, User } from "grammy/types"
 import { Module } from "@/lib/modules"
+import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
+import { redis } from "@/redis"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
@@ -12,6 +14,8 @@ import { type BanAll, getBanAllText } from "./ban-all"
 import { grantCreatedMenu, grantMessageMenu } from "./grants"
 import { getReportText, type Report, reportMenu } from "./report"
 import type * as Types from "./types"
+
+type REPORT_RESULT = "SENT" | "ALREADY_SENT" | "ERROR"
 
 type Topics = {
   actionRequired: number
@@ -36,6 +40,13 @@ const MOD_ACTION_TITLE = (props: ModerationAction) =>
   })[props.action]
 
 export class TgLogger extends Module<ModuleShared> {
+  private reportStorage = new RedisFallbackAdapter<boolean>({
+    redis,
+    logger,
+    prefix: "report",
+    ttl: 900,
+  })
+
   constructor(
     public readonly groupId: number,
     private topics: Topics
@@ -97,9 +108,14 @@ export class TgLogger extends Module<ModuleShared> {
     return []
   }
 
-  public async report(message: Message, reporter: User): Promise<boolean> {
-    if (message.from === undefined) return false // should be impossible
+  public async report(message: Message, reporter: User): Promise<REPORT_RESULT> {
+    if (message.from === undefined) return "ERROR" // should be impossible
     const { invite_link } = await this.shared.api.getChat(message.chat.id)
+
+    const reportKey = `${message.chat.id}_${message.message_id}`
+
+    if (await this.reportStorage.has(reportKey).catch(() => false)) return "ALREADY_SENT"
+    await this.reportStorage.write(reportKey, true).catch(() => {})
 
     const report: Report = { message, reporter } as Report
     const reportText = getReportText(report, invite_link)
@@ -109,10 +125,10 @@ export class TgLogger extends Module<ModuleShared> {
       disable_notification: false,
     })
 
-    if (!reportMsg) return false
+    if (!reportMsg) return "ERROR"
 
     await this.forward(this.topics.actionRequired, message.chat.id, [message.message_id])
-    return true
+    return "SENT"
   }
 
   // NOTE: this does not delete the messages
