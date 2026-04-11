@@ -12,7 +12,7 @@ const BYPASS_ROLES: Role[] = ["president", "owner", "direttivo"]
 export const banAll = new CommandsCollection<Role>("Ban All")
   .createCommand({
     trigger: "ban_all",
-    description: "PREMA BAN a user from all the Network's groups",
+    description: "PERMA BAN a user from all the Network's groups",
     scope: "private",
     permissions: {
       allowedRoles: ["owner", "direttivo"],

@@ -9,7 +9,6 @@ import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
-import { wait } from "@/utils/wait"
 
 const dateFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -253,8 +252,6 @@ export const grants = new CommandsCollection<Role>("Grants").createCommand({
       .text("❌ Cancel", async (ctx) => {
         await ctx.editMessageText(fmt(({ b, skip }) => [skip`${baseMsg()}`, b`❌ Grant Cancelled`], { sep: "\n\n" }))
         ctx.menu.close()
-        await wait(5000)
-        await ctx.deleteMessage().catch(() => {})
         await conversation.halt()
       })
 

@@ -44,10 +44,10 @@ export function createFakeMessage(chatId: number, messageId: number, from: User,
  * so it can be used without awaiting it.
  *
  * @param message The message to delete or its promise
- * @param timeout Timeout in ms, defaults to 5 seconds
+ * @param timeout Timeout in ms, defaults to 20 seconds
  * @returns a void promise that resolves after the message is deleted (or if the deletion fails)
  */
-export async function ephemeral(message: MaybePromise<MessageXFragment>, timeout = 5000): Promise<void> {
+export async function ephemeral(message: MaybePromise<MessageXFragment>, timeout = 20000): Promise<void> {
   const msg = await Promise.resolve(message)
   await wait(timeout)
     .then(() => msg.delete())
