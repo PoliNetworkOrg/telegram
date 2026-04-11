@@ -16,6 +16,6 @@ export const invite = new CommandsCollection<Role>().createCommand({
     if (!inviteLink)
       return await ephemeral(context.reply(fmt(({ n }) => n`❌ Cannot retrieve the invite link`)), 10_000)
 
-    await ephemeral(context.reply(fmt(({ n }) => n`🔗 ${inviteLink}`)), 20_000)
+    await ephemeral(context.reply(fmt(({ n }) => n`🔗 ${inviteLink}`)))
   },
 })
