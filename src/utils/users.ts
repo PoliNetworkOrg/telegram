@@ -46,10 +46,10 @@ export async function getOverloadUser<C extends Context>(
 
   if (!firstArg) return new Err("[getOverloadUser] No firstArg passed (without repliedTo)")
 
-  const userId = typeof firstArg === "number" ? firstArg : await getTelegramId(firstArg)
+  const userId = typeof firstArg === "number" ? firstArg : await getTelegramId(firstArg).catch(() => null)
   if (!userId) return new Err("[getOverloadUser] Cannot retrieve the userId from arg or redis")
 
-  const user = await getUser(userId, context)
+  const user = await getUser(userId, context).catch(() => null)
   if (!user) return new Err("[getOverloadUser] Cannot retrieve the User from chatMember or storage")
 
   return new Ok({
