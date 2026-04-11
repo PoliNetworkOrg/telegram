@@ -148,7 +148,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
    *
    * Used when banning a user to delete all their messages in the chat
    */
-  private async deleteLastMessages(userId: number, chatId: number): Promise<void> {
+  public async deleteAllLastMessages(userId: number, chatId: number): Promise<void> {
     await MessageUserStorage.getInstance()
       .sync()
       .catch(() => {})
@@ -183,7 +183,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
           modules.shared.api
             .banChatMember(p.chat.id, p.target.id, { until_date: p.duration?.timestamp_s })
             .catch(() => false),
-          this.deleteLastMessages(p.target.id, p.chat.id),
+          this.deleteAllLastMessages(p.target.id, p.chat.id),
         ])
         return success
       }

@@ -97,9 +97,13 @@ export class BanAllQueue extends Module<ModuleShared> {
     async (job) => {
       switch (job.name) {
         case "ban": {
-          const success = await this.shared.api.banChatMember(job.data.chatId, job.data.targetId, {
-            revoke_messages: true,
-          })
+          const [success] = await Promise.all([
+            await this.shared.api
+              .banChatMember(job.data.chatId, job.data.targetId, { revoke_messages: true })
+              .catch(() => false),
+            Moderation.deleteAllLastMessages(job.data.targetId, job.data.chatId),
+          ])
+
           logger.debug({ chatId: job.data.chatId, targetId: job.data.targetId, success }, "[BanAllQueue] ban result")
           if (!success) {
             throw new Error("Failed to ban user")
