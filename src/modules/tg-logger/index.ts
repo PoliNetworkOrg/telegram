@@ -507,5 +507,6 @@ export class TgLogger extends Module<ModuleShared> {
       })
       .then(after(120_000))
       .then((sent) => sent && this.shared.api.deleteMessage(p.chat.id, sent.message_id))
+      .catch(() => {})
   }
 }
