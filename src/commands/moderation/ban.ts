@@ -89,7 +89,7 @@ export const ban = new CommandsCollection<Role>("Banning")
       const user = await getUser(userId, context)
       if (!user) {
         logger.error({ userId }, "UNBAN: cannot retrieve the user")
-        await ephemeral(context.reply("Error: cannot find this user"))
+        await ephemeral(context.reply(fmt(({ n }) => [n`Error: cannot find this user`])))
         return
       }
 
