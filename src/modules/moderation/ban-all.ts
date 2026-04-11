@@ -7,6 +7,7 @@ import { throttle } from "@/utils/throttle"
 import type { ModuleShared } from "@/utils/types"
 import { modules } from ".."
 import { type BanAll, type BanAllState, isBanAllState } from "../tg-logger/ban-all"
+import { Moderation } from "."
 
 /**
  * Utility type that get the Worker type for a Job
@@ -96,9 +97,13 @@ export class BanAllQueue extends Module<ModuleShared> {
     async (job) => {
       switch (job.name) {
         case "ban": {
-          const success = await this.shared.api.banChatMember(job.data.chatId, job.data.targetId, {
-            revoke_messages: true,
-          })
+          const [success] = await Promise.all([
+            this.shared.api
+              .banChatMember(job.data.chatId, job.data.targetId, { revoke_messages: true })
+              .catch(() => false),
+            Moderation.deleteAllLastMessages(job.data.targetId, job.data.chatId),
+          ])
+
           logger.debug({ chatId: job.data.chatId, targetId: job.data.targetId, success }, "[BanAllQueue] ban result")
           if (!success) {
             throw new Error("Failed to ban user")
@@ -169,6 +174,19 @@ export class BanAllQueue extends Module<ModuleShared> {
     const allGroups = await api.tg.groups.getAll.query()
     const chats = allGroups.map((g) => g.telegramId)
     const banType = banAll.type === "BAN" ? "ban" : "unban"
+
+    await api.tg.auditLog.create
+      .mutate({
+        adminId: banAll.reporter.id,
+        targetId: banAll.target.id,
+        type: banAll.type === "BAN" ? "ban_all" : "unban_all",
+        reason: banAll.reason,
+        groupId: null,
+        until: null,
+      })
+      .catch(() => {
+        logger.warn("[BanAllQueue] Failed to create audit log for ban all command")
+      })
 
     const job = await this.flowProducer.add({
       name: `${banType}_all`,
