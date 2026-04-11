@@ -48,7 +48,17 @@ async function errorBackend(chat: ChatFullInfo, type: "CREATE" | "UPDATE", fatal
 type GroupDB = Parameters<TRPCClient<AppRouter>["tg"]["groups"]["create"]["mutate"]>[0][0]
 export const GroupManagement = {
   async create(chatId: number, addedBy: User): Promise<Result<GroupDB, string>> {
+    const { status } = await modules.shared.api
+      .getChatMember(chatId, modules.shared.botInfo.id)
+      .catch(() => ({ status: null }))
+    if (status !== "administrator") {
+      const reason = "The bot is not an administrator"
+      logger.error({ chatId, reason }, "[GroupManagement] Cannot CREATE group")
+      return err(reason)
+    }
+
     const chat = await modules.shared.api.getChat(chatId).catch(() => null)
+
     if (!chat) {
       const reason = "The bot cannot retrieve chat info, probably it is not an administrator"
       logger.error({ chatId, reason }, "[GroupManagement] Cannot CREATE group")
@@ -79,6 +89,15 @@ export const GroupManagement = {
   },
 
   async update(chatId: number, requestedBy: User): Promise<Result<GroupDB, string>> {
+    const { status } = await modules.shared.api
+      .getChatMember(chatId, modules.shared.botInfo.id)
+      .catch(() => ({ status: null }))
+    if (status !== "administrator") {
+      const reason = "The bot is not an administrator"
+      logger.error({ chatId, reason }, "[GroupManagement] Cannot CREATE group")
+      return err(reason)
+    }
+
     const chat = await modules.shared.api.getChat(chatId).catch(() => null)
     if (!chat) {
       const reason = "The bot is not in this group or is not an administrator"
