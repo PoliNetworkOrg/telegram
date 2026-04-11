@@ -1,6 +1,9 @@
 import type { Context } from "grammy"
-import type { User } from "grammy/types"
+import type { Message, User } from "grammy/types"
+import { Err, Ok, type Result } from "neverthrow"
+import { logger } from "@/logger"
 import { MessageUserStorage } from "@/middlewares/message-user-storage"
+import { getTelegramId } from "./telegram-id"
 
 export async function getUser<C extends Context>(userId: number, ctx: C | null): Promise<User | null> {
   // TODO: check if this works correctly
@@ -25,4 +28,32 @@ export function printUsername(user: User): string {
 export function printCtxFrom<C extends Context = Context>(ctx: C): string {
   if (!ctx.from) return "<N/A>"
   return printUsername(ctx.from)
+}
+
+export async function getOverloadUser<C extends Context>(
+  context: C,
+  repliedTo: Message | null,
+  firstArg?: string | number,
+  secondArg?: string
+): Promise<Result<{ user: User; reason?: string }, string>> {
+  if (repliedTo) {
+    if (!repliedTo.from) {
+      // error
+      return new Err("[getOverloadUser] no repliedTo.from field (the msg was sent in a channel)")
+    }
+    return new Ok({ user: repliedTo.from, reason: [firstArg, secondArg].filter(Boolean).join(" ") })
+  }
+
+  if (!firstArg) return new Err("[getOverloadUser] No firstArg passed (without repliedTo)")
+
+  const userId = typeof firstArg === "number" ? firstArg : await getTelegramId(firstArg)
+  if (!userId) return new Err("[getOverloadUser] Cannot retrieve the userId from arg or redis")
+
+  const user = await getUser(userId, context)
+  if (!user) return new Err("[getOverloadUser] Cannot retrieve the User from chatMember or storage")
+
+  return new Ok({
+    user,
+    reason: secondArg,
+  })
 }
