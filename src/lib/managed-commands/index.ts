@@ -364,8 +364,17 @@ export class ManagedCommands<
       })
     )
 
-    this.composer.command("help", (ctx) => {
+    this.composer.command("help", async (ctx) => {
+      if (ctx.chat.type !== "private") {
+        await ephemeral(
+          ctx.reply(fmt(({ n, code }) => n`You can only send ${code`/help`} in private chat with the bot.`)),
+          10_000
+        )
+        return
+      }
+
       const text = ctx.message?.text ?? ""
+
       const [_, cmdArg] = text.replaceAll("/", "").split(" ")
       if (cmdArg) {
         const cmd = this.getCommands().find((c) =>
