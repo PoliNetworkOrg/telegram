@@ -14,6 +14,7 @@ import { printCtxFrom } from "@/utils/users"
 import { linkAdminDashboard } from "./link-admin-dashboard"
 import { management } from "./management"
 import { moderation } from "./moderation"
+import { pin } from "./pin"
 import { report } from "./report"
 import { search } from "./search"
 
@@ -136,4 +137,4 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       )
     },
   })
-  .withCollection(linkAdminDashboard, report, search, management, moderation)
+  .withCollection(linkAdminDashboard, report, search, management, moderation, pin)
