@@ -99,8 +99,9 @@ async function makeResponse(
       ),
     }
   }
-  const inviteLink =
-    chat.invite_link ?? (await api.tg.groups.getById.query({ telegramId: chat.id }))[0].link ?? undefined
+
+  const dbGroup = await api.tg.groups.getById.query({ telegramId: chat.id })
+  const inviteLink = chat.invite_link ?? dbGroup?.link ?? undefined
 
   const message = await MessageUserStorage.getInstance().get(chatId, messageId)
   if (message === null) {
