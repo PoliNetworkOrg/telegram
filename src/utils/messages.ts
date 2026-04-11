@@ -48,7 +48,8 @@ export function createFakeMessage(chatId: number, messageId: number, from: User,
  * @returns a void promise that resolves after the message is deleted (or if the deletion fails)
  */
 export async function ephemeral(message: MaybePromise<PartialMessage>, timeout = 20000): Promise<void> {
-  const msg = await Promise.resolve(message)
+  const msg = await Promise.resolve(message).catch(() => null)
+  if (!msg) return
   await wait(timeout)
     .then(() => modules.shared.api.deleteMessage(msg.chat.id, msg.message_id))
     .catch(() => {})
