@@ -3,6 +3,7 @@ import type { Chat, ChatMember, Message, User } from "grammy/types"
 import { err, ok, type Result } from "neverthrow"
 import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
+import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { type Duration, duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
@@ -142,6 +143,30 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
     })
   }
 
+  /**
+   * Mass deletes the last 100 messages of a user in a specific chat, on best effort basis.
+   *
+   * Used when banning a user to delete all their messages in the chat
+   */
+  private async deleteLastMessages(userId: number, chatId: number): Promise<void> {
+    await MessageUserStorage.getInstance()
+      .sync()
+      .catch(() => {})
+
+    // both the limit of tRPC endpoint and Telegram API hard limit: https://core.telegram.org/bots/api#deletemessages
+    const messages = await api.tg.messages.getLastByUser
+      .query({ userId, chatId, limit: 100 })
+      .then((res) => res.messages ?? [])
+      .catch(() => [])
+
+    await modules.shared.api
+      .deleteMessages(
+        chatId,
+        messages.map((m) => m.messageId)
+      )
+      .catch(() => {})
+  }
+
   private async perform(p: ModerationAction) {
     switch (p.action) {
       case "SILENT":
@@ -153,13 +178,16 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
             revoke_messages: true,
           })
           .catch(() => false)
-      case "BAN":
-        return modules.shared.api
-          .banChatMember(p.chat.id, p.target.id, {
-            until_date: p.duration?.timestamp_s,
-            revoke_messages: true,
-          })
-          .catch(() => false)
+      case "BAN": {
+        const [success] = await Promise.all([
+          modules.shared.api
+            .banChatMember(p.chat.id, p.target.id, { until_date: p.duration?.timestamp_s })
+            .catch(() => false),
+          this.deleteLastMessages(p.target.id, p.chat.id),
+        ])
+        return success
+      }
+
       case "UNBAN":
         return modules.shared.api.unbanChatMember(p.chat.id, p.target.id, { only_if_banned: true }).catch(() => false)
       case "MUTE":
