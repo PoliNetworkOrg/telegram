@@ -1,10 +1,13 @@
 import { type TelegramSocket, WS_PATH } from "@polinetwork/backend"
+import * as parser from "@socket.io/devalue-parser"
 import { io } from "socket.io-client"
 import { env } from "@/env"
 import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
+import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { duration } from "@/utils/duration"
 import type { ModuleShared } from "@/utils/types"
+import type { TgLogger } from "./tg-logger"
 
 type SocketError = {
   name: string
@@ -31,13 +34,18 @@ type SocketError = {
  *
  * @param bot - The telegram bot instance
  */
-export class WebSocketClient extends Module<ModuleShared> {
+export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }> {
   private io: TelegramSocket
   private lastErrorCode: string | null = null
 
   constructor() {
     super()
-    this.io = io(`http://${env.BACKEND_URL}`, { path: WS_PATH, query: { type: "telegram" }, autoConnect: false })
+    this.io = io(`http://${env.BACKEND_URL}`, {
+      path: WS_PATH,
+      query: { type: "telegram" },
+      autoConnect: false,
+      parser,
+    })
     this.io.on("connect", () => {
       logger.info("[WS] connected")
       this.lastErrorCode = null
@@ -77,6 +85,63 @@ export class WebSocketClient extends Module<ModuleShared> {
         logger.debug("[WS] Telegram API ban call OK")
         cb(null)
       }
+    })
+
+    this.io.on("logGrantCreate", async ({ userId, adminId, validSince, validUntil, reason }, cb) => {
+      const target = await MessageUserStorage.getInstance().getStoredUser(userId)
+      const admin = await MessageUserStorage.getInstance().getStoredUser(adminId)
+      if (!target || !admin) {
+        logger.error("[WS] grant create log ERROR -- cannot retrieve users")
+        cb("Cannot retrieve the users")
+        return
+      }
+
+      const res = await this.getModule("tgLogger")
+        .grants({
+          action: "CREATE",
+          target: target,
+          by: admin,
+          since: validSince,
+          until: validUntil,
+          reason,
+        })
+        .catch(() => null)
+
+      if (!res) {
+        logger.error("[WS] grant create log ERROR -- cannot send log")
+        cb("Cannot send the log")
+        return
+      }
+
+      logger.debug("[WS] grant create log OK")
+      cb(null)
+    })
+
+    this.io.on("logGrantInterrupt", async ({ userId, adminId }, cb) => {
+      const target = await MessageUserStorage.getInstance().getStoredUser(userId)
+      const admin = await MessageUserStorage.getInstance().getStoredUser(adminId)
+      if (!target || !admin) {
+        logger.error("[WS] grant interrupt log ERROR -- cannot retrieve users")
+        cb("Cannot retrieve the users")
+        return
+      }
+
+      const res = await this.getModule("tgLogger")
+        .grants({
+          action: "INTERRUPT",
+          target: target,
+          by: admin,
+        })
+        .catch(() => null)
+
+      if (!res) {
+        logger.error("[WS] grant interrupt log ERROR -- cannot send log")
+        cb("Cannot send the log")
+        return
+      }
+
+      logger.debug("[WS] grant interrupt log OK")
+      cb(null)
     })
   }
 
