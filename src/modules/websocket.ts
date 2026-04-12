@@ -96,14 +96,23 @@ export class WebSocketClient extends Module<ModuleShared> {
         return
       }
 
-      await modules.get("tgLogger").grants({
-        action: "CREATE",
-        target: target,
-        by: admin,
-        since: validSince,
-        until: validUntil,
-        reason,
-      })
+      const res = await modules
+        .get("tgLogger")
+        .grants({
+          action: "CREATE",
+          target: target,
+          by: admin,
+          since: validSince,
+          until: validUntil,
+          reason,
+        })
+        .catch(() => null)
+
+      if (!res) {
+        logger.error("[WS] grant create log ERROR -- cannot send log")
+        cb("Cannot send te log")
+        return
+      }
 
       logger.debug("[WS] grant create log OK")
       cb(null)
@@ -118,11 +127,20 @@ export class WebSocketClient extends Module<ModuleShared> {
         return
       }
 
-      await modules.get("tgLogger").grants({
-        action: "INTERRUPT",
-        target: target,
-        by: admin,
-      })
+      const res = await modules
+        .get("tgLogger")
+        .grants({
+          action: "INTERRUPT",
+          target: target,
+          by: admin,
+        })
+        .catch(() => null)
+
+      if (!res) {
+        logger.error("[WS] grant create log ERROR -- cannot send log")
+        cb("Cannot send te log")
+        return
+      }
 
       logger.debug("[WS] grant create log OK")
       cb(null)
