@@ -20,7 +20,6 @@ type Config = {
 export function messageLink({ channelIds }: Config) {
   return async (ctx: Context, next: NextFunction) => {
     // Ensure it's a message and in a specified channel
-    logger.warn({ channelIds, chatId: ctx.chat?.id }, "CHAT ID")
     if (!ctx.message || !ctx.chat || !channelIds.includes(ctx.chat.id)) {
       return next() // Not a message or not in a target channel
     }
