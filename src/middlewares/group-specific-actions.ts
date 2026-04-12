@@ -34,7 +34,7 @@ export class GroupSpecificActions<C extends TelemetryContextFlavor<Context>> ext
     super("group_specific_actions")
     this.composer
       .filter((ctx) => !!ctx.chatId && TARGET_GROUP_IDS_SET.has(ctx.chatId))
-      .on("message", async (ctx, next) => {
+      .on("message:text", async (ctx, next) => {
         if (ctx.from.id === ctx.me.id) return next() // skip if bot
         const { roles } = await api.tg.permissions.getRoles.query({ userId: ctx.from.id })
         if (roles && roles.length > 0) return next() // skip if admin or other roles
@@ -91,19 +91,19 @@ export class GroupSpecificActions<C extends TelemetryContextFlavor<Context>> ext
       })
   }
 
-  private checkAlloggi(ctx: Filter<C, "message">): Result<void, string> {
+  private checkAlloggi(ctx: Filter<C, "message:text">): Result<void, string> {
     return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
-  private checkRipetizioni(ctx: Filter<C, "message">): Result<void, string> {
+  private checkRipetizioni(ctx: Filter<C, "message:text">): Result<void, string> {
     return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
-  private checkBooks(ctx: Filter<C, "message">): Result<void, string> {
+  private checkBooks(ctx: Filter<C, "message:text">): Result<void, string> {
     return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
-  private checkHashtags(ctx: Filter<C, "message">, requiredHashtags: string[]): Result<void, string> {
+  private checkHashtags(ctx: Filter<C, "message:text">, requiredHashtags: string[]): Result<void, string> {
     const hashtags = ctx.entities("hashtag").map((e) => e.text.toLowerCase())
     const hasRequired = requiredHashtags.some((tag) => hashtags.includes(tag.toLowerCase()))
     if (!hasRequired) {
