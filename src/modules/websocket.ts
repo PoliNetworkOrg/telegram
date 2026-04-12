@@ -109,7 +109,7 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
 
       if (!res) {
         logger.error("[WS] grant create log ERROR -- cannot send log")
-        cb("Cannot send te log")
+        cb("Cannot send the log")
         return
       }
 
@@ -136,7 +136,7 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
 
       if (!res) {
         logger.error("[WS] grant interrupt log ERROR -- cannot send log")
-        cb("Cannot send te log")
+        cb("Cannot send the log")
         return
       }
 
