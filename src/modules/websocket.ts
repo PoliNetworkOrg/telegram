@@ -137,12 +137,12 @@ export class WebSocketClient extends Module<ModuleShared> {
         .catch(() => null)
 
       if (!res) {
-        logger.error("[WS] grant create log ERROR -- cannot send log")
+        logger.error("[WS] grant interrupt log ERROR -- cannot send log")
         cb("Cannot send te log")
         return
       }
 
-      logger.debug("[WS] grant create log OK")
+      logger.debug("[WS] grant interrupt log OK")
       cb(null)
     })
   }
