@@ -1,4 +1,5 @@
 import type { MaybePromise } from "./types"
+import { Awaiter } from "./wait"
 
 /**
  * Wraps a function so that it can only be invoked once.
@@ -15,14 +16,14 @@ import type { MaybePromise } from "./types"
  * @returns A wrapped version of `fn` that only runs on the first call
  */
 export function once<R, A extends unknown[]>(fn: (...args: A) => MaybePromise<R>) {
+  const result: Awaiter<R> = new Awaiter()
   let called = false
-  let result: R
 
   return async (...args: A) => {
     if (!called) {
       called = true
-      result = await fn(...args)
+      result.resolve(await fn(...args))
     }
-    return result
+    return await result
   }
 }
