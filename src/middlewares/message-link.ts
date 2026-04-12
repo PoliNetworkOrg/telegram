@@ -20,6 +20,7 @@ type Config = {
 export function messageLink({ channelIds }: Config) {
   return async (ctx: Context, next: NextFunction) => {
     // Ensure it's a message and in a specified channel
+    logger.warn({ channelIds, chatId: ctx.chat?.id }, "CHAT ID")
     if (!ctx.message || !ctx.chat || !channelIds.includes(ctx.chat.id)) {
       return next() // Not a message or not in a target channel
     }
@@ -60,6 +61,7 @@ export function messageLink({ channelIds }: Config) {
       await ctx.reply(message, {
         reply_markup: inlineKeyboard,
         link_preview_options: { is_disabled: true }, // Prevent previewing the invite link in the reply itself
+        message_thread_id: ctx.chat.is_forum ? ctx.message.message_thread_id : undefined,
       })
       await ctx.deleteMessage()
     }
