@@ -1,10 +1,13 @@
 import { type TelegramSocket, WS_PATH } from "@polinetwork/backend"
+import * as parser from "@socket.io/devalue-parser"
 import { io } from "socket.io-client"
 import { env } from "@/env"
 import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
+import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { duration } from "@/utils/duration"
 import type { ModuleShared } from "@/utils/types"
+import { modules } from "."
 
 type SocketError = {
   name: string
@@ -37,7 +40,12 @@ export class WebSocketClient extends Module<ModuleShared> {
 
   constructor() {
     super()
-    this.io = io(`http://${env.BACKEND_URL}`, { path: WS_PATH, query: { type: "telegram" }, autoConnect: false })
+    this.io = io(`http://${env.BACKEND_URL}`, {
+      path: WS_PATH,
+      query: { type: "telegram" },
+      autoConnect: false,
+      parser,
+    })
     this.io.on("connect", () => {
       logger.info("[WS] connected")
       this.lastErrorCode = null
@@ -77,6 +85,47 @@ export class WebSocketClient extends Module<ModuleShared> {
         logger.debug("[WS] Telegram API ban call OK")
         cb(null)
       }
+    })
+
+    this.io.on("logGrantCreate", async ({ userId, adminId, validSince, validUntil, reason }, cb) => {
+      const target = await MessageUserStorage.getInstance().getStoredUser(userId)
+      const admin = await MessageUserStorage.getInstance().getStoredUser(adminId)
+      if (!target || !admin) {
+        logger.error("[WS] grant create log ERROR -- cannot retrieve users")
+        cb("Cannot retrieve the users")
+        return
+      }
+
+      await modules.get("tgLogger").grants({
+        action: "CREATE",
+        target: target,
+        by: admin,
+        since: validSince,
+        until: validUntil,
+        reason,
+      })
+
+      logger.debug("[WS] grant create log OK")
+      cb(null)
+    })
+
+    this.io.on("logGrantInterrupt", async ({ userId, adminId }, cb) => {
+      const target = await MessageUserStorage.getInstance().getStoredUser(userId)
+      const admin = await MessageUserStorage.getInstance().getStoredUser(adminId)
+      if (!target || !admin) {
+        logger.error("[WS] grant interrupt log ERROR -- cannot retrieve users")
+        cb("Cannot retrieve the users")
+        return
+      }
+
+      await modules.get("tgLogger").grants({
+        action: "INTERRUPT",
+        target: target,
+        by: admin,
+      })
+
+      logger.debug("[WS] grant create log OK")
+      cb(null)
     })
   }
 
