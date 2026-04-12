@@ -7,7 +7,7 @@ import { logger } from "@/logger"
 import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { duration } from "@/utils/duration"
 import type { ModuleShared } from "@/utils/types"
-import { modules } from "."
+import type { TgLogger } from "./tg-logger"
 
 type SocketError = {
   name: string
@@ -34,7 +34,7 @@ type SocketError = {
  *
  * @param bot - The telegram bot instance
  */
-export class WebSocketClient extends Module<ModuleShared> {
+export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }> {
   private io: TelegramSocket
   private lastErrorCode: string | null = null
 
@@ -96,8 +96,7 @@ export class WebSocketClient extends Module<ModuleShared> {
         return
       }
 
-      const res = await modules
-        .get("tgLogger")
+      const res = await this.getModule("tgLogger")
         .grants({
           action: "CREATE",
           target: target,
@@ -127,8 +126,7 @@ export class WebSocketClient extends Module<ModuleShared> {
         return
       }
 
-      const res = await modules
-        .get("tgLogger")
+      const res = await this.getModule("tgLogger")
         .grants({
           action: "INTERRUPT",
           target: target,
