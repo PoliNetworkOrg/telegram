@@ -60,6 +60,7 @@ export function messageLink({ channelIds }: Config) {
       await ctx.reply(message, {
         reply_markup: inlineKeyboard,
         link_preview_options: { is_disabled: true }, // Prevent previewing the invite link in the reply itself
+        message_thread_id: ctx.chat.is_forum ? ctx.message.message_thread_id : undefined,
       })
       await ctx.deleteMessage()
     }
