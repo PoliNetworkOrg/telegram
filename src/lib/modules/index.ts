@@ -16,8 +16,13 @@ type WithGetter<T> = {
  * @param self The module instance
  * @returns A function that returns the shared value, or null if not available
  */
-function magicGetter<TShared>(self: Module<TShared>): WithGetter<TShared> {
-  return self as unknown as WithGetter<TShared> // dont tell typescript!
+function magicGetter<TShared, ModuleMap extends Record<string, Module<TShared>>>(
+  self: Module<TShared, ModuleMap>
+): WithGetter<{ shared: TShared; modules: ModuleMap }> {
+  return self as unknown as WithGetter<{
+    shared: TShared
+    modules: ModuleMap
+  }> // dont tell typescript!
 }
 
 /**
@@ -27,14 +32,19 @@ function magicGetter<TShared>(self: Module<TShared>): WithGetter<TShared> {
  * This abstract class provides overridable lifecycle methods `start` and `stop`
  * for initialization and cleanup when used with a `ModuleCoordinator`.
  */
-export abstract class Module<TShared> {
+
+// biome-ignore lint/suspicious/noExplicitAny: the ModuleMap is intentionally flexible to allow any shape of modules, and the internal getter is hidden via a symbol, so this is safe.
+export abstract class Module<TShared, ModuleMap extends Record<string, Module<TShared>> = any> {
   /**
    * The concrete getter is stored under a symbol property that is NOT exposed.
    * It's `private` so subclasses cannot directly touch it. We still access it
    * via a symbol to allow ModuleCoordinator (in same module/file) to bind it.
    * biome-ignore lint/correctness/noUnusedPrivateClassMembers: it's a kind of magic
    */
-  private [SHARED_GETTER]?: () => Readonly<TShared>
+  private [SHARED_GETTER]?: () => Readonly<{
+    shared: TShared
+    modules: ModuleMap
+  }>
 
   /**
    * Protected accessor for the shared, immutable data. If a module tries to use
@@ -45,7 +55,19 @@ export abstract class Module<TShared> {
     if (!getter) {
       throw new Error("Module not bound to a ModuleCoordinator or coordinator hasn't started yet.")
     }
-    return getter()
+    return getter().shared
+  }
+
+  protected getModule<K extends keyof ModuleMap>(modname: K): ModuleMap[K] {
+    const getter = magicGetter(this)[SHARED_GETTER]
+    if (!getter) {
+      throw new Error("Module not bound to a ModuleCoordinator or coordinator hasn't started yet.")
+    }
+    const module = getter().modules[modname]
+    if (!module) {
+      throw new Error(`Module ${String(modname)} not found in coordinator.`)
+    }
+    return module
   }
 
   /**
@@ -83,7 +105,7 @@ export class ModuleCoordinator<TShared, ModuleMap extends Record<string, Module<
     for (const m of Object.values(this.modules)) {
       // `as any` is required because symbols on classes are not part of the
       // public Module<TShared> shape. This is internal wiring only.
-      magicGetter(m)[SHARED_GETTER] = () => resolved
+      magicGetter(m)[SHARED_GETTER] = () => ({ shared: resolved, modules: this.modules })
     }
     await this.start()
     this.starting.resolve()
