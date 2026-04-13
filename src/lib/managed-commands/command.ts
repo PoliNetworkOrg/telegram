@@ -262,3 +262,12 @@ export function isForThisScope(cmd: AnyCommand, chatType: "private" | "group" | 
   if (cmd.scope === "group") return chatType === "group" || chatType === "supergroup"
   return true
 }
+
+export function switchOnScope<S extends CommandScope, T>(
+  cmd: Command<CommandArgs, CommandReplyTo, S>,
+  handlers: { private: T; group: T; both: T }
+) {
+  if (cmd.scope === "private") return handlers.private
+  if (cmd.scope === "group") return handlers.group
+  return handlers.both
+}

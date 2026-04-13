@@ -33,7 +33,7 @@ import type {
   CommandScopedContext,
   RepliedTo,
 } from "./command"
-import { isAllowedInGroups, isAllowedInPrivate, isForThisScope, isTypedArgumentOptions, toBotCommands } from "./command"
+import { isAllowedInGroups, isAllowedInPrivate, isTypedArgumentOptions, switchOnScope, toBotCommands } from "./command"
 import type { ManagedCommandsFlavor } from "./context"
 
 export type Hook<C extends Context, TRole extends string = string, Params = unknown> = (
@@ -272,9 +272,11 @@ export class ManagedCommands<
    */
   private static formatCommandUsage(cmd: AnyCommand): string {
     const args = cmd.args ?? []
-    const scope =
-      cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
-
+    const scope = switchOnScope(cmd, {
+      private: "👤 Private chats only",
+      group: "👥 Groups only",
+      both: "🌍 Both private and group chats",
+    })
     return fmt(({ n, b, i }) => [
       typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | "),
       ...args.map(({ key, optional }) => (optional ? n`[${i`${key}`}]` : n`<${i`${key}`}>`)),
@@ -292,11 +294,12 @@ export class ManagedCommands<
     const args = cmd.args ?? []
     const trigger: string =
       typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | ")
+    const scope = switchOnScope(cmd, { private: "👤", group: "👥", both: "🌍" })
+    const admin = isAllowedInGroups(cmd) && cmd.permissions?.allowGroupAdmins ? "🛡️" : ""
     return fmt(({ i, n }) => [
       trigger,
       ...args.map(({ key, optional }) => (optional ? i` [${key}]` : i` <${key}>`)),
-      n`\n\t${cmd.description ?? "No description"}`,
-      n`\n\tScope: ${cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"}`,
+      n`\n\t${scope}${admin}${cmd.description ?? "No description"}`,
     ])
   }
 
@@ -424,25 +427,29 @@ export class ManagedCommands<
       }
 
       const getUserRoles = once(async () => await this.getUserRoles(userId))
-      const isFromGroupAdmin = once(async () => await this.isFromGroupAdmin(ctx))
+      const isFromGroupAdmin = once(async () => {
+        if (ctx.chat.type === "private") return true
+        return await this.isFromGroupAdmin(ctx)
+      })
 
       const rawCollections = await asyncMap(Object.entries(this.commands), async ([collection, cmds]) => ({
         collection,
-        commands: await asyncFilter(
-          cmds.filter((c) => isForThisScope(c, ctx.chat.type)),
-          async (cmd) => this.checkPermissionsCached(cmd, ctx, getUserRoles, isFromGroupAdmin)
+        commands: await asyncFilter(cmds, async (cmd) =>
+          this.checkPermissionsCached(cmd, ctx, getUserRoles, isFromGroupAdmin)
         ),
       }))
       const collections = rawCollections.filter((c) => c.commands.length > 0)
 
       const reply = fmt(
-        ({ u, b, skip, n, code }) => [
+        ({ u, b, skip, n, code, i }) => [
           b`Available commands:`,
           ...collections.flatMap(({ collection, commands }) => [
             collection === "default" ? "" : u`${b`\n${collection}:`}`,
             ...commands.map((cmd) => skip`${ManagedCommands.formatCommandShort(cmd)}`),
           ]),
-          n`\n\nType ${code`\/help <command>`} for more details on a specific command.`,
+          i`\n👤: Private only, 👥: Group only, 🌍: Everywhere`,
+          i`Commands marked with 🛡️ are restricted to administrators.`,
+          n`Type ${code`\/help <command>`} for more details on a specific command.`,
         ],
         { sep: "\n" }
       )
@@ -459,6 +466,9 @@ export class ManagedCommands<
     return cmds
   }
 
+  /**
+   * Checks whether a command is allowed in a specific group based on its permissions
+   */
   private isCommandAllowedInGroup(command: AnyGroupCommand<TRole>, chatId: number): boolean {
     const { allowedGroupsId, excludedGroupsId } = command.permissions ?? {}
     if (allowedGroupsId && !allowedGroupsId.includes(chatId)) return false
@@ -466,6 +476,9 @@ export class ManagedCommands<
     return true
   }
 
+  /**
+   * Checks whether a command is allowed for a specific set of roles based on its permissions
+   */
   private isCommandAllowedForRoles(command: AnyCommand<TRole>, roles: TRole[]): boolean {
     const { allowedRoles, excludedRoles } = command.permissions ?? {}
     if (allowedRoles?.every((r) => !roles.includes(r))) return false
@@ -508,7 +521,7 @@ export class ManagedCommands<
   ): Promise<boolean> {
     if (!command.permissions) return true
 
-    if (isAllowedInGroups(command) && (ctx.chat.type === "group" || ctx.chat.type === "supergroup")) {
+    if (isAllowedInGroups(command)) {
       const allowed = this.isCommandAllowedInGroup(command, ctx.chat.id)
       if (!allowed) return false
 
