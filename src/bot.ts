@@ -85,6 +85,7 @@ bot.use(new AutoModerationStack())
 bot.use(new GroupSpecificActions())
 bot.use(Moderation)
 bot.use(new MentionListener())
+bot.use(new MessageLink({ chatIds: [POLIADMINS] }))
 
 bot.on("message", async (ctx, next) => {
   const { username, id } = ctx.message.from
@@ -93,7 +94,6 @@ bot.on("message", async (ctx, next) => {
   await next()
 })
 
-bot.on("message", new MessageLink({ chatIds: [POLIADMINS] }))
 bot.on("message", MessageUserStorage.getInstance())
 bot.on("message", checkUsername)
 // bot.on("message", async (ctx, next) => { console.log(ctx.message); return await next() })
