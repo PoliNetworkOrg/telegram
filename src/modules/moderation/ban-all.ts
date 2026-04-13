@@ -220,6 +220,9 @@ export class BanAllQueue extends Module<ModuleShared> {
         ignored: true,
         unprocessed: true,
       })
+
+      logger.debug({ parentId: parentID, ...rawNumbers }, "[BanAllQueue] Current progress for parent job")
+
       // get child counts
       const { failed, ignored, processed, unprocessed } = {
         failed: 0,
