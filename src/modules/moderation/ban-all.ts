@@ -208,8 +208,7 @@ export class BanAllQueue extends Module<ModuleShared> {
    * Register event listeners when the module is loaded
    */
   override async start() {
-    // set the listener to update the parent job progress
-    this.executor.on("completed", async (job) => {
+    const reportProgress = async (job: BanJob) => {
       // this listener recomputes the progress for the parent job every time a child job is completed
       const parentID = job.parent?.id
       if (!parentID) return
@@ -237,6 +236,11 @@ export class BanAllQueue extends Module<ModuleShared> {
         successCount,
         failedCount: failed,
       } satisfies BanAllState)
+    }
+
+    this.executor.on("completed", (job) => reportProgress(job))
+    this.executor.on("failed", (job) => {
+      if (job) void reportProgress(job)
     })
 
     // throttled call to update the message, to avoid spamming Telegram API
