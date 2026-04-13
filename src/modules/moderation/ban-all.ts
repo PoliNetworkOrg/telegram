@@ -172,7 +172,7 @@ export class BanAllQueue extends Module<ModuleShared> {
 
   public async initiateBanAll(banAll: BanAll, messageId: number) {
     const allGroups = await api.tg.groups.getAll.query()
-    const chats = allGroups.map((g) => g.telegramId)
+    const chats = allGroups.filter((g) => !g.hide).map((g) => g.telegramId)
     const banType = banAll.type === "BAN" ? "ban" : "unban"
 
     await api.tg.auditLog.create
