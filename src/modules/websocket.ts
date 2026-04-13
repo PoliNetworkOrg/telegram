@@ -143,6 +143,16 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
       logger.debug("[WS] grant interrupt log OK")
       cb(null)
     })
+
+    this.io.on("leaveChat", async ({ chatId, performerId }, cb) => {
+      const chat = await this.shared.api.getChat(chatId).catch(() => null)
+      const ok = await this.shared.api.leaveChat(chatId).catch(() => false)
+
+      if (ok && chat) await this.getModule("tgLogger").groupManagement({ type: "DELETE", chat })
+      if (ok) logger.info({ chatId, performerId }, "[WS] leave chat performed")
+
+      cb(ok)
+    })
   }
 
   override async start() {
