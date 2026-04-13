@@ -15,7 +15,7 @@ import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { checkUsername } from "./middlewares/check-username"
 import { GroupSpecificActions } from "./middlewares/group-specific-actions"
 import { MentionListener } from "./middlewares/mention-listener"
-import { messageLink } from "./middlewares/message-link"
+import { MessageLink } from "./middlewares/message-link"
 import { MessageUserStorage } from "./middlewares/message-user-storage"
 import { modules, sharedDataInit } from "./modules"
 import { Moderation } from "./modules/moderation"
@@ -93,7 +93,7 @@ bot.on("message", async (ctx, next) => {
   await next()
 })
 
-bot.on("message", messageLink({ channelIds: [POLIADMINS] }))
+bot.on("message", new MessageLink({ chatIds: [POLIADMINS] }))
 bot.on("message", MessageUserStorage.getInstance())
 bot.on("message", checkUsername)
 // bot.on("message", async (ctx, next) => { console.log(ctx.message); return await next() })
