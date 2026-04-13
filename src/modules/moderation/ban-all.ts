@@ -249,8 +249,8 @@ export class BanAllQueue extends Module<ModuleShared> {
       void modules
         .get("tgLogger")
         .banAllProgress(banAll, messageId)
-        .catch(() => {
-          logger.warn("[BanAllQueue] Failed to update ban all progress message")
+        .catch((error) => {
+          logger.warn({ error }, "[BanAllQueue] Failed to update ban all progress message")
         })
     }, CONFIG.UPDATE_MESSAGE_THROTTLE_MS)
 
