@@ -22,6 +22,23 @@ class ProbeModule extends Module<SharedState> {
   }
 }
 
+type LinkedModuleMap = {
+  source: SourceModule
+  target: TargetModule
+}
+
+class SourceModule extends Module<SharedState, LinkedModuleMap> {
+  public getTarget(): TargetModule {
+    return this.getModule("target")
+  }
+
+  public getMissing(): unknown {
+    return this.getModule("missing" as keyof LinkedModuleMap)
+  }
+}
+
+class TargetModule extends Module<SharedState, LinkedModuleMap> {}
+
 describe("ModuleCoordinator", () => {
   it("throws when a module accesses shared state before being bound", () => {
     const module = new ProbeModule()
@@ -81,6 +98,32 @@ describe("ModuleCoordinator", () => {
 
     expect(coordinator.get("first")).toBe(first)
     expect(coordinator.get("second")).toBe(second)
+  })
+
+  it("allows modules to resolve peers through getModule after binding", async () => {
+    const source = new SourceModule()
+    const target = new TargetModule()
+    const coordinator = new ModuleCoordinator({ source, target }, () => ({ value: 7 }))
+
+    await coordinator.ready()
+
+    expect(source.getTarget()).toBe(target)
+  })
+
+  it("throws when getModule is accessed before being bound", () => {
+    const source = new SourceModule()
+
+    expect(() => source.getTarget()).toThrow(/Module not bound to a ModuleCoordinator/)
+  })
+
+  it("throws when getModule references a module key not in the coordinator", async () => {
+    const source = new SourceModule()
+    const target = new TargetModule()
+    const coordinator = new ModuleCoordinator({ source, target }, () => ({ value: 3 }))
+
+    await coordinator.ready()
+
+    expect(() => source.getMissing()).toThrow(/Module missing not found in coordinator\./)
   })
 
   it("stops modules exactly once and ignores repeated stop calls", async () => {

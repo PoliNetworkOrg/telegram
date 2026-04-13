@@ -68,7 +68,7 @@ export type GrantLog = {} & (
       target: User
       by: User
       since: Date
-      duration: Duration
+      until: Date
       reason?: string
     }
   | {

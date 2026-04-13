@@ -27,7 +27,7 @@ import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
 import type { Context, ModuleShared } from "./utils/types"
 
-const TEST_CHAT_ID = -1002669533277
+const POLIADMINS = -1001183900582
 const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
   "message",
   "edited_message",
@@ -93,7 +93,7 @@ bot.on("message", async (ctx, next) => {
   await next()
 })
 
-bot.on("message", messageLink({ channelIds: [TEST_CHAT_ID] })) // now is configured a test group
+bot.on("message", messageLink({ channelIds: [POLIADMINS] }))
 bot.on("message", MessageUserStorage.getInstance())
 bot.on("message", checkUsername)
 // bot.on("message", async (ctx, next) => { console.log(ctx.message); return await next() })
