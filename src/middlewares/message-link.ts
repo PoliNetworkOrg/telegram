@@ -3,7 +3,7 @@ import type { User } from "grammy/types"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { TrackedMiddleware } from "@/modules/telemetry"
-import { padChatId } from "@/utils/chat"
+import { padChatId, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
 import type { Context } from "@/utils/types"
 import { MessageUserStorage } from "./message-user-storage"
@@ -23,7 +23,7 @@ export async function parseTelegramMessageLink(link: string): Promise<{
   const chatId = chatHandle
     ? await api.tg.groups.getByTag
         .query({ tag: chatHandle })
-        .then((r) => r?.telegramId ?? null)
+        .then((r) => stripChatId(r?.telegramId) ?? null)
         .catch(() => null)
     : parseInt(match[1], 10)
   const messageId = match[4] ? parseInt(match[4], 10) : parseInt(match[3], 10)
@@ -71,7 +71,7 @@ export class MessageLink<C extends Context> extends TrackedMiddleware<C> {
           )
           processedLinks.push({ chatId, messageId })
 
-          const { message, inviteLink } = await makeResponse(ctx, chatId, messageId, ctx.from)
+          const { message, inviteLink } = await makeResponse(ctx, link, chatId, messageId, ctx.from)
 
           const inlineKeyboard = new InlineKeyboard()
           if (inviteLink) {
@@ -94,13 +94,15 @@ type Response = {
   message: string
   inviteLink?: string
 }
-async function makeResponse(ctx: Context, chatId: number, messageId: number, reporter: User): Promise<Response> {
+async function makeResponse(
+  ctx: Context,
+  link: string,
+  chatId: number,
+  messageId: number,
+  reporter: User
+): Promise<Response> {
   const headerRes = fmt(
-    ({ b, n }) => [
-      b`Message link reported`,
-      n`${b`Reporter:`} ${fmtUser(reporter)}`,
-      n`${b`Link:`} https://t.me/c/${chatId}/${messageId}`,
-    ],
+    ({ b, n }) => [b`🚩 Message link reported`, n`${b`Reporter:`} ${fmtUser(reporter)}`, n`${b`Link:`} ${link}`],
     { sep: "\n" }
   )
 

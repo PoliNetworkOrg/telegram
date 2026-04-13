@@ -18,6 +18,7 @@ function stripChatInfo(chat: ChatFullInfo) {
     is_forum: chat.is_forum,
     type: chat.type,
     invite_link: chat.invite_link,
+    username: chat.username,
   }
 }
 
