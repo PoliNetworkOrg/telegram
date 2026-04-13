@@ -195,6 +195,7 @@ export class BanAllQueue extends Module<ModuleShared> {
       children: chats.map((chat) => ({
         name: banType,
         queueName: CONFIG.EXECUTOR_QUEUE,
+        opts: { continueParentOnFailure: true },
         data: {
           chatId: chat,
           targetId: banAll.target.id,
@@ -220,8 +221,6 @@ export class BanAllQueue extends Module<ModuleShared> {
         ignored: true,
         unprocessed: true,
       })
-
-      logger.debug({ parentId: parentID, ...rawNumbers }, "[BanAllQueue] Current progress for parent job")
 
       // get child counts
       const { failed, ignored, processed, unprocessed } = {
