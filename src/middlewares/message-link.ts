@@ -1,9 +1,11 @@
-import type { NextFunction } from "grammy"
 import { InlineKeyboard } from "grammy"
+import type { User } from "grammy/types"
 import { api } from "@/backend"
 import { logger } from "@/logger"
+import { TrackedMiddleware } from "@/modules/telemetry"
 import { padChatId } from "@/utils/chat"
-import { fmt, fmtChat } from "@/utils/format"
+import { fmt, fmtChat, fmtUser } from "@/utils/format"
+import { getText } from "@/utils/messages"
 import type { Context } from "@/utils/types"
 import { MessageUserStorage } from "./message-user-storage"
 
@@ -12,60 +14,65 @@ const LINK_REGEX = /https?:\/\/t\.me\/c\/(-?\d+)\/(\d+)(?:\/(\d+))?/gi // Regex 
 const CHAR_LIMIT = 400 // How many initial rows of text to include
 
 type Config = {
-  channelIds: number[]
+  chatIds: number[]
   textRowsLimit?: number
 }
 
-// --- Middleware ---
-export function messageLink({ channelIds }: Config) {
-  return async (ctx: Context, next: NextFunction) => {
-    // Ensure it's a message and in a specified channel
-    if (!ctx.message || !ctx.chat || !channelIds.includes(ctx.chat.id)) {
-      return next() // Not a message or not in a target channel
-    }
+export class MessageLink<C extends Context> extends TrackedMiddleware<C> {
+  constructor(config: Config) {
+    super("message-link")
 
-    const reporter = ctx.from?.username
+    this.composer
+      .filter((ctx) => !!ctx.chatId && config.chatIds.includes(ctx.chatId))
+      .on(["message:text", "message:caption"])
+      .filter(
+        (ctx) => getText(ctx.message).text.match(LINK_REGEX) !== null,
+        async (ctx, next) => {
+          logger.debug("[message-link] found a link to parse")
 
-    const messageText = ctx.message.text || ctx.message.caption
-    if (!messageText) {
-      return next() // No text or caption to scan
-    }
+          const messageText = getText(ctx.message).text
 
-    const matches = messageText.matchAll(LINK_REGEX)
-    const processedLinks: { chatId: number; messageId: number }[] = [] // Track processed links to avoid duplicates
+          const matches = messageText.matchAll(LINK_REGEX)
+          const processedLinks: { chatId: number; messageId: number }[] = [] // Track processed links to avoid duplicates
 
-    for (const match of matches) {
-      // Ensure we have capture groups
-      if (!match[1] || !match[2]) {
-        logger.warn(`Regex matched but missing capture groups: ${match.join(" - ")}`)
-        continue
-      }
+          for (const match of matches) {
+            // Ensure we have capture groups
+            if (!match[1] || !match[2]) {
+              logger.warn(`[message-link] Regex matched but missing capture groups: ${match.join(" - ")}`)
+              continue
+            }
 
-      const chatId = Number(match[1])
-      const messageId = match[3] ? Number(match[3]) : Number(match[2])
+            const chatId = Number(match[1])
+            const messageId = match[3] ? Number(match[3]) : Number(match[2])
 
-      // Skip if we've already processed this link in this message (e.g., multiple occurrences)
-      if (processedLinks.some((link) => link.chatId === chatId && link.messageId === messageId)) {
-        continue
-      }
-      processedLinks.push({ chatId, messageId })
+            // Skip if we've already processed this link in this message (e.g., multiple occurrences)
+            if (processedLinks.some((link) => link.chatId === chatId && link.messageId === messageId)) {
+              continue
+            }
+            logger.info(
+              { chatId, messageId, reporter: { username: ctx.from.username, id: ctx.from.id } },
+              "[message-link] link parsed and sending response"
+            )
+            processedLinks.push({ chatId, messageId })
 
-      const { message, inviteLink } = await makeResponse(ctx, chatId, messageId, reporter)
+            const { message, inviteLink } = await makeResponse(ctx, chatId, messageId, ctx.from)
 
-      const inlineKeyboard = new InlineKeyboard()
-      if (inviteLink) {
-        inlineKeyboard.url("Join Group", inviteLink)
-      }
+            const inlineKeyboard = new InlineKeyboard()
+            if (inviteLink) {
+              inlineKeyboard.url("Join Group", inviteLink)
+            }
 
-      await ctx.reply(message, {
-        reply_markup: inlineKeyboard,
-        link_preview_options: { is_disabled: true }, // Prevent previewing the invite link in the reply itself
-        message_thread_id: ctx.chat.is_forum ? ctx.message.message_thread_id : undefined,
-      })
-      await ctx.deleteMessage()
-    }
+            await ctx.reply(message, {
+              reply_markup: inlineKeyboard,
+              link_preview_options: { is_disabled: true }, // Prevent previewing the invite link in the reply itself
+              message_thread_id: ctx.chat.is_forum ? ctx.message.message_thread_id : undefined,
+            })
+            await ctx.deleteMessage()
+          }
 
-    return next()
+          return next()
+        }
+      )
   }
 }
 
@@ -73,15 +80,11 @@ type Response = {
   message: string
   inviteLink?: string
 }
-async function makeResponse(
-  ctx: Context,
-  chatId: number,
-  messageId: number,
-  reporterUsername?: string
-): Promise<Response> {
+async function makeResponse(ctx: Context, chatId: number, messageId: number, reporter: User): Promise<Response> {
   const headerRes = fmt(
     ({ b, n }) => [
-      b`Message link reported ${reporterUsername ? `by @${reporterUsername}` : ""}`,
+      b`Message link reported`,
+      n`${b`Reporter:`} ${fmtUser(reporter)}`,
       n`${b`Link:`} https://t.me/c/${chatId}/${messageId}`,
     ],
     { sep: "\n" }
@@ -134,10 +137,8 @@ async function makeResponse(
   }
 
   const isAdmin = author?.status === "creator" || author?.status === "administrator"
-  const authorRes = fmt(({ code, i, b, n }) =>
-    author
-      ? n`${b`Author:`} @${author.user.username} [${code`${author.user.id}`}] ${isAdmin ? b`ADMIN` : ""}`
-      : n`${b`Author:`} ${i`not available`}`
+  const authorRes = fmt(({ i, b, n }) =>
+    author ? n`${b`Author:`} ${fmtUser(author.user)} ${isAdmin ? b`ADMIN` : ""}` : n`${b`Author:`} ${i`not available`}`
   )
 
   return {
