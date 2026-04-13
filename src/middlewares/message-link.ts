@@ -5,13 +5,34 @@ import { logger } from "@/logger"
 import { TrackedMiddleware } from "@/modules/telemetry"
 import { padChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
-import { getText } from "@/utils/messages"
 import type { Context } from "@/utils/types"
 import { MessageUserStorage } from "./message-user-storage"
 
 // --- Configuration ---
-const LINK_REGEX = /https?:\/\/t\.me\/c\/(-?\d+)\/(\d+)(?:\/(\d+))?/gi // Regex with global and case-insensitive flags
+const LINK_REGEX = /https?:\/\/t\.me\/(?:c\/(-?\d+)|([\w\d]+))\/(\d+)(?:\/(\d+))?/i // Regex with global and case-insensitive flags
 const CHAR_LIMIT = 400 // How many initial rows of text to include
+
+export async function parseTelegramMessageLink(link: string): Promise<{
+  chatId: number
+  messageId: number
+} | null> {
+  const match = link.match(LINK_REGEX)
+  if (!match) return null
+
+  const chatHandle = match[2]
+  const chatId = chatHandle
+    ? await api.tg.groups.getByTag
+        .query({ tag: chatHandle })
+        .then((r) => r?.telegramId ?? null)
+        .catch(() => null)
+    : parseInt(match[1], 10)
+  const messageId = match[4] ? parseInt(match[4], 10) : parseInt(match[3], 10)
+
+  if (chatId === null) return null
+  if (Number.isNaN(chatId) || Number.isNaN(messageId)) return null
+
+  return { chatId, messageId }
+}
 
 type Config = {
   chatIds: number[]
@@ -24,55 +45,48 @@ export class MessageLink<C extends Context> extends TrackedMiddleware<C> {
 
     this.composer
       .filter((ctx) => !!ctx.chatId && config.chatIds.includes(ctx.chatId))
-      .on(["message:text", "message:caption"])
-      .filter(
-        (ctx) => getText(ctx.message).text.match(LINK_REGEX) !== null,
-        async (ctx, next) => {
-          logger.debug("[message-link] found a link to parse")
+      .on(["message:entities:url", "message:entities:text_link"])
+      .use(async (ctx, next) => {
+        logger.debug("[message-link] found a link to parse")
 
-          const messageText = getText(ctx.message).text
+        const links = ctx
+          .entities("text_link")
+          .map((e) => e.url)
+          .concat(ctx.entities("url").map((e) => e.text))
 
-          const matches = messageText.matchAll(LINK_REGEX)
-          const processedLinks: { chatId: number; messageId: number }[] = [] // Track processed links to avoid duplicates
+        const processedLinks: { chatId: number; messageId: number }[] = [] // Track processed links to avoid duplicates
+        for (const link of links) {
+          const parsed = await parseTelegramMessageLink(link)
+          if (!parsed) continue
+          logger.debug({ parsed }, `[message-link] parsed link with regex`)
+          const { chatId, messageId } = parsed
 
-          for (const match of matches) {
-            // Ensure we have capture groups
-            if (!match[1] || !match[2]) {
-              logger.warn(`[message-link] Regex matched but missing capture groups: ${match.join(" - ")}`)
-              continue
-            }
+          // Skip if we've already processed this link in this message (e.g., multiple occurrences)
+          if (processedLinks.some((link) => link.chatId === chatId && link.messageId === messageId)) {
+            continue
+          }
+          logger.info(
+            { chatId, messageId, reporter: { username: ctx.from.username, id: ctx.from.id } },
+            "[message-link] link parsed and sending response"
+          )
+          processedLinks.push({ chatId, messageId })
 
-            const chatId = Number(match[1])
-            const messageId = match[3] ? Number(match[3]) : Number(match[2])
+          const { message, inviteLink } = await makeResponse(ctx, chatId, messageId, ctx.from)
 
-            // Skip if we've already processed this link in this message (e.g., multiple occurrences)
-            if (processedLinks.some((link) => link.chatId === chatId && link.messageId === messageId)) {
-              continue
-            }
-            logger.info(
-              { chatId, messageId, reporter: { username: ctx.from.username, id: ctx.from.id } },
-              "[message-link] link parsed and sending response"
-            )
-            processedLinks.push({ chatId, messageId })
-
-            const { message, inviteLink } = await makeResponse(ctx, chatId, messageId, ctx.from)
-
-            const inlineKeyboard = new InlineKeyboard()
-            if (inviteLink) {
-              inlineKeyboard.url("Join Group", inviteLink)
-            }
-
-            await ctx.reply(message, {
-              reply_markup: inlineKeyboard,
-              link_preview_options: { is_disabled: true }, // Prevent previewing the invite link in the reply itself
-              message_thread_id: ctx.chat.is_forum ? ctx.message.message_thread_id : undefined,
-            })
-            await ctx.deleteMessage()
+          const inlineKeyboard = new InlineKeyboard()
+          if (inviteLink) {
+            inlineKeyboard.url("Join Group", inviteLink)
           }
 
-          return next()
+          await ctx.reply(message, {
+            reply_markup: inlineKeyboard,
+            link_preview_options: { is_disabled: true }, // Prevent previewing the invite link in the reply itself
+            message_thread_id: ctx.chat.is_forum ? ctx.message.message_thread_id : undefined,
+          })
+          await ctx.deleteMessage()
         }
-      )
+        return next()
+      })
   }
 }
 
