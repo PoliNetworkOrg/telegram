@@ -231,12 +231,10 @@ export class BanAllQueue extends Module<ModuleShared> {
         ...rawNumbers,
       }
 
-      const successCount = processed - (failed + ignored)
-      const total = processed + unprocessed
       await parent.updateProgress({
-        jobCount: total,
-        successCount,
-        failedCount: failed,
+        jobCount: processed + unprocessed + ignored + failed,
+        successCount: processed,
+        failedCount: failed + ignored,
       } satisfies BanAllState)
     }
 
