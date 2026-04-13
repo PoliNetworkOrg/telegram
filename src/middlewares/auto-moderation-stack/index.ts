@@ -295,10 +295,23 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
       const muteDuration = duration.zod.parse(MULTI_CHAT_SPAM.MUTE_DURATION)
 
       const res = await Moderation.multiChatSpam(ctx.from, similarMessages, muteDuration)
-
       if (res.isErr()) {
         logger.error({ error: res.error }, "Cannot execute moderation action for MULTI_CHAT_SPAM")
+        return
       }
+
+      void ephemeral(
+        ctx.reply(
+          fmt(
+            ({ i, b, n }) => [
+              i`Message for ${fmtUser(ctx.from)}.`,
+              b`⚠️ Your message was detected as potential spam and has been deleted.`,
+              n`Please avoid sending similar messages to multiple groups/topics in a short period of time. Try again in 5 minutes.`,
+            ],
+            { sep: "\n" }
+          )
+        )
+      )
     }
   }
 }
