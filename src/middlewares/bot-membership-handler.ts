@@ -42,6 +42,7 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
     redis,
     prefix: "TEMP_groups",
     logger,
+    ttl: 60 * 60 * 24, // 1 day, just in case
   })
 
   constructor() {
