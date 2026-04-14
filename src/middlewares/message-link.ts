@@ -23,7 +23,7 @@ export async function parseTelegramMessageLink(link: string): Promise<{
   const chatId = chatHandle
     ? await api.tg.groups.getByTag
         .query({ tag: chatHandle })
-        .then((r) => stripChatId(r?.telegramId) ?? null)
+        .then((r) => (r?.telegramId ? stripChatId(r.telegramId) : null))
         .catch(() => null)
     : parseInt(match[1], 10)
   const messageId = match[4] ? parseInt(match[4], 10) : parseInt(match[3], 10)
