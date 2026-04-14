@@ -52,9 +52,12 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
       if (ctx.chat.type === "private") return next()
 
       const redisCheck = await this.TEMP_redis.has(ctx.chat.id.toString())
-      if (redisCheck) {
-        const backendGroup = await api.tg.groups.getById.query({ telegramId: ctx.chat.id }).catch(() => null)
-        if (backendGroup !== null) return next()
+      if (redisCheck) return next()
+
+      const backendGroup = await api.tg.groups.getById.query({ telegramId: ctx.chat.id }).catch(() => null)
+      if (backendGroup !== null) {
+        await this.TEMP_redis.write(ctx.chat.id.toString(), ctx.chat.id)
+        return next()
       }
 
       const me = await ctx.getChatMember(ctx.me.id).catch(() => ({ status: "undefined" }))
