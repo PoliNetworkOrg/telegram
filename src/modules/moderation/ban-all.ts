@@ -136,7 +136,7 @@ export class BanAllQueue extends Module<ModuleShared> {
     async (job) => {
       const { failed, ignored, processed } = await job.getDependenciesCount()
       logger.info(
-        `[BanAllQueue] Finished executing ${job.name} job for target ${job.data.banAll.target.id} in ${processed} chats (ignored: ${ignored}, failed: ${failed})`
+        `[BanAllQueue] Finished executing ${job.name} job for target ${typeof job.data.banAll.target === "number" ? job.data.banAll.target : job.data.banAll.target.id} in ${processed} chats (ignored: ${ignored}, failed: ${failed})`
       )
     },
     { connection }
@@ -178,7 +178,7 @@ export class BanAllQueue extends Module<ModuleShared> {
     await api.tg.auditLog.create
       .mutate({
         adminId: banAll.reporter.id,
-        targetId: banAll.target.id,
+        targetId: typeof banAll.target === "number" ? banAll.target : banAll.target.id,
         type: banAll.type === "BAN" ? "ban_all" : "unban_all",
         reason: banAll.reason,
         groupId: null,
@@ -198,7 +198,7 @@ export class BanAllQueue extends Module<ModuleShared> {
         opts: { continueParentOnFailure: true },
         data: {
           chatId: chat,
-          targetId: banAll.target.id,
+          targetId: typeof banAll.target === "number" ? banAll.target : banAll.target.id,
         },
       })),
     } satisfies BanAllFlow)
