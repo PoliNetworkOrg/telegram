@@ -47,15 +47,14 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
   constructor() {
     super("bot_membership_handler")
 
+    void this.fillRedis()
+
     // TEMP: this is for initial migration from previous bot
     this.composer.fork().filter(predicate, async (ctx, next) => {
       if (ctx.chat.type === "private") return next()
 
       const redisCheck = await this.TEMP_redis.has(ctx.chat.id.toString())
-      if (redisCheck) {
-        const backendGroup = await api.tg.groups.getById.query({ telegramId: ctx.chat.id }).catch(() => null)
-        if (backendGroup !== null) return next()
-      }
+      if (redisCheck) return next()
 
       const me = await ctx.getChatMember(ctx.me.id).catch(() => ({ status: "undefined" }))
       if (me.status !== "administrator") {
@@ -91,6 +90,11 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
 
       await next()
     })
+  }
+
+  private async fillRedis() {
+    const dbGroups = await api.tg.groups.getAll.query()
+    await Promise.all(dbGroups.map((g) => this.TEMP_redis.write(g.telegramId.toString(), g.telegramId)))
   }
 
   private static isJoin<C extends Context>(ctx: MemberContext<C>): boolean {
