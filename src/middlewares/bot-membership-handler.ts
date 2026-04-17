@@ -47,7 +47,7 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
   constructor() {
     super("bot_membership_handler")
 
-    this.fillRedis()
+    void this.fillRedis()
 
     // TEMP: this is for initial migration from previous bot
     this.composer.fork().filter(predicate, async (ctx, next) => {
