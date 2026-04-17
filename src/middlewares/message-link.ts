@@ -3,7 +3,7 @@ import type { User } from "grammy/types"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { TrackedMiddleware } from "@/modules/telemetry"
-import { padChatId, stripChatId } from "@/utils/chat"
+import { padChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
 import type { Context } from "@/utils/types"
 import { MessageUserStorage } from "./message-user-storage"
@@ -23,7 +23,7 @@ export async function parseTelegramMessageLink(link: string): Promise<{
   const chatId = chatHandle
     ? await api.tg.groups.getByTag
         .query({ tag: chatHandle })
-        .then((r) => (r?.telegramId ? stripChatId(r.telegramId) : null))
+        .then((r) => (r?.telegramId ? padChatId(r.telegramId) : null))
         .catch(() => null)
     : parseInt(match[1], 10)
   const messageId = match[4] ? parseInt(match[4], 10) : parseInt(match[3], 10)

@@ -176,7 +176,12 @@ export class TgLogger extends Module<ModuleShared> {
     }
   }
 
-  public async banAll(target: User, reporter: User, type: "BAN" | "UNBAN", reason?: string): Promise<string | null> {
+  public async banAll(
+    target: User | number,
+    reporter: User,
+    type: "BAN" | "UNBAN",
+    reason?: string
+  ): Promise<string | null> {
     const banAll: BanAll = {
       type,
       reporter: reporter,
