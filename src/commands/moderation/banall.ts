@@ -62,6 +62,9 @@ export const banAll = new CommandsCollection<Role>("Ban All")
         : userId
 
       await modules.get("tgLogger").banAll(target, context.from, "BAN", args.reason)
+      await context.reply(
+        fmt(({ n, link }) => n`Ban All started for userId ${link(userId.toString(), `tg://user?id=${userId}`)}`)
+      )
     },
   })
   .createCommand({
@@ -88,10 +91,6 @@ export const banAll = new CommandsCollection<Role>("Ban All")
       }
 
       const dbUser = await api.tg.users.get.query({ userId })
-      if (!dbUser || dbUser.error) {
-        await context.reply(fmt(({ n }) => n`This user is not in our cache, we cannot proceed.`))
-        return
-      }
 
       const target: User | number = dbUser.user
         ? {
@@ -105,5 +104,8 @@ export const banAll = new CommandsCollection<Role>("Ban All")
         : userId
 
       await modules.get("tgLogger").banAll(target, context.from, "UNBAN")
+      await context.reply(
+        fmt(({ n, link }) => n`UN-Ban All started for userId ${link(userId.toString(), `tg://user?id=${userId}`)}`)
+      )
     },
   })
