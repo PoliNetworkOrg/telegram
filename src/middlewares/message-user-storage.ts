@@ -47,7 +47,7 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
 
     // save user on join
     this.composer.on("chat_member").filter(
-      (ctx) => ctx.chatMember.new_chat_member.status === "member",
+      (ctx) => ctx.chatMember.old_chat_member.status === "left" && ctx.chatMember.new_chat_member.status === "member",
       (ctx, next) => {
         this.userStorage.set(ctx.chatMember.new_chat_member.user.id, ctx.chatMember.new_chat_member.user)
         return next()
