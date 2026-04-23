@@ -140,6 +140,7 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "🚨 Start BAN ALL 🚨",
       cb: async ({ data, ctx }) => {
+        await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id).catch(() => {})
         modules
           .get("tgLogger")
           .banAll(
