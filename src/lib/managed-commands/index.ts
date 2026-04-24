@@ -9,16 +9,20 @@ import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
 import type { CommandContext, Context, Middleware, MiddlewareObj } from "grammy"
 import { Composer, MemorySessionStorage } from "grammy"
-import type { Message } from "grammy/types"
+import type { BotCommand, Message } from "grammy/types"
 import type { Result } from "neverthrow"
 import { err, ok } from "neverthrow"
 import z from "zod"
+import { asyncFilter, asyncMap } from "@/utils/arrays"
 import { isFromGroupChat, isFromPrivateChat } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
+import { once } from "@/utils/once"
+import type { ContextWith } from "@/utils/types"
 import type { CommandsCollection } from "./collection"
 import type {
   AnyCommand,
+  AnyGroupCommand,
   ArgumentMap,
   ArgumentOptions,
   Command,
@@ -29,7 +33,7 @@ import type {
   CommandScopedContext,
   RepliedTo,
 } from "./command"
-import { isAllowedInGroups, isTypedArgumentOptions } from "./command"
+import { isAllowedInGroups, isAllowedInPrivate, isTypedArgumentOptions, switchOnScope, toBotCommands } from "./command"
 import type { ManagedCommandsFlavor } from "./context"
 
 export type Hook<C extends Context, TRole extends string = string, Params = unknown> = (
@@ -71,7 +75,7 @@ export type ManagedCommandsHooks<OC extends Context, C extends Context, TRole ex
    * "administrator" or "creator" as group admins, but you can override this to implement your own logic,
    *  for example by checking an external database of admins
    */
-  overrideGroupAdminCheck?: (userId: number, chatId: number, context: CommandContext<OC>) => Promise<boolean>
+  overrideGroupAdminCheck?: (userId: number, chatId: number, context: OC) => Promise<boolean>
   /**
    * Called when a command is invoked, before any processing is done, can be used to implement custom logic that should
    * run before checking permissions or requirements, for example logging or analytics
@@ -82,6 +86,11 @@ export type ManagedCommandsHooks<OC extends Context, C extends Context, TRole ex
    * (i.e after `await ctx.conversation.enter()` returns)
    */
   commandMiddlewareEnd?: Hook<OC, TRole>
+  /**
+   * A function to externally cache wether a user has had the commands menu generated for them or not
+   * @returns true if the user has had the commands menu generated, false otherwise
+   */
+  cachedUserSetCommands?: (userId: number, chatId: number) => Promise<boolean>
 }
 
 export interface IManagedCommandsOptions<TRole extends string, OC extends Context, C extends Context> {
@@ -99,7 +108,7 @@ export interface IManagedCommandsOptions<TRole extends string, OC extends Contex
    * @example
    * ```ts
    * const commands = new ManagedCommands({
-   *   getUserRoles: async (userId, context) => {
+   *   getUserRoles: async (userId) => {
    *     const roles = await db.getUserRoles(userId) // Array<"admin" | "user">[]
    *     return roles
    *   },
@@ -114,7 +123,7 @@ export interface IManagedCommandsOptions<TRole extends string, OC extends Contex
    * })
    * ```
    */
-  getUserRoles: (userId: number, context: CommandContext<OC>) => Promise<TRole[]>
+  getUserRoles: (userId: number) => Promise<TRole[]>
 
   /**
    * Additional plugins to apply to the conversation inner composer.
@@ -162,7 +171,7 @@ export class ManagedCommands<
 {
   private composer = new Composer<OC>()
   private commands: Record<string, AnyCommand<TRole>[]> = {}
-  private getUserRoles: (userId: number, context: CommandContext<OC>) => Promise<TRole[]>
+  private getUserRoles: (userId: number) => Promise<TRole[]>
   private hooks: ManagedCommandsHooks<OC, C, TRole>
   private adapter: ConversationStorage<OC, ConversationData>
   private registeredTriggers = new Set<string>()
@@ -263,9 +272,11 @@ export class ManagedCommands<
    */
   private static formatCommandUsage(cmd: AnyCommand): string {
     const args = cmd.args ?? []
-    const scope =
-      cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
-
+    const scope = switchOnScope(cmd, {
+      private: "👤 Private chats only",
+      group: "👥 Groups only",
+      both: "🌍 Both private and group chats",
+    })
     return fmt(({ n, b, i }) => [
       typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | "),
       ...args.map(({ key, optional }) => (optional ? n`[${i`${key}`}]` : n`<${i`${key}`}>`)),
@@ -281,10 +292,14 @@ export class ManagedCommands<
 
   private static formatCommandShort(cmd: AnyCommand): string {
     const args = cmd.args ?? []
+    const trigger: string =
+      typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | ")
+    const scope = switchOnScope(cmd, { private: "👤", group: "👥", both: "🌍" })
+    const admin = isAllowedInGroups(cmd) && cmd.permissions?.allowGroupAdmins ? "🛡️" : ""
     return fmt(({ i, n }) => [
-      typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | "),
+      trigger,
       ...args.map(({ key, optional }) => (optional ? i` [${key}]` : i` <${key}>`)),
-      n`\n\t${cmd.description ?? "No description"}`,
+      n`\n\t${scope}${admin}${cmd.description ?? "No description"}`,
     ])
   }
 
@@ -364,13 +379,41 @@ export class ManagedCommands<
       })
     )
 
-    this.composer.command("help", async (ctx) => {
-      if (ctx.chat.type !== "private")
-        return void ephemeral(
-          ctx.reply(fmt(({ n, code }) => n`You can only send ${code`/help`} in private chat with the bot.`)),
-          10_000
-        )
+    const setFreeCommands = once(async (ctx: OC) => {
+      const freeCommands = this.getCommands().filter((cmd) => this.isCommandAllowedForRoles(cmd, []))
+      const privateCommands: BotCommand[] = freeCommands
+        .filter((cmd) => isAllowedInPrivate(cmd))
+        .flatMap((cmd) => toBotCommands(cmd))
+        .concat([{ command: "help", description: "Show available commands" }])
+      await ctx.api.setMyCommands(privateCommands, { scope: { type: "all_private_chats" } }).catch(() => {})
+      const groupCommands: BotCommand[] = freeCommands
+        .filter((cmd) => isAllowedInGroups(cmd) && this.isCommandAllowedInGroup(cmd, -100)) // only include commands that are allowed in all groups
+        .flatMap((cmd) => toBotCommands(cmd))
+        .concat([{ command: "help", description: "Show available commands" }])
+      await ctx.api.setMyCommands(groupCommands, { scope: { type: "all_group_chats" } }).catch(() => {})
+    })
 
+    this.composer.use(async (ctx, next) => {
+      await setFreeCommands(ctx)
+      return next()
+    })
+
+    this.composer.on("message").use(async (ctx, next) => {
+      if (!ctx.from) return next()
+      const shouldSkip = (await this.hooks.cachedUserSetCommands?.(ctx.from.id, ctx.chat.id)) ?? false
+      if (shouldSkip) return next()
+      const allowedCommands = await this.getAllowedCommandsFor(ctx)
+      await ctx.api
+        .setMyCommands(allowedCommands.flatMap(toBotCommands), {
+          scope: { type: "chat_member", chat_id: ctx.chat.id, user_id: ctx.from.id },
+        })
+        .catch(() => {})
+      return next()
+    })
+
+    this.composer.command("help", async (ctx) => {
+      if (!ctx.from) return
+      const userId = ctx.from.id
       const text = ctx.message?.text ?? ""
 
       const [_, cmdArg] = text.replaceAll("/", "").split(" ")
@@ -383,14 +426,30 @@ export class ManagedCommands<
         return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
       }
 
+      const getUserRoles = once(async () => await this.getUserRoles(userId))
+      const isFromGroupAdmin = once(async () => {
+        if (ctx.chat.type === "private") return true
+        return await this.isFromGroupAdmin(ctx)
+      })
+
+      const rawCollections = await asyncMap(Object.entries(this.commands), async ([collection, cmds]) => ({
+        collection,
+        commands: await asyncFilter(cmds, async (cmd) =>
+          this.checkPermissionsCached(cmd, ctx, getUserRoles, isFromGroupAdmin)
+        ),
+      }))
+      const collections = rawCollections.filter((c) => c.commands.length > 0)
+
       const reply = fmt(
-        ({ u, b, skip, n, code }) => [
+        ({ u, b, skip, n, code, i }) => [
           b`Available commands:`,
-          ...Object.entries(this.commands).flatMap(([collection, cmds]) => [
+          ...collections.flatMap(({ collection, commands }) => [
             collection === "default" ? "" : u`${b`\n${collection}:`}`,
-            ...cmds.flatMap((cmd) => [skip`${ManagedCommands.formatCommandShort(cmd)}`]),
+            ...commands.map((cmd) => skip`${ManagedCommands.formatCommandShort(cmd)}`),
           ]),
-          n`\n\nType ${code`\/help <command>`} for more details on a specific command.`,
+          i`\n👤: Private only, 👥: Group only, 🌍: Everywhere`,
+          i`Commands marked with 🛡️ are restricted to administrators.`,
+          n`Type ${code`\/help <command>`} for more details on a specific command.`,
         ],
         { sep: "\n" }
       )
@@ -407,36 +466,84 @@ export class ManagedCommands<
     return cmds
   }
 
-  private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<OC>): Promise<boolean> {
+  /**
+   * Checks whether a command is allowed in a specific group based on its permissions
+   */
+  private isCommandAllowedInGroup(command: AnyGroupCommand<TRole>, chatId: number): boolean {
+    const { allowedGroupsId, excludedGroupsId } = command.permissions ?? {}
+    if (allowedGroupsId && !allowedGroupsId.includes(chatId)) return false
+    if (excludedGroupsId?.includes(chatId)) return false
+    return true
+  }
+
+  /**
+   * Checks whether a command is allowed for a specific set of roles based on its permissions
+   */
+  private isCommandAllowedForRoles(command: AnyCommand<TRole>, roles: TRole[]): boolean {
+    const { allowedRoles, excludedRoles } = command.permissions ?? {}
+    if (allowedRoles?.every((r) => !roles.includes(r))) return false
+    if (excludedRoles?.some((r) => roles.includes(r))) return false
+    return true
+  }
+
+  private async isFromGroupAdmin(ctx: OC): Promise<boolean> {
+    if (!ctx.from || !ctx.chatId) return false
+    if (this.hooks.overrideGroupAdminCheck) {
+      const isAdmin = await this.hooks.overrideGroupAdminCheck(ctx.from.id, ctx.chatId, ctx)
+      if (isAdmin) return true
+    } else {
+      const { status: groupRole } = await ctx.getChatMember(ctx.from.id)
+      if (groupRole === "administrator" || groupRole === "creator") return true
+    }
+    return false
+  }
+
+  private async getAllowedCommandsFor(ctx: ContextWith<OC, "from" | "chat">): Promise<AnyCommand<TRole>[]> {
+    const getUserRoles = once(() => this.getUserRoles(ctx.from.id))
+    const isFromGroupAdmin = once(() => this.isFromGroupAdmin(ctx))
+
+    return await Promise.all(
+      this.getCommands()
+        .filter(isFromPrivateChat(ctx) ? (cmd) => isAllowedInPrivate(cmd) : (cmd) => isAllowedInGroups(cmd))
+        .map((cmd) =>
+          this.checkPermissionsCached(cmd, ctx, getUserRoles, isFromGroupAdmin).then((allowed) =>
+            allowed ? cmd : null
+          )
+        )
+    ).then((cmds) => cmds.filter((c) => c !== null))
+  }
+
+  private async checkPermissionsCached(
+    command: AnyCommand<TRole>,
+    ctx: ContextWith<OC, "chat">,
+    getUserRoles: () => Promise<TRole[]>,
+    isFromGroupAdmin: () => Promise<boolean>
+  ): Promise<boolean> {
     if (!command.permissions) return true
-    if (!ctx.from) return false
 
-    const { allowedRoles, excludedRoles } = command.permissions
+    if (isAllowedInGroups(command)) {
+      const allowed = this.isCommandAllowedInGroup(command, ctx.chat.id)
+      if (!allowed) return false
 
-    if (isAllowedInGroups(command) && (ctx.chat.type === "group" || ctx.chat.type === "supergroup")) {
-      const { allowGroupAdmins, allowedGroupsId, excludedGroupsId } = command.permissions
-
-      if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
-      if (excludedGroupsId?.includes(ctx.chatId)) return false
-
-      if (allowGroupAdmins) {
-        if (this.hooks.overrideGroupAdminCheck) {
-          const isAdmin = await this.hooks.overrideGroupAdminCheck(ctx.from.id, ctx.chatId, ctx)
-          if (isAdmin) return true
-        } else {
-          const { status: groupRole } = await ctx.getChatMember(ctx.from.id)
-          if (groupRole === "administrator" || groupRole === "creator") return true
-        }
+      if (command.permissions.allowGroupAdmins) {
+        const isAdmin = await isFromGroupAdmin()
+        if (isAdmin) return true
       }
     }
 
-    const roles = await this.getUserRoles(ctx.from.id, ctx)
+    const roles = await getUserRoles()
+    return this.isCommandAllowedForRoles(command, roles)
+  }
 
-    // blacklist is stronger than whitelist
-    if (allowedRoles?.every((r) => !roles.includes(r))) return false
-    if (excludedRoles?.some((r) => roles.includes(r))) return false
-
-    return true
+  private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<OC>): Promise<boolean> {
+    if (!ctx.from) return false
+    const userId = ctx.from.id
+    return this.checkPermissionsCached(
+      command,
+      ctx,
+      () => this.getUserRoles(userId),
+      () => this.isFromGroupAdmin(ctx)
+    )
   }
 
   /**
