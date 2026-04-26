@@ -16,9 +16,9 @@ import z from "zod"
 import { asyncFilter, asyncMap } from "@/utils/arrays"
 import { isFromGroupChat, isFromPrivateChat } from "@/utils/chat"
 import { fmt } from "@/utils/format"
-import { ephemeral } from "@/utils/messages"
 import { once } from "@/utils/once"
 import type { ContextWith } from "@/utils/types"
+import { wait } from "@/utils/wait"
 import type { CommandsCollection } from "./collection"
 import type {
   AnyCommand,
@@ -100,7 +100,7 @@ export interface IManagedCommandsOptions<TRole extends string, OC extends Contex
    * - {@link https://grammy.dev/plugins/session sessions documentation}
    * @default MemorySessionStorage
    */
-  adapter: ConversationStorage<OC, ConversationData>
+  adapter?: ConversationStorage<OC, ConversationData>
 
   /**
    * A function to get externally defined roles for a specific user.
@@ -123,7 +123,7 @@ export interface IManagedCommandsOptions<TRole extends string, OC extends Contex
    * })
    * ```
    */
-  getUserRoles: (userId: number) => Promise<TRole[]>
+  getUserRoles?: (userId: number) => Promise<TRole[]>
 
   /**
    * Additional plugins to apply to the conversation inner composer.
@@ -133,7 +133,7 @@ export interface IManagedCommandsOptions<TRole extends string, OC extends Contex
   /**
    * Hooks to execute on specific events
    */
-  hooks: ManagedCommandsHooks<OC, C, TRole>
+  hooks?: ManagedCommandsHooks<OC, C, TRole>
 }
 
 export type ManagedCommandsOptions<TRole extends string, OC extends Context, C extends Context> = string extends TRole
@@ -645,7 +645,10 @@ export class ManagedCommands<
             code`/help ${Array.isArray(cmd.trigger) ? cmd.trigger[0] : cmd.trigger}`,
           ])
         )
-        if (!isPrivate) void ephemeral(msg, 10_000) // delete the error message after some time in groups, no need to keep it
+        if (!isPrivate)
+          void wait(10_000)
+            .then(() => msg.delete())
+            .catch(() => {})
         return
       }
 
