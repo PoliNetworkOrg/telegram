@@ -10,7 +10,7 @@
     "build": "tsup",
     "dev:raw": "NODE_ENV=development tsx watch --clear-screen=false --env-file=.env src/bot.ts",
     "dev": "pnpm run dev:raw | pino-pretty",
-    "test": "vitest",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "biome check",
     "check:fix": "biome check --write --unsafe"
