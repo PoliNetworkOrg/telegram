@@ -1,6 +1,5 @@
 import type { GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"
-import type { Duration } from "@/utils/duration"
 
 export type BanAllLog = {
   target: User

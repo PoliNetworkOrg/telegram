@@ -91,12 +91,8 @@ export class TgLogger extends Module<ModuleShared> {
           e.description.includes("there are no messages to forward")
         ) {
           logger.warn({ e }, "[TgLogger:forward] Message(s) to forward not found")
-          // await this.log(
-          //   topicId,
-          //   fmt(({ b, i }) => [b`Could not forward the message`, i`It probably was deleted before forwarding`], {
-          //     sep: "\n",
-          //   })
-          // )
+        } else if (e.description.includes("MESSAGE_ID_INVALID")) {
+          logger.warn({ e, chatId, messageIds }, "[TgLogger:forward] Message ID(s) is not valid for telegram API")
         } else {
           await this.exception({ type: "BOT_ERROR", error: e }, "TgLogger.forward")
           logger.error({ e }, "[TgLogger:forward] There was an error while trying to forward a message")
@@ -176,7 +172,12 @@ export class TgLogger extends Module<ModuleShared> {
     }
   }
 
-  public async banAll(target: User, reporter: User, type: "BAN" | "UNBAN", reason?: string): Promise<string | null> {
+  public async banAll(
+    target: User | number,
+    reporter: User,
+    type: "BAN" | "UNBAN",
+    reason?: string
+  ): Promise<string | null> {
     const banAll: BanAll = {
       type,
       reporter: reporter,
@@ -189,7 +190,6 @@ export class TgLogger extends Module<ModuleShared> {
       },
     }
 
-    await this.log(this.topics.banAll, "———————————————")
     const msg = await this.log(this.topics.banAll, getBanAllText(banAll))
 
     if (!msg?.message_id) {

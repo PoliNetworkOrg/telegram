@@ -136,7 +136,7 @@ export class BanAllQueue extends Module<ModuleShared> {
     async (job) => {
       const { failed, ignored, processed } = await job.getDependenciesCount()
       logger.info(
-        `[BanAllQueue] Finished executing ${job.name} job for target ${job.data.banAll.target.id} in ${processed} chats (ignored: ${ignored}, failed: ${failed})`
+        `[BanAllQueue] Finished executing ${job.name} job for target ${typeof job.data.banAll.target === "number" ? job.data.banAll.target : job.data.banAll.target.id} in ${processed} chats (ignored: ${ignored}, failed: ${failed})`
       )
     },
     { connection }
@@ -172,13 +172,13 @@ export class BanAllQueue extends Module<ModuleShared> {
 
   public async initiateBanAll(banAll: BanAll, messageId: number) {
     const allGroups = await api.tg.groups.getAll.query()
-    const chats = allGroups.map((g) => g.telegramId)
+    const chats = allGroups.filter((g) => !g.hide).map((g) => g.telegramId)
     const banType = banAll.type === "BAN" ? "ban" : "unban"
 
     await api.tg.auditLog.create
       .mutate({
         adminId: banAll.reporter.id,
-        targetId: banAll.target.id,
+        targetId: typeof banAll.target === "number" ? banAll.target : banAll.target.id,
         type: banAll.type === "BAN" ? "ban_all" : "unban_all",
         reason: banAll.reason,
         groupId: null,
@@ -195,9 +195,10 @@ export class BanAllQueue extends Module<ModuleShared> {
       children: chats.map((chat) => ({
         name: banType,
         queueName: CONFIG.EXECUTOR_QUEUE,
+        opts: { continueParentOnFailure: true },
         data: {
           chatId: chat,
-          targetId: banAll.target.id,
+          targetId: typeof banAll.target === "number" ? banAll.target : banAll.target.id,
         },
       })),
     } satisfies BanAllFlow)
@@ -208,8 +209,7 @@ export class BanAllQueue extends Module<ModuleShared> {
    * Register event listeners when the module is loaded
    */
   override async start() {
-    // set the listener to update the parent job progress
-    this.executor.on("completed", async (job) => {
+    const reportProgress = async (job: BanJob) => {
       // this listener recomputes the progress for the parent job every time a child job is completed
       const parentID = job.parent?.id
       if (!parentID) return
@@ -221,6 +221,7 @@ export class BanAllQueue extends Module<ModuleShared> {
         ignored: true,
         unprocessed: true,
       })
+
       // get child counts
       const { failed, ignored, processed, unprocessed } = {
         failed: 0,
@@ -230,13 +231,16 @@ export class BanAllQueue extends Module<ModuleShared> {
         ...rawNumbers,
       }
 
-      const successCount = processed - (failed + ignored)
-      const total = processed + unprocessed
       await parent.updateProgress({
-        jobCount: total,
-        successCount,
-        failedCount: failed,
+        jobCount: processed + unprocessed + ignored + failed,
+        successCount: processed,
+        failedCount: failed + ignored,
       } satisfies BanAllState)
+    }
+
+    this.executor.on("completed", (job) => reportProgress(job))
+    this.executor.on("failed", (job) => {
+      if (job) void reportProgress(job)
     })
 
     // throttled call to update the message, to avoid spamming Telegram API
@@ -245,8 +249,8 @@ export class BanAllQueue extends Module<ModuleShared> {
       void modules
         .get("tgLogger")
         .banAllProgress(banAll, messageId)
-        .catch(() => {
-          logger.warn("[BanAllQueue] Failed to update ban all progress message")
+        .catch((error) => {
+          logger.warn({ error }, "[BanAllQueue] Failed to update ban all progress message")
         })
     }, CONFIG.UPDATE_MESSAGE_THROTTLE_MS)
 

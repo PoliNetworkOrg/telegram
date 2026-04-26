@@ -33,7 +33,7 @@ export function isBanAllState(obj: unknown): obj is BanAllState {
 
 export type BanAll = {
   type: "BAN" | "UNBAN"
-  target: User
+  target: User | number
   reporter: User
   reason?: string
   state: BanAllState
@@ -65,10 +65,10 @@ export const getProgressText = (state: BanAll["state"]): string => {
  */
 export const getBanAllText = (data: BanAll) =>
   fmt(
-    ({ n, b, skip, i }) => [
+    ({ n, b, skip, i, link }) => [
       data.type === "BAN" ? b`🚨 BAN ALL 🚨` : b`🕊 UN-BAN ALL 🕊`,
       "",
-      n`${b`🎯 Target:`} ${fmtUser(data.target)} `,
+      n`${b`🎯 Target:`} ${typeof data.target === "number" ? link(data.target.toString(), `tg://user?id=${data.target}`) : fmtUser(data.target)} `,
       n`${b`📣 Reporter:`} ${fmtUser(data.reporter)} `,
       data.type === "BAN" ? n`${b`📋 Reason:`} ${data.reason ? data.reason : i`N/A`}` : undefined,
       "",

@@ -2,6 +2,7 @@ import type { User } from "grammy/types"
 import z from "zod"
 import { api } from "@/backend"
 import { CommandsCollection } from "@/lib/managed-commands"
+import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
@@ -32,6 +33,10 @@ export const banAll = new CommandsCollection<Role>("Ban All")
     handler: async ({ args, context }) => {
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
+      logger.debug(
+        { userId, arg: args.username, isString: typeof args.username === "string" },
+        "debug ban all username"
+      )
 
       if (userId === null) {
         await context.reply(fmt(({ n }) => n`Not a valid userId or username not in our cache`))
@@ -45,21 +50,21 @@ export const banAll = new CommandsCollection<Role>("Ban All")
         return
       }
 
-      if (!dbUser || dbUser.error) {
-        await context.reply(fmt(({ n }) => n`This user is not in our cache, we cannot proceed.`))
-        return
-      }
-
-      const target: User = {
-        id: userId,
-        first_name: dbUser.user.firstName,
-        last_name: dbUser.user.lastName,
-        username: dbUser.user.username,
-        is_bot: dbUser.user.isBot,
-        language_code: dbUser.user.langCode,
-      }
+      const target: User | number = dbUser.user
+        ? {
+            id: userId,
+            first_name: dbUser.user.firstName,
+            last_name: dbUser.user.lastName,
+            username: dbUser.user.username,
+            is_bot: dbUser.user.isBot,
+            language_code: dbUser.user.langCode,
+          }
+        : userId
 
       await modules.get("tgLogger").banAll(target, context.from, "BAN", args.reason)
+      await context.reply(
+        fmt(({ n, link }) => n`Ban All started for userId ${link(userId.toString(), `tg://user?id=${userId}`)}`)
+      )
     },
   })
   .createCommand({
@@ -86,20 +91,21 @@ export const banAll = new CommandsCollection<Role>("Ban All")
       }
 
       const dbUser = await api.tg.users.get.query({ userId })
-      if (!dbUser || dbUser.error) {
-        await context.reply(fmt(({ n }) => n`This user is not in our cache, we cannot proceed.`))
-        return
-      }
 
-      const target: User = {
-        id: userId,
-        first_name: dbUser.user.firstName,
-        last_name: dbUser.user.lastName,
-        username: dbUser.user.username,
-        is_bot: dbUser.user.isBot,
-        language_code: dbUser.user.langCode,
-      }
+      const target: User | number = dbUser.user
+        ? {
+            id: userId,
+            first_name: dbUser.user.firstName,
+            last_name: dbUser.user.lastName,
+            username: dbUser.user.username,
+            is_bot: dbUser.user.isBot,
+            language_code: dbUser.user.langCode,
+          }
+        : userId
 
       await modules.get("tgLogger").banAll(target, context.from, "UNBAN")
+      await context.reply(
+        fmt(({ n, link }) => n`UN-Ban All started for userId ${link(userId.toString(), `tg://user?id=${userId}`)}`)
+      )
     },
   })
