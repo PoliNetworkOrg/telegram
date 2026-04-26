@@ -10,6 +10,15 @@ export type OutgoingRequest = {
   payload: PayloadType
 }
 
+/** Returns the current timestamp in seconds since the Unix epoch. */
+function now() {
+  return Math.floor(Date.now() / 1000)
+}
+
+/**
+ * Creates a dummy bot instance for testing purposes.
+ * @returns An object containing the dummy bot and an array to capture outgoing API requests
+ */
 export async function createDummyBot<C extends Context>() {
   const bot = new Bot<C>("token")
   const outgoingRequests: OutgoingRequest[] = []
@@ -39,13 +48,14 @@ export async function createDummyBot<C extends Context>() {
   }
 }
 
+/** Generates a dummy command call `Update` for testing purposes. */
 export function generateCommandCall(trigger: string, id: number = 0): Update {
   return {
     update_id: 0,
     message: {
       text: `/${trigger}`,
       message_id: 0,
-      date: Date.now(),
+      date: now(),
       entities: [
         {
           type: "bot_command",
@@ -71,13 +81,14 @@ export function generateCommandCall(trigger: string, id: number = 0): Update {
   }
 }
 
+/** Generates a dummy command call `Update` for testing purposes, from a group chat */
 export function generateGroupCommandCall(trigger: string, id: number = 0): Update {
   return {
     update_id: 0,
     message: {
       text: `/${trigger}`,
       message_id: 0,
-      date: Date.now(),
+      date: now(),
       entities: [
         {
           type: "bot_command",
@@ -101,13 +112,14 @@ export function generateGroupCommandCall(trigger: string, id: number = 0): Updat
   }
 }
 
+/** Generates a dummy text message `Update` for testing purposes. */
 export function generateMessage(text: string, id: number = 0): Update {
   return {
     update_id: 0,
     message: {
       text,
       message_id: 0,
-      date: Date.now(),
+      date: now(),
       chat: {
         id,
         first_name: "Test",
@@ -126,13 +138,14 @@ export function generateMessage(text: string, id: number = 0): Update {
   }
 }
 
+/** Generates a dummy text message `Update` for testing purposes, from a group chat */
 export function generateGroupMessage(text: string, id: number = 0): Update {
   return {
     update_id: 0,
     message: {
       text,
       message_id: 0,
-      date: Date.now(),
+      date: now(),
       chat: {
         id,
         title: "Test Group",

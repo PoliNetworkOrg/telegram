@@ -87,7 +87,7 @@ export type ManagedCommandsHooks<OC extends Context, C extends Context, TRole ex
    */
   commandMiddlewareEnd?: Hook<OC, TRole>
   /**
-   * A function to externally cache wether a user has had the commands menu generated for them or not
+   * A function to externally cache whether a user has had the commands menu generated for them or not
    * @returns true if the user has had the commands menu generated, false otherwise
    */
   cachedUserSetCommands?: (userId: number, chatId: number) => Promise<boolean>
