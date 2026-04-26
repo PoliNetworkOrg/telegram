@@ -13,7 +13,8 @@
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "check": "biome check",
-    "check:fix": "biome check --write --unsafe"
+    "check:fix": "biome check --write --unsafe",
+    "docs": "typedoc"
   },
   "keywords": [],
   "author": "",
@@ -27,6 +28,9 @@
     "ts-node": "^10.9.2",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
+    "typedoc": "^0.28.19",
+    "typedoc-docusaurus-theme": "^1.4.2",
+    "typedoc-plugin-markdown": "^4.11.0",
     "typescript": "^5.7.3",
     "vitest": "^3.1.1"
   },
