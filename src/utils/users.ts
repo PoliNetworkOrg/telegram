@@ -22,7 +22,7 @@ export function printUsername(user: User): string {
 /**
  * Formats the context's `from` user information for logging.
  * @param ctx grammY Context object
- * @returns formatted username and user_id of the context's `from` user, or "<N/A>" if not available
+ * @returns formatted username and user_id of the context's `from` user, or "\<N/A\>" if not available
  */
 export function printCtxFrom<C extends Context = Context>(ctx: C): string {
   if (!ctx.from) return "<N/A>"

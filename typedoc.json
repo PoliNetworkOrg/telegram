@@ -1,0 +1,16 @@
+{
+  "entryPointStrategy": "expand",
+  "entryPoints": [
+    "src"
+  ],
+  "plugin": [
+    "typedoc-plugin-markdown",
+    "typedoc-docusaurus-theme",
+  ],
+  "fileExtension": ".mdx",
+  "sanitizeComments": true,
+  "cleanOutputDir": true,
+  "router": "module",
+  "mergeReadme": true,
+  "out": "./docs/telegram"
+}
