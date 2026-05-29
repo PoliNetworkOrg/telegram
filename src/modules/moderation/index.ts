@@ -159,12 +159,17 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
       .then((res) => res.messages ?? [])
       .catch(() => [])
 
-    await modules.shared.api
+    const success = await modules.shared.api
       .deleteMessages(
         chatId,
         messages.map((m) => m.messageId)
       )
       .catch(() => {})
+
+    logger.debug(
+      { userId, chatId, messagesCount: messages.length, success },
+      "[Moderation:deleteAllLastMessages] deleted last messages of the user in the chat"
+    )
   }
 
   private async perform(p: ModerationAction) {
