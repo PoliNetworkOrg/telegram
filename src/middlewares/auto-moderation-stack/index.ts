@@ -74,8 +74,6 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
       .fork()
       .use(measureForkDuration("auto_moderation_link_duration"))
       .use((ctx) => this.linkHandler(ctx))
-    // AI takes too long to measure, completely defer it to avoid blocking the main stack, and just log any errors
-    // filtered.fork().use(defer((ctx) => this.harmfulContentHandler(ctx)))
     filtered
       .on([":text", ":caption"])
       .fork()
@@ -167,62 +165,6 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
       )
     )
   }
-
-  // /**
-  //  * Checks messages for harmful content using AI moderation.
-  //  * If harmful content is detected, mutes the user and deletes the message.
-  //  */
-  // private async harmfulContentHandler(ctx: ModerationContext<C>) {
-  //   const message = ctx.msg
-  //   const flaggedCategories = await this.aiModeration.checkForHarmfulContent(ctx)
-
-  //   if (flaggedCategories.length > 0) {
-  //     const reasons = flaggedCategories.map((cat) => ` - ${cat.category} (${(cat.score * 100).toFixed(1)}%)`).join("\n")
-
-  //     if (flaggedCategories.some((cat) => cat.aboveThreshold)) {
-  //       if (ctx.whitelisted) {
-  //         // log the action but do not mute
-  //         if (ctx.whitelisted.role === "user")
-  //           await modules.get("tgLogger").grants({
-  //             action: "USAGE",
-  //             from: ctx.from,
-  //             chat: ctx.chat,
-  //             message,
-  //           })
-  //       } else {
-  //         // above threshold, mute user and delete the message
-  //         const res = await Moderation.mute(
-  //           ctx.from,
-  //           ctx.chat,
-  //           ctx.me,
-  //           duration.zod.parse("1d"),
-  //           [message],
-  //           `Automatic moderation detected harmful content\n${reasons}`
-  //         )
-
-  //         void ephemeral(
-  //           ctx.reply(
-  //             res.isOk()
-  //               ? fmt(({ i, b }) => [
-  //                   b`⚠️ Message from ${fmtUser(ctx.from)} was deleted automatically due to harmful content.`,
-  //                   i`If you think this is a mistake, please contact the group administrators.`,
-  //                 ])
-  //               : res.error.fmtError
-  //           )
-  //         )
-  //       }
-  //     } else {
-  //       // no flagged category is above the threshold, still log it for manual review
-  //       await modules.get("tgLogger").moderationAction({
-  //         action: "SILENT",
-  //         from: ctx.me,
-  //         chat: ctx.chat,
-  //         target: ctx.from,
-  //         reason: `Message flagged for moderation: \n${reasons}`,
-  //       })
-  //     }
-  //   }
-  // }
 
   /**
    * Handles messages containing a high percentage of non-latin characters to avoid most spam bots.
