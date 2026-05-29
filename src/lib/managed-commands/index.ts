@@ -387,7 +387,7 @@ export class ManagedCommands<
         .concat([{ command: "help", description: "Show available commands" }])
       await ctx.api.setMyCommands(privateCommands, { scope: { type: "all_private_chats" } }).catch(() => {})
       const groupCommands: BotCommand[] = freeCommands
-        .filter((cmd) => isAllowedInGroups(cmd) && this.isCommandAllowedInGroup(cmd, -100)) // only include commands that are allowed in all groups
+        .filter((cmd) => isAllowedInGroups(cmd) && !cmd.permissions?.allowedGroupsId) // only include commands without whitelist
         .flatMap((cmd) => toBotCommands(cmd))
         .concat([{ command: "help", description: "Show available commands" }])
       await ctx.api.setMyCommands(groupCommands, { scope: { type: "all_group_chats" } }).catch(() => {})
