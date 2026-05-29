@@ -187,6 +187,11 @@ function expectMissingPermissions(): void {
   wasMissingPermissions = false
 }
 
+function expectHelpCommandNotFound(): void {
+  expect(lastSentText()).toBe("Command not found\\. See /help for available commands\\.")
+  expect(wasMissingPermissions).toBe(false)
+}
+
 describe("ManagedCommands - Permissions", () => {
   it("executes command without permissions", async () => {
     await bot.handleUpdate(generateCommandCall("public"))
@@ -308,5 +313,15 @@ describe("ManagedCommands - Permissions", () => {
     const text = normalizeMarkdownEscapes(lastSentText())
     expect(text).toContain("Available commands")
     expect(text).toContain("/group_allowed_only")
+  })
+
+  it("returns not found for role-gated commands in help when permissions are missing", async () => {
+    await bot.handleUpdate(generateCommandCall("help", 2, "role_admin"))
+    expectHelpCommandNotFound()
+  })
+
+  it("returns not found for group-gated commands in help when the group is not allowed", async () => {
+    await bot.handleUpdate(generateGroupCommandCall("help", 51, "group_allowed_only"))
+    expectHelpCommandNotFound()
   })
 })

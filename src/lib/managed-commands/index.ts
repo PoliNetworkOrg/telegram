@@ -416,21 +416,25 @@ export class ManagedCommands<
       const userId = ctx.from.id
       const text = ctx.message?.text ?? ""
 
-      const [_, cmdArg] = text.replaceAll("/", "").split(" ")
-      if (cmdArg) {
-        const cmd = this.getCommands().find((c) =>
-          Array.isArray(c.trigger) ? c.trigger.includes(cmdArg) : c.trigger === cmdArg
-        )
-        if (!cmd) return ctx.reply(fmt(() => "Command not found. See /help for available commands."))
-
-        return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
-      }
-
       const getUserRoles = once(async () => await this.getUserRoles(userId))
       const isFromGroupAdmin = once(async () => {
         if (ctx.chat.type === "private") return true
         return await this.isFromGroupAdmin(ctx)
       })
+
+      const [_, cmdArg] = text.replaceAll("/", "").split(" ")
+      if (cmdArg) {
+        const cmd = this.getCommands().find((c) =>
+          Array.isArray(c.trigger) ? c.trigger.includes(cmdArg) : c.trigger === cmdArg
+        )
+
+        if (cmd) {
+          const allowed = await this.checkPermissionsCached(cmd, ctx, getUserRoles, isFromGroupAdmin)
+          if (allowed) return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
+        }
+
+        return ctx.reply(fmt(() => "Command not found. See /help for available commands."))
+      }
 
       const rawCollections = await asyncMap(Object.entries(this.commands), async ([collection, cmds]) => ({
         collection,

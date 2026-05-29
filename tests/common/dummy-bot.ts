@@ -49,11 +49,11 @@ export async function createDummyBot<C extends Context>() {
 }
 
 /** Generates a dummy command call `Update` for testing purposes. */
-export function generateCommandCall(trigger: string, id: number = 0): Update {
+export function generateCommandCall(trigger: string, id: number = 0, args: string = ""): Update {
   return {
     update_id: 0,
     message: {
-      text: `/${trigger}`,
+      text: `/${trigger} ${args}`.trim(),
       message_id: 0,
       date: now(),
       entities: [
@@ -82,11 +82,11 @@ export function generateCommandCall(trigger: string, id: number = 0): Update {
 }
 
 /** Generates a dummy command call `Update` for testing purposes, from a group chat */
-export function generateGroupCommandCall(trigger: string, id: number = 0): Update {
+export function generateGroupCommandCall(trigger: string, id: number = 0, args: string = ""): Update {
   return {
     update_id: 0,
     message: {
-      text: `/${trigger}`,
+      text: `/${trigger} ${args}`.trim(),
       message_id: 0,
       date: now(),
       entities: [
