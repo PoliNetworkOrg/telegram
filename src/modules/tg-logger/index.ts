@@ -37,6 +37,9 @@ const MOD_ACTION_TITLE = (props: ModerationAction) =>
     UNBAN: fmt(({ b }) => b`✅ Unban`),
     UNMUTE: fmt(({ b }) => b`🎤 Unmute`),
     SILENT: fmt(({ b }) => b`🔶 Possible Harmful Content Detection`),
+    WARN: fmt(({ b }) => b`⚠️ Warn`),
+    UNWARN: fmt(({ b }) => b`♻️ Unwarn`),
+    WARNS: fmt(({ b }) => b`📋 Warnings`),
   })[props.action]
 
 export class TgLogger extends Module<ModuleShared> {

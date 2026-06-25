@@ -5,5 +5,6 @@ import { banAll } from "./banall"
 import { del } from "./del"
 import { kick } from "./kick"
 import { mute } from "./mute"
+import { warn } from "./warn"
 
-export const moderation = new CommandsCollection<Role>("Moderation").withCollection(ban, banAll, del, kick, mute)
+export const moderation = new CommandsCollection<Role>("Moderation").withCollection(ban, banAll, del, kick, mute, warn)
