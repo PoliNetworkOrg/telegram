@@ -26,6 +26,26 @@ export type ModuleShared = {
   botInfo: UserFromGetMe
 }
 
+/**
+ * Validates and transforms a string into a type-safe number.
+ * 
+ * Since the Telegram API sends all payload data and command arguments as strings, 
+ * this schema serves as a strict gatekeeper. It ensures the string contains a valid 
+ * numeric value safely rejecting text, whitespace, and empty strings—before 
+ * casting it to a native JavaScript number.
+ * 
+ * @example
+ * tgnumber.parse("42");      // Returns: 42
+ * tgnumber.parse("abc");     // Throws: ZodError (Invalid numeric string)
+ * tgnumber.parse("   ");     // Throws: ZodError (Prevents whitespace converting to 0)
+ */
+export const tgnumber = z
+  .string()
+  .refine((s) => !Number.isNaN(Number(s)) && s.trim() !== "", {
+    message: "Must be a valid numeric string",
+  })
+  .transform(Number);
+
 export const numberOrString = z.string().transform((s) => {
   const n = Number(s)
   if (!Number.isNaN(n) && s.trim() !== "") return n
