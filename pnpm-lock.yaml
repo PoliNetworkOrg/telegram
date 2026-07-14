@@ -50,6 +50,9 @@ importers:
       croner:
         specifier: ^10.0.1
         version: 10.0.1
+      cross-env:
+        specifier: ^7.0.3
+        version: 7.0.3
       grammy:
         specifier: ^1.37.0
         version: 1.37.0
@@ -93,9 +96,6 @@ importers:
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260421.2
         version: 7.0.0-dev.20260421.2
-      cross-env:
-        specifier: ^7.0.3
-        version: 7.0.3
       pino-pretty:
         specifier: ^13.0.0
         version: 13.0.0

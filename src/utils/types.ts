@@ -39,12 +39,13 @@ export type ModuleShared = {
  * tgnumber.parse("abc");     // Throws: ZodError (Invalid numeric string)
  * tgnumber.parse("   ");     // Throws: ZodError (Prevents whitespace converting to 0)
  */
-export const tgnumber = z
-  .string()
-  .refine((s) => !Number.isNaN(Number(s)) && s.trim() !== "", {
-    message: "Must be a valid numeric string",
-  })
-  .transform(Number);
+export const tgnumber = z  
+  .string()  
+  .trim()  
+  .refine((s) => /^\d+$/.test(s), {  
+    message: "Must be a valid positive integer string",  
+  })  
+  .transform(Number);  
 
 export const numberOrString = z.string().transform((s) => {
   const n = Number(s)

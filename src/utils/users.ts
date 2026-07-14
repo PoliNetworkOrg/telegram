@@ -47,7 +47,7 @@ export async function getOverloadUser<C extends Context>(
 
   const user = await resolveUser(firstArg, context)
   if (!user) {
-    return new Err("SILENT_ERROR") 
+    return new Err("SILENT_ERROR")
   }
 
   return new Ok({

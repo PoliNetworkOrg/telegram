@@ -9,6 +9,10 @@ import { getOverloadUser, resolveUser } from "@/utils/users"
 import { api } from "@/backend"
 
 
+/**
+ * Shape of a warning record returned by the backend's `getByTarget` query.
+ * Includes the warning metadata plus joined group/admin/target info.
+ */
 export type Warning = {
   id: number;
   targetId: number;
@@ -40,6 +44,10 @@ export type Warning = {
   } | null;
 };
 
+/**
+ * Sends a message that auto-deletes after a short delay in groups,
+ * but awaits it (persistent) in private chats where ephemeral isn't supported.
+ */
 async function ephemeralInGroup(ctx: { chat: { type: string } }, message: MaybePromise<PartialMessage>) {
   if (ctx.chat.type === "private") {
     await message
@@ -49,6 +57,15 @@ async function ephemeralInGroup(ctx: { chat: { type: string } }, message: MaybeP
 }
 
 export const warn = new CommandsCollection<Role>("Warning")
+  /**
+   * /warn - Creates a warning for a user and triggers automatic penalties:
+   *         - 3 active warnings in the same group → auto-kick
+   *         - 4 active warnings across all groups → auto-ban-all
+   *
+   * Scope is "both" so that high-privilege roles (owner, direttivo) can warn
+   * even from DMs. Group admins are only allowed inside their own group via
+   * the `allowGroupAdmins` permission flag.
+   */
   .createCommand({
     trigger: "warn",
     args: [
@@ -65,7 +82,7 @@ export const warn = new CommandsCollection<Role>("Warning")
         description: "Optional reason to warn the user",
       },
     ],
-    description: "Warn a user from a group",
+    description: "Warn a user in this group",
     scope: "both",
     permissions: {
       allowedRoles: ["owner", "direttivo"],
@@ -73,19 +90,35 @@ export const warn = new CommandsCollection<Role>("Warning")
       allowGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo }) => {
+      // In DMs the command is only available to owner/direttivo; group admins
+      // get filtered out here before any API calls or side effects happen.
+      if (context.chat.type !== "group" && context.chat.type !== "supergroup") {
+        const { roles } = await api.tg.permissions.getRoles.query({ userId: context.from.id })
+        const ALLOWED_ROLES: Role[] = ["owner", "direttivo"]
+        if (!roles?.some((r: Role) => ALLOWED_ROLES.includes(r))) return
+      }
+      // Resolve the target user - by reply, username, or user ID.
+      // getOverloadUser handles all three cases and sends its own error reply
+      // when the user cannot be found (via resolveUser). We skip our own reply
+      // on SILENT_ERROR to avoid double-replying.
       const userOverload = await getOverloadUser(context, repliedTo ?? null, args.reasonOrUser, args.reason)
       if (userOverload.isErr()) {
-        await ephemeralInGroup(context, context.reply(
-          repliedTo
-            ? fmt(({ n }) => n`There was an error`)
-            : fmt(({ n }) => n`Target user not found, please try replying to their message`)
-        ))
+        if (userOverload.error !== "SILENT_ERROR") {
+          await ephemeralInGroup(context, context.reply(
+            repliedTo
+              ? fmt(({ n }) => n`There was an error`)
+              : fmt(({ n }) => n`Target user not found, please try replying to their message`)
+          ))
+        }
         logger.error({ args, repliedTo }, `WARN: ${userOverload.error}`)
         return
       }
 
       const { user, reason } = userOverload.value
 
+      // Persist the warning in the database.
+      // groupId is always set to the current chat so the backend can later
+      // count active warnings per-group or globally.
       try {
         const { error } = await api.tg.warnings.create.mutate({
           targetId: user.id,
@@ -106,6 +139,9 @@ export const warn = new CommandsCollection<Role>("Warning")
 
       const extraLines: string[] = []
 
+      // --- AUTO-KICK (group-level threshold) ---
+      // Only runs inside groups/supergroups. In DMs there is no group to kick
+      // from and context.chat.id would be a private chat ID, so we skip entirely.
       if (context.chat.type === "group" || context.chat.type === "supergroup") {
         try {
           const [groupCount] = await api.tg.warnings.getActiveCountInGroup.query({
@@ -123,18 +159,36 @@ export const warn = new CommandsCollection<Role>("Warning")
         }
       }
 
+      // --- AUTO-BAN-ALL (global threshold) ---
+      // Runs unconditionally (both DMs and groups) because the ban-all affects
+      // every group, not just the current one.
       try {
         const [totalCount] = await api.tg.warnings.getTotalActiveCount.query({
           targetId: user.id,
         })
+        
         if (totalCount.count >= 4) {
-          await modules.get("tgLogger").banAll(user, context.from, "BAN", "Auto-ban all: 4 total warnings")
-          extraLines.push("🚫 Auto-ban all initiated (4 total warnings)")
+
+          // Before issuing a network-wide ban, check that the target does not
+          // hold bypass roles (president, owner, direttivo). This mirrors the
+          // same guard in /ban_all so protected accounts cannot be auto-banned.
+          const BYPASS_ROLES: Role[] = ["president", "owner", "direttivo"]
+
+          const { roles } = await api.tg.permissions.getRoles.query({ userId: user.id })
+
+          if (!roles?.some((r: Role) => BYPASS_ROLES.includes(r))) {
+            await modules.get("tgLogger").banAll(user, context.from, "BAN", "Auto-ban all: 4 total warnings")
+            extraLines.push("🚫 Auto-ban all initiated (4 total warnings)")
+          } else {
+            logger.warn({ targetId: user.id }, "Auto-ban all skipped: user has bypass roles")
+          }
+
         }
       } catch (error) {
         logger.error({ error, targetId: user.id }, "Auto-ban all check failed after warning")
       }
 
+      // Send the success reply with any auto-penalty notices appended.
       await ephemeralInGroup(context, context.reply(
         fmt(({ b, n, i }) => [
           b`⚠️ User has been warned!`,
@@ -147,6 +201,14 @@ export const warn = new CommandsCollection<Role>("Warning")
       ))
     }
   })
+  /**
+   * /unwarn - Soft-deletes a warning by its numeric ID.
+   *
+   * In groups, the groupId is passed to the backend so that only warnings
+   * belonging to that group can be removed (prevents cross-group deletion by
+   * group admins). In DMs, groupId is omitted since high-privilege roles
+   * (owner, direttivo) are allowed to remove any warning globally.
+   */
 .createCommand({
     trigger: "unwarn",
     args: [{ key: "warnId", type: tgnumber, description: "Warning ID to remove (use /warns to get the ID)" }],
@@ -165,9 +227,23 @@ export const warn = new CommandsCollection<Role>("Warning")
         return
       }
 
+      // In DMs, require explicit role check because allowGroupAdmins in the
+      // permissions block doesn't apply outside a group context.
+      if (context.chat.type === "private") {
+        const { roles } = await api.tg.permissions.getRoles.query({ userId: context.from.id })
+        const ALLOWED_ROLES: Role[] = ["owner", "direttivo"]
+        if (!roles?.some((r: Role) => ALLOWED_ROLES.includes(r))) {
+          await context.reply(fmt(({ n }) => n`This command can only be used in a group.`))
+          return
+        }
+      }
+
       try {
+        // Pass groupId only when inside a group so the backend verifies the
+        // warning belongs to that chat. Omit it in DMs to allow global deletion.
         const res = await api.tg.warnings.deleteById.mutate({
-          id: warnId
+          id: warnId,
+          groupId: context.chat.type !== "private" ? context.chat.id : undefined,
         })
 
         if (res?.deleted === false) {
@@ -191,6 +267,13 @@ export const warn = new CommandsCollection<Role>("Warning")
       }
     },
   })
+  /**
+   * /warns - Lists all warnings (active, expired, removed) for a given user.
+   *
+   * Only available in private chats to avoid leaking warning data inside
+   * groups. Messages are chunked at 4000 characters to stay under Telegram's
+   * 4096-character per-message limit.
+   */
   .createCommand({
     trigger: "warns",
     description: "Get the warnings of a user",
@@ -216,46 +299,48 @@ export const warn = new CommandsCollection<Role>("Warning")
           )
         }
 
-        await context.reply(
-          fmt(({ b, n, i, code }) => {
-            const elements = [
-              b`⚠️ Warning history for @${user.username || user.first_name}:`,
-              `Total Warnings: ${warns.length}`,
-              "",
-            ];
+        // Chunk at 4000 chars to leave room for Telegram's overhead.
+        const MAX_LENGTH = 4000
+        const messageParts: string[] = []
+        let currentPart = fmt(({ b, n }) => [
+          b`⚠️ Warning history for @${user.username || user.first_name}:`,
+          n`Total Warnings: ${warns.length}`,
+          "",
+        ], { sep: "\n" })
 
-            warns.forEach((warn, index) => {
-              const date = new Date(warn.createdAt).toLocaleDateString();
-              const status = warn.isExpired ? "🟢 [Expired]" : warn.deletedAt ? "🗑️ [Removed]" : "🔴 [Active]";
-              
-              const warningId = warn.id
-              const groupName = warn.group?.title || `Group ID: ${warn.groupId}`;
-              const adminName = warn.admin?.firstName 
-                ? `@${warn.admin.username || warn.admin.firstName}` 
-                : `ID: ${warn.adminId}`;
-              
-              elements.push(
-                `${index + 1}. ${status} - ${date}`,
-                n`   🆔 ${b`Warning ID:`} ${code`${warningId}`}`,
-                n`   👥 ${b`Group:`} ${groupName}`,
-                n`   👮‍♂️ ${b`Admin:`} ${adminName}`,
-                n`   📝 ${b`Reason:`} ${warn.reason ? i`${warn.reason}` : "No reason provided"}`
-              )
+        for (const warn of warns) {
+          const date = new Date(warn.createdAt).toLocaleDateString();
+          const status = warn.isExpired ? "🟢 [Expired]" : warn.deletedAt ? "🗑️ [Removed]" : "🔴 [Active]";
+          const groupName = warn.group?.title || `Group ID: ${warn.groupId}`;
+          const adminName = warn.admin?.firstName 
+            ? `@${warn.admin.username || warn.admin.firstName}` 
+            : `ID: ${warn.adminId}`;
 
-              if (index < warns.length - 1) {
-                elements.push("");
-              }
-            });
+          const entryStr = fmt(({ b, n, i, code }) => [
+            "",
+            `${warns.indexOf(warn) + 1}. ${status} - ${date}`,
+            n`   🆔 ${b`Warning ID:`} ${code`${warn.id}`}`,
+            n`   👥 ${b`Group:`} ${groupName}`,
+            n`   👮‍♂️ ${b`Admin:`} ${adminName}`,
+            n`   📝 ${b`Reason:`} ${warn.reason ? i`${warn.reason}` : "No reason provided"}`,
+          ], { sep: "\n" })
 
-            return elements;
-          }, {
-            sep: "\n",
-          })
-        )
+          if ((currentPart + entryStr).length > MAX_LENGTH) {
+            messageParts.push(currentPart)
+            currentPart = entryStr
+          } else {
+            currentPart += entryStr
+          }
+        }
+
+        if (currentPart) messageParts.push(currentPart)
+
+        for (const part of messageParts) {
+          await context.reply(part)
+        }
       } catch (error) {
         logger.error({ error }, "Failed to fetch warnings")
         await context.reply(fmt(({ n }) => n`There was an error: ${String(error)}`))
       }
     },
 })
-

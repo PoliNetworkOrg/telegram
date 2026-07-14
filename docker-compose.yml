@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
   redis:
     image: redis:7-alpine
     container_name: redis_db
     restart: always
-    command: redis-server --requirepass "Radmin"
+    command: redis-server --requirepass "${REDIS_PASSWORD:-Radmin}"
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
 
@@ -16,14 +14,14 @@ services:
     container_name: influx_db
     restart: always
     ports:
-      - "8086:8086"
+      - "127.0.0.1:8086:8086"
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=Iadmin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=Iadmin1234567
-      - DOCKER_INFLUXDB_INIT_ORG=polinetwork
-      - DOCKER_INFLUXDB_INIT_BUCKET=telegram_bot
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=tu_token_secreto_de_32_caracteres_o_mas
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_USERNAME:-Iadmin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD:-Iadmin1234567}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG:-polinetwork}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET:-telegram_bot}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN:?INFLUXDB_TOKEN is required}
     volumes:
       - influxdb_data:/var/lib/influxdb2
 
