@@ -1,17 +1,15 @@
 name: Docker Image CI
 on:
-  workflow_run:
-    workflows: [Test]
+  push:
     branches: [main]
-    types:
-      - completed
-  workflow_dispatch:
 
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
