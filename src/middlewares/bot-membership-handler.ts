@@ -1,8 +1,11 @@
-import { Composer, type Filter, InlineKeyboard, type MiddlewareObj } from "grammy"
+import type { Filter } from "grammy"
+import type { Chat } from "grammy/types"
 import { api } from "@/backend"
 import { GroupManagement } from "@/lib/group-management"
+import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
-import { modules } from "@/modules"
+import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
+import { redis } from "@/redis"
 import type { Context } from "@/utils/types"
 
 type ChatType = "group" | "supergroup" | "private" | "channel"
@@ -29,107 +32,75 @@ const joinEvent: Record<ChatType, StatusType[]> = {
   private: [],
 }
 
+function predicate<C extends Context>(ctx: C): ctx is C & { chat: Chat } {
+  return ctx.chat !== undefined && ctx.update.my_chat_member === undefined
+}
+
 type MemberContext<C extends Context> = Filter<C, "my_chat_member">
-export class BotMembershipHandler<C extends Context> implements MiddlewareObj<C> {
-  private composer = new Composer<C>()
+export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> extends TrackedMiddleware<C> {
+  private TEMP_redis = new RedisFallbackAdapter<number>({
+    redis,
+    prefix: "TEMP_groups",
+    logger,
+  })
 
   constructor() {
+    super("bot_membership_handler")
+
+    void this.fillRedis()
+
+    // TEMP: this is for initial migration from previous bot
+    this.composer.fork().filter(predicate, async (ctx, next) => {
+      if (ctx.chat.type === "private") return next()
+
+      const redisCheck = await this.TEMP_redis.has(ctx.chat.id.toString())
+      if (redisCheck) return next()
+
+      const me = await ctx.getChatMember(ctx.me.id).catch(() => ({ status: "undefined" }))
+      if (me.status !== "administrator") {
+        logger.warn({ chat: ctx.chat }, "Cannot create group because bot is not admin")
+        return next()
+      }
+
+      const res = await GroupManagement.create(ctx.chat.id, ctx.me)
+      if (res.isOk()) await this.TEMP_redis.write(ctx.chat.id.toString(), ctx.chat.id)
+      else logger.error({ chat: ctx.chat, error: res.error }, "Cannot create group")
+
+      await next()
+    })
+
     this.composer.on("my_chat_member", async (ctx, next) => {
       const chat = ctx.myChatMember.chat
       const newStatus = ctx.myChatMember.new_chat_member.status
       if (chat.type === "private") return next()
 
-      if (this.isJoin(ctx)) {
+      if (BotMembershipHandler.isJoin(ctx)) {
         // joined event
         // go next, if adder has no permission
-        if (!(await this.checkAdderPermission(ctx))) return next()
+        if (!(await GroupManagement.checkAdderPermission(ctx.myChatMember.chat, ctx.myChatMember.from))) return next()
       }
 
       if (newStatus === "administrator") {
         // promoted to admin event
-        await this.createGroup(ctx)
+        await GroupManagement.create(ctx.chatId, ctx.myChatMember.from)
       } else {
         // not an admin anymore (left, restricted or downgraded)
-        await this.deleteGroup(ctx)
+        await GroupManagement.delete(ctx.chat)
       }
 
       await next()
     })
   }
 
-  middleware() {
-    return this.composer.middleware()
+  private async fillRedis() {
+    const dbGroups = await api.tg.groups.getAll.query()
+    await Promise.all(dbGroups.map((g) => this.TEMP_redis.write(g.telegramId.toString(), g.telegramId)))
   }
 
-  private isJoin(ctx: MemberContext<C>): boolean {
+  private static isJoin<C extends Context>(ctx: MemberContext<C>): boolean {
     const oldStatusCheck = ["left", "kicked"].includes(ctx.myChatMember.old_chat_member.status)
     const newStatusCheck = joinEvent[ctx.myChatMember.chat.type].includes(ctx.myChatMember.new_chat_member.status)
 
     return oldStatusCheck && newStatusCheck
-  }
-
-  private async checkAdderPermission(ctx: MemberContext<C>): Promise<boolean> {
-    const { allowed } = await api.tg.permissions.canAddBot.query({ userId: ctx.myChatMember.from.id })
-    if (!allowed) {
-      const left = await ctx.leaveChat().catch(() => false)
-      if (left) {
-        await modules
-          .get("tgLogger")
-          .groupManagement({ type: "LEAVE", chat: ctx.myChatMember.chat, addedBy: ctx.myChatMember.from })
-        logger.info({ chat: ctx.myChatMember.chat, from: ctx.myChatMember.from }, `[BCE] Left unauthorized group`)
-      } else {
-        await modules.get("tgLogger").groupManagement({
-          type: "LEAVE_FAIL",
-          chat: ctx.myChatMember.chat,
-          addedBy: ctx.myChatMember.from,
-        })
-        logger.error(
-          { chat: ctx.myChatMember.chat, from: ctx.myChatMember.from },
-          `[BCE] Cannot left unauthorized group`
-        )
-      }
-    }
-    return allowed
-  }
-
-  private async deleteGroup(ctx: MemberContext<C>): Promise<void> {
-    const chat = ctx.myChatMember.chat
-    const res = await GroupManagement.delete(chat)
-    await res.match(
-      async () => {
-        await modules.get("tgLogger").groupManagement({ type: "DELETE", chat })
-        logger.info({ chat }, `[BCE] Deleted a group`)
-      },
-      (e) => {
-        logger.error({ chat }, `[BCE] Cannot delete group from DB. Reason: ${e}`)
-      }
-    )
-  }
-
-  private async createGroup(ctx: MemberContext<C>): Promise<void> {
-    const chat = await ctx.getChat()
-    const res = await GroupManagement.create(chat)
-    const logChat = {
-      id: chat.id,
-      title: chat.title,
-      is_forum: chat.is_forum,
-      type: chat.type,
-      invite_link: chat.invite_link,
-    }
-
-    await res.match(
-      async (g) => {
-        await modules.get("tgLogger").groupManagement({ type: "CREATE", chat, inviteLink: g.link, addedBy: ctx.from })
-        logger.info({ chat: logChat }, `[BCE] Created a new group`)
-      },
-      async (e) => {
-        const ik = new InlineKeyboard()
-        if (chat.invite_link) ik.url("Join Group", chat.invite_link)
-        await modules
-          .get("tgLogger")
-          .groupManagement({ type: "CREATE_FAIL", chat, inviteLink: chat.invite_link, reason: e })
-        logger.error({ chat: logChat }, `[BCE] Cannot create group into DB. Reason: ${e}`)
-      }
-    )
   }
 }

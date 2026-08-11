@@ -3,6 +3,7 @@ import type { Chat, ChatMember, Message, User } from "grammy/types"
 import { err, ok, type Result } from "neverthrow"
 import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
+import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { type Duration, duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
@@ -33,7 +34,7 @@ function deduceModerationAction(oldMember: ChatMember, newMember: ChatMember): M
 }
 
 const MAP_ACTIONS: Record<
-  Exclude<ModerationAction["action"], "SILENT" | "MULTI_CHAT_SPAM"> | "BAN_ALL" | "MUTE_ALL",
+  Exclude<ModerationAction["action"], "SILENT" | "MULTI_CHAT_SPAM"> | "BAN_ALL" | "UNBAN_ALL",
   ApiInput["tg"]["auditLog"]["create"]["type"]
 > = {
   MUTE: "mute",
@@ -42,10 +43,9 @@ const MAP_ACTIONS: Record<
   UNBAN: "unban",
   UNMUTE: "unmute",
   BAN_ALL: "ban_all",
-  MUTE_ALL: "mute_all",
+  UNBAN_ALL: "unban_all",
 }
 
-// TODO: missing in-channel user feedback (eg. <user> has been muted by <admin>...)
 class ModerationClass<C extends Context> implements MiddlewareObj<C> {
   private composer = new Composer<C>()
   private static instance: ModerationClass<Context> | null = null
@@ -143,6 +143,35 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
     })
   }
 
+  /**
+   * Mass deletes the last 100 messages of a user in a specific chat, on best effort basis.
+   *
+   * Used when banning a user to delete all their messages in the chat
+   */
+  public async deleteAllLastMessages(userId: number, chatId: number): Promise<void> {
+    await MessageUserStorage.getInstance()
+      .sync()
+      .catch(() => {})
+
+    // both the limit of tRPC endpoint and Telegram API hard limit: https://core.telegram.org/bots/api#deletemessages
+    const messages = await api.tg.messages.getLastByUser
+      .query({ userId, chatId, limit: 100 })
+      .then((res) => res.messages ?? [])
+      .catch(() => [])
+
+    const success = await modules.shared.api
+      .deleteMessages(
+        chatId,
+        messages.map((m) => m.messageId)
+      )
+      .catch(() => {})
+
+    logger.debug(
+      { userId, chatId, messagesCount: messages.length, success },
+      "[Moderation:deleteAllLastMessages] deleted last messages of the user in the chat"
+    )
+  }
+
   private async perform(p: ModerationAction) {
     switch (p.action) {
       case "SILENT":
@@ -151,16 +180,21 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
         return modules.shared.api
           .banChatMember(p.chat.id, p.target.id, {
             until_date: Date.now() / 1000 + duration.values.m,
+            revoke_messages: true,
           })
           .catch(() => false)
-      case "BAN":
-        return modules.shared.api
-          .banChatMember(p.chat.id, p.target.id, {
-            until_date: p.duration?.timestamp_s,
-          })
-          .catch(() => false)
+      case "BAN": {
+        const [success] = await Promise.all([
+          modules.shared.api
+            .banChatMember(p.chat.id, p.target.id, { until_date: p.duration?.timestamp_s })
+            .catch(() => false),
+          this.deleteAllLastMessages(p.target.id, p.chat.id),
+        ])
+        return success
+      }
+
       case "UNBAN":
-        return modules.shared.api.unbanChatMember(p.chat.id, p.target.id).catch(() => false)
+        return modules.shared.api.unbanChatMember(p.chat.id, p.target.id, { only_if_banned: true }).catch(() => false)
       case "MUTE":
         return modules.shared.api
           .restrictChatMember(p.chat.id, p.target.id, RestrictPermissions.mute, {

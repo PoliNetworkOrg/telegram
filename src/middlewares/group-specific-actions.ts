@@ -1,8 +1,9 @@
-import { Composer, type Filter, type MiddlewareObj } from "grammy"
+import type { Filter } from "grammy"
 import { err, ok, type Result } from "neverthrow"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
+import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { fmt, fmtUser } from "@/utils/format"
 import type { Context } from "@/utils/types"
 import { wait } from "@/utils/wait"
@@ -28,19 +29,19 @@ function groupSpecificHashtags(groupId: number): string[] {
   }
 }
 
-export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C> {
-  private composer = new Composer<C>()
-
+export class GroupSpecificActions<C extends TelemetryContextFlavor<Context>> extends TrackedMiddleware<C> {
   constructor() {
+    super("group_specific_actions")
     this.composer
       .filter((ctx) => !!ctx.chatId && TARGET_GROUP_IDS_SET.has(ctx.chatId))
-      .on("message", async (ctx, next) => {
+      .on("message:text", async (ctx, next) => {
         if (ctx.from.id === ctx.me.id) return next() // skip if bot
         const { roles } = await api.tg.permissions.getRoles.query({ userId: ctx.from.id })
         if (roles && roles.length > 0) return next() // skip if admin or other roles
 
         const chatMember = await ctx.getChatMember(ctx.from.id)
         if (chatMember.status === "administrator" || chatMember.status === "creator") return next() // skip if group-admin
+        ctx.point.tag("group_specific_chat_id", ctx.chatId.toString())
 
         let check: Result<void, string>
         switch (ctx.chatId) {
@@ -90,28 +91,24 @@ export class GroupSpecificActions<C extends Context> implements MiddlewareObj<C>
       })
   }
 
-  private checkAlloggi(ctx: Filter<C, "message">): Result<void, string> {
+  private checkAlloggi(ctx: Filter<C, "message:text">): Result<void, string> {
     return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
-  private checkRipetizioni(ctx: Filter<C, "message">): Result<void, string> {
+  private checkRipetizioni(ctx: Filter<C, "message:text">): Result<void, string> {
     return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
-  private checkBooks(ctx: Filter<C, "message">): Result<void, string> {
+  private checkBooks(ctx: Filter<C, "message:text">): Result<void, string> {
     return this.checkHashtags(ctx, groupSpecificHashtags(ctx.chatId))
   }
 
-  private checkHashtags(ctx: Filter<C, "message">, requiredHashtags: string[]): Result<void, string> {
+  private checkHashtags(ctx: Filter<C, "message:text">, requiredHashtags: string[]): Result<void, string> {
     const hashtags = ctx.entities("hashtag").map((e) => e.text.toLowerCase())
     const hasRequired = requiredHashtags.some((tag) => hashtags.includes(tag.toLowerCase()))
     if (!hasRequired) {
       return err(`You must include one of the following hashtags in your message: ${requiredHashtags.join(", ")}`)
     }
     return ok()
-  }
-
-  middleware() {
-    return this.composer.middleware()
   }
 }

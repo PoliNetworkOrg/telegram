@@ -1,9 +1,9 @@
 import { api } from "@/backend"
+import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
+import type { Role } from "@/utils/types"
 
-import { _commandsBase } from "../_base"
-
-_commandsBase.createCommand({
+export const testdb = new CommandsCollection<Role>().createCommand({
   trigger: "test_db",
   scope: "private",
   description: "Test postgres db through the backend",

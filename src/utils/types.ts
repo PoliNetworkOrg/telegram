@@ -3,6 +3,7 @@ import type { User, UserFromGetMe } from "grammy/types"
 import z from "zod"
 import type { ApiInput, ApiOutput } from "@/backend"
 import type { ManagedCommandsFlavor } from "@/lib/managed-commands"
+import type { TelemetryContextFlavor } from "@/modules/telemetry"
 
 export type OptionalPropertyOf<T extends object> = Exclude<
   {
@@ -15,8 +16,9 @@ export type ContextWith<P extends OptionalPropertyOf<TContext>> = Exclude<TConte
 }
 
 export type MaybePromise<T> = T | Promise<T>
+export type MaybeArray<T> = T | T[]
 
-export type Context = ManagedCommandsFlavor<TContext>
+export type Context = TelemetryContextFlavor<ManagedCommandsFlavor<TContext>>
 export type Role = ApiInput["tg"]["permissions"]["addRole"]["role"]
 
 export type ModuleShared = {
@@ -40,3 +42,8 @@ export const toGrammyUser = (apiUser: Exclude<ApiOutput["tg"]["users"]["get"]["u
   is_premium: undefined,
   added_to_attachment_menu: undefined,
 })
+
+export type PartialMessage = {
+  message_id: number
+  chat: { id: number }
+}

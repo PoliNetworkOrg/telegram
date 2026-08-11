@@ -1,3 +1,4 @@
+import { api } from "@/backend"
 import { BANNED_DOMAINS, POLINETWORK_DISCORD_GUILD_ID } from "./constants"
 
 /**
@@ -31,14 +32,17 @@ export async function checkForAllowedLinks(links: string[]): Promise<boolean> {
     }
 
     // specific telegram invites handling
-    const telegramMatches = url.matchAll(/t\.me\/([^/?#]+)/g)
+    // TODO: check more ways to prevent spam?
+    const telegramMatches = url.matchAll(/t\.me\/(?:joinchat\/|\+|addlist\/)([^/?#\n]+)/g)
     for (const match of telegramMatches) {
       const code = match[1]
-      // if this is the channel link, we allow it
-      if (code !== "c") {
-        // TODO: fetch invite links from backend
-        return false
-      }
+      // canonicalize the link to avoid issues with different formats (e.g t.me/joinchat/xxxx vs t.me/+xxxx)
+      const inviteLink = `https://t.me/+${code}`
+      const isOurs = await api.tg.groups.getByInviteLink
+        .query({ inviteLink })
+        .then((group) => group !== null)
+        .catch(() => true) // fail open: if the check fails, we assume the link is fine
+      if (!isOurs) return false
     }
   }
 

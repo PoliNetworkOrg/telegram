@@ -1,27 +1,29 @@
 import { Cron } from "croner"
-import { Composer, type Context, type MiddlewareObj } from "grammy"
+import type { Context } from "grammy"
 import type { User } from "grammy/types"
 import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
+import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { padChatId } from "@/utils/chat"
 import { toGrammyUser } from "@/utils/types"
 
 export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
 type DBUsers = ApiInput["tg"]["users"]["add"]["users"]
 
-export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
-  private static instance: MessageUserStorage<Context> | null = null
-  static getInstance<C extends Context>(): MessageUserStorage<C> {
+type TC = TelemetryContextFlavor<Context>
+export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
+  private static instance: MessageUserStorage<TC> | null = null
+  static getInstance<C extends TC>(): MessageUserStorage<C> {
     if (!MessageUserStorage.instance) {
-      MessageUserStorage.instance = new MessageUserStorage<Context>()
+      MessageUserStorage.instance = new MessageUserStorage<TC>()
     }
     return MessageUserStorage.instance as unknown as MessageUserStorage<C>
   }
 
-  private composer: Composer<C> = new Composer<C>()
   private memoryStorage: Message[] = []
   private userStorage: Map<number, User> = new Map()
   private constructor() {
+    super("message_user_storage")
     new Cron("0 */1 * * * *", () => this.sync())
 
     this.composer.on(["message:text", "message:caption"], (ctx, next) => {
@@ -42,6 +44,15 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
       this.userStorage.set(ctx.from.id, ctx.from)
       return next()
     })
+
+    // save user on join
+    this.composer.on("chat_member").filter(
+      (ctx) => ctx.chatMember.old_chat_member.status === "left" && ctx.chatMember.new_chat_member.status === "member",
+      (ctx, next) => {
+        this.userStorage.set(ctx.chatMember.new_chat_member.user.id, ctx.chatMember.new_chat_member.user)
+        return next()
+      }
+    )
   }
 
   async get(chatId: number, messageId: number): Promise<Message | null> {
@@ -123,9 +134,5 @@ export class MessageUserStorage<C extends Context> implements MiddlewareObj<C> {
     }
 
     logger.debug(`userStorage: ${users.length} users upserted in the database`)
-  }
-
-  middleware() {
-    return this.composer.middleware()
   }
 }

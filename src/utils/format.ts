@@ -138,9 +138,14 @@ export function fmt(cb: (formatters: Formatters) => string | (string | undefined
   )
 }
 
-export function fmtUser(user: Partial<Pick<User, "id" | "first_name" | "last_name">> & { id: number }): string {
+export function fmtUser(
+  user: Partial<Pick<User, "id" | "first_name" | "last_name">> & { id: number },
+  showId: boolean = true
+): string {
   const fullname = user.last_name ? `${user.first_name} ${user.last_name}` : user.first_name
-  return formatters.n`${formatters.link(fullname ?? "[no-name]", `tg://user?id=${user.id}`)} [${formatters.code`${user.id}`}]`
+  return showId
+    ? formatters.n`${formatters.link(fullname ?? "[no-name]", `tg://user?id=${user.id}`)} [${formatters.code`${user.id}`}]`
+    : formatters.n`${formatters.link(fullname ?? "[no-name]", `tg://user?id=${user.id}`)}`
 }
 
 export function fmtChat(chat: Chat, inviteLink?: string): string {

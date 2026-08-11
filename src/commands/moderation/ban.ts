@@ -1,35 +1,59 @@
+import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
+import { ephemeral } from "@/utils/messages"
 import { getTelegramId } from "@/utils/telegram-id"
-import { numberOrString } from "@/utils/types"
-import { getUser } from "@/utils/users"
-import { wait } from "@/utils/wait"
-import { _commandsBase } from "./_base"
+import { numberOrString, type Role } from "@/utils/types"
+import { getOverloadUser, getUser } from "@/utils/users"
 
-_commandsBase
+export const ban = new CommandsCollection<Role>("Banning")
   .createCommand({
     trigger: "ban",
-    args: [{ key: "reason", optional: true, description: "Optional reason to ban the user" }],
+    args: [
+      {
+        key: "reasonOrUser",
+        optional: true,
+        description:
+          "If the message is a reply, this argument is the reason. Otherwise, it's the username or user id of the user to ban",
+        type: numberOrString,
+      },
+      { key: "reason", optional: true, description: "Optional reason to ban the user" },
+    ],
     description: "Permanently ban a user from a group",
     scope: "group",
-    reply: "required",
+    reply: "optional",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
-      allowedGroupAdmins: true,
+      allowGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo }) => {
-      await context.deleteMessage()
-      if (!repliedTo.from) {
-        logger.error("ban: no repliedTo.from field (the msg was sent in a channel)")
+      const userOverload = await getOverloadUser(context, repliedTo, args.reasonOrUser, args.reason)
+      if (userOverload.isErr()) {
+        void ephemeral(
+          context.reply(
+            repliedTo
+              ? fmt(({ n }) => n`There was an error`)
+              : fmt(({ n }) => n`Target user not found, please try replying to their message`)
+          )
+        )
+        logger.error({ args, repliedTo }, `BAN: ${userOverload.error}`)
         return
       }
 
-      const res = await Moderation.ban(repliedTo.from, context.chat, context.from, null, [repliedTo], args.reason)
-      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      await wait(5000)
-      await msg.delete()
+      const { user, reason } = userOverload.value
+
+      const res = await Moderation.ban(
+        user,
+        context.chat,
+        context.from,
+        null,
+        repliedTo ? [repliedTo] : undefined,
+        reason
+      )
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })
   .createCommand({
@@ -47,11 +71,11 @@ _commandsBase
     scope: "group",
     reply: "required",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
-      allowedGroupAdmins: true,
+      allowGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo }) => {
-      await context.deleteMessage()
       if (!repliedTo.from) {
         logger.error("ban: no repliedTo.from field (the msg was sent in a channel)")
         return
@@ -65,9 +89,7 @@ _commandsBase
         [repliedTo],
         args.reason
       )
-      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      await wait(5000)
-      await msg.delete()
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })
   .createCommand({
@@ -76,34 +98,26 @@ _commandsBase
     description: "Unban a user from a group",
     scope: "group",
     permissions: {
+      allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
-      allowedGroupAdmins: true,
+      allowGroupAdmins: true,
     },
     handler: async ({ args, context }) => {
-      await context.deleteMessage()
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 
       if (!userId) {
         logger.debug(`unban: no userId for username ${args.username}`)
-        const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
-        await wait(5000)
-        await msg.delete()
-        return
+        return void ephemeral(context.reply(fmt(({ b }) => b`@${context.from.username} user not found`)))
       }
 
       const user = await getUser(userId, context)
       if (!user) {
-        const msg = await context.reply("Error: cannot find this user")
         logger.error({ userId }, "UNBAN: cannot retrieve the user")
-        await wait(5000)
-        await msg.delete()
-        return
+        return void ephemeral(context.reply(fmt(({ n }) => [n`Error: cannot find this user`])))
       }
 
       const res = await Moderation.unban(user, context.chat, context.from)
-      const msg = await context.reply(res.isErr() ? res.error.fmtError : "OK")
-      await wait(5000)
-      await msg.delete()
+      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
     },
   })

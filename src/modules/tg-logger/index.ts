@@ -1,16 +1,21 @@
 import { GrammyError, InlineKeyboard } from "grammy"
 import type { Message, User } from "grammy/types"
-import { api } from "@/backend"
 import { Module } from "@/lib/modules"
+import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
+import { redis } from "@/redis"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
+import { after } from "@/utils/wait"
+import { modules } from ".."
 import type { ModerationAction, PreDeleteResult } from "../moderation/types"
-import { type BanAll, banAllMenu, getBanAllText } from "./ban-all"
+import { type BanAll, getBanAllText } from "./ban-all"
 import { grantCreatedMenu, grantMessageMenu } from "./grants"
 import { getReportText, type Report, reportMenu } from "./report"
 import type * as Types from "./types"
+
+type REPORT_RESULT = "SENT" | "ALREADY_SENT" | "ERROR"
 
 type Topics = {
   actionRequired: number
@@ -35,6 +40,13 @@ const MOD_ACTION_TITLE = (props: ModerationAction) =>
   })[props.action]
 
 export class TgLogger extends Module<ModuleShared> {
+  private reportStorage = new RedisFallbackAdapter<boolean>({
+    redis,
+    logger,
+    prefix: "report",
+    ttl: 900,
+  })
+
   constructor(
     public readonly groupId: number,
     private topics: Topics
@@ -79,12 +91,8 @@ export class TgLogger extends Module<ModuleShared> {
           e.description.includes("there are no messages to forward")
         ) {
           logger.warn({ e }, "[TgLogger:forward] Message(s) to forward not found")
-          // await this.log(
-          //   topicId,
-          //   fmt(({ b, i }) => [b`Could not forward the message`, i`It probably was deleted before forwarding`], {
-          //     sep: "\n",
-          //   })
-          // )
+        } else if (e.description.includes("MESSAGE_ID_INVALID")) {
+          logger.warn({ e, chatId, messageIds }, "[TgLogger:forward] Message ID(s) is not valid for telegram API")
         } else {
           await this.exception({ type: "BOT_ERROR", error: e }, "TgLogger.forward")
           logger.error({ e }, "[TgLogger:forward] There was an error while trying to forward a message")
@@ -96,9 +104,14 @@ export class TgLogger extends Module<ModuleShared> {
     return []
   }
 
-  public async report(message: Message, reporter: User): Promise<boolean> {
-    if (message.from === undefined) return false // should be impossible
+  public async report(message: Message, reporter: User): Promise<REPORT_RESULT> {
+    if (message.from === undefined) return "ERROR" // should be impossible
     const { invite_link } = await this.shared.api.getChat(message.chat.id)
+
+    const reportKey = `${message.chat.id}_${message.message_id}`
+
+    if (await this.reportStorage.has(reportKey).catch(() => false)) return "ALREADY_SENT"
+    await this.reportStorage.write(reportKey, true).catch(() => {})
 
     const report: Report = { message, reporter } as Report
     const reportText = getReportText(report, invite_link)
@@ -108,10 +121,10 @@ export class TgLogger extends Module<ModuleShared> {
       disable_notification: false,
     })
 
-    if (!reportMsg) return false
+    if (!reportMsg) return "ERROR"
 
     await this.forward(this.topics.actionRequired, message.chat.id, [message.message_id])
-    return true
+    return "SENT"
   }
 
   // NOTE: this does not delete the messages
@@ -159,56 +172,17 @@ export class TgLogger extends Module<ModuleShared> {
     }
   }
 
-  public async banAll(target: User, reporter: User, type: "BAN" | "UNBAN", reason?: string): Promise<string | null> {
-    const direttivo = await api.tg.permissions.getDirettivo.query()
-
-    switch (direttivo.error) {
-      case "EMPTY":
-        return fmt(({ n }) => n`Error: Direttivo is not set`)
-
-      case "NOT_ENOUGH_MEMBERS":
-        return fmt(({ n }) => n`Error: Direttivo has not enough members!`)
-
-      case "TOO_MANY_MEMBERS":
-        return fmt(({ n }) => n`Error: Direttivo has too many members!`)
-
-      case "INTERNAL_SERVER_ERROR":
-        return fmt(({ n }) => n`Error: there was an internal error while fetching members of Direttivo.`)
-
-      case null:
-        break
-    }
-
-    const voters = direttivo.members.map((m) => ({
-      user: m.user
-        ? {
-            id: m.userId,
-            first_name: m.user.firstName,
-            last_name: m.user.lastName,
-            username: m.user.username,
-            is_bot: m.user.isBot,
-            language_code: m.user.langCode,
-          }
-        : { id: m.userId },
-      isPresident: m.isPresident,
-      vote: undefined,
-    }))
-
-    if (!voters.some((v) => v.isPresident))
-      return fmt(
-        ({ n, b }) => [b`Error: No member is President!`, n`${b`Members:`} ${voters.map((v) => v.user.id).join(" ")}`],
-        {
-          sep: "\n",
-        }
-      )
-
+  public async banAll(
+    target: User | number,
+    reporter: User,
+    type: "BAN" | "UNBAN",
+    reason?: string
+  ): Promise<string | null> {
     const banAll: BanAll = {
       type,
-      outcome: "waiting",
       reporter: reporter,
       reason,
       target,
-      voters,
       state: {
         successCount: 0,
         failedCount: 0,
@@ -216,12 +190,24 @@ export class TgLogger extends Module<ModuleShared> {
       },
     }
 
-    const menu = await banAllMenu(banAll)
-    await this.log(this.topics.banAll, "———————————————")
-    const msg = await this.log(this.topics.banAll, getBanAllText(banAll), { reply_markup: menu })
+    const msg = await this.log(this.topics.banAll, getBanAllText(banAll))
+
+    if (!msg?.message_id) {
+      logger.error("[banall] There was an error when initiating banall, no msg.msgId")
+      return fmt(
+        ({ n, b }) => [
+          b`${type} All ERROR!`,
+          n`Cannot log the message in tgLogger, therefore cannot start the procedure`,
+          n`This should be inspected as it should not never happen`,
+        ],
+        { sep: "\n" }
+      )
+    }
+
+    await modules.get("banAll").initiateBanAll(banAll, msg.message_id)
     return fmt(
       ({ n, b, link }) => [
-        b`${type} All requested!`,
+        b`${type} All started!`,
         msg
           ? n`Check ${link("here", `https://t.me/c/${this.groupId}/${this.topics.banAll}/${msg.message_id}`)}`
           : undefined,
@@ -278,6 +264,7 @@ export class TgLogger extends Module<ModuleShared> {
       ? new InlineKeyboard().url("See Deleted Message", props.preDeleteRes.link)
       : undefined
     await this.log(isAutoModeration ? this.topics.autoModeration : this.topics.adminActions, mainMsg, { reply_markup })
+    if (!isAutoModeration) void this.logModActionInChat(props)
     return mainMsg
   }
 
@@ -319,11 +306,12 @@ export class TgLogger extends Module<ModuleShared> {
         break
 
       case "CREATE":
+      case "UPDATE":
         msg = fmt(
           ({ b, n }) => [
-            b`✳ Create`,
+            props.type === "CREATE" ? b`✳ Create` : b`🔄 Update`,
             n`${b`Group:`} ${fmtChat(props.chat)}`,
-            n`${b`Added by:`} ${fmtUser(props.addedBy)}`,
+            n`${props.type === "CREATE" ? b`Added by:` : b`Requested by:`} ${fmtUser(props.addedBy)}`,
           ],
           {
             sep: "\n",
@@ -332,10 +320,11 @@ export class TgLogger extends Module<ModuleShared> {
         reply_markup = new InlineKeyboard().url("Join Group", props.inviteLink)
         break
 
+      case "UPDATE_FAIL":
       case "CREATE_FAIL":
         msg = fmt(
           ({ b, n, i }) => [
-            b`! Cannot Create`,
+            b`! Cannot ${props.type === "CREATE_FAIL" ? "Create" : "Update"}`,
             n`${b`Group:`} ${fmtChat(props.chat)}`,
             n`${b`Reason`}: ${props.reason}`,
             i`Check logs for more details`,
@@ -385,7 +374,7 @@ export class TgLogger extends Module<ModuleShared> {
             n`${b`By:`} ${fmtUser(props.by)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
             n`\n${b`Valid since:`} ${fmtDate(props.since)}`,
-            n`${b`Duration:`} ${props.duration.raw} (until ${fmtDate(new Date(props.since.getTime() + props.duration.secondsFromNow * 1000))})`,
+            n`${b`Valid until:`} ${fmtDate(props.until)}`,
           ],
           { sep: "\n" }
         )
@@ -497,5 +486,43 @@ export class TgLogger extends Module<ModuleShared> {
 
     await this.log(this.topics.exceptions, msg)
     return msg
+  }
+
+  private async logModActionInChat(p: ModerationAction): Promise<void> {
+    if (
+      p.action !== "BAN" &&
+      p.action !== "KICK" &&
+      p.action !== "MUTE" &&
+      p.action !== "UNBAN" &&
+      p.action !== "UNMUTE"
+    )
+      return
+
+    const msg = fmt(
+      ({ b, n, skip }) => [
+        skip`${MOD_ACTION_TITLE(p)}`,
+        n`${b`Target:`} ${fmtUser(p.target, false)}`,
+        n`${b`Moderator:`} ${fmtUser(p.from, false)}`,
+        "duration" in p && p.duration ? n`${b`Duration:`} ${p.duration.raw} (until ${p.duration.dateStr})` : undefined,
+        "reason" in p && p.reason ? n`${b`Reason:`} ${p.reason}` : undefined,
+      ],
+      { sep: "\n" }
+    )
+
+    await this.shared.api
+      .sendMessage(p.chat.id, msg, {
+        disable_notification: false,
+        link_preview_options: { is_disabled: true },
+      })
+      .catch((error: unknown) => {
+        logger.warn(
+          { error, action: p.action },
+          "[Moderation:logActionInChat] Failed to post moderation action in chat"
+        )
+        return null
+      })
+      .then(after(120_000))
+      .then((sent) => sent && this.shared.api.deleteMessage(p.chat.id, sent.message_id))
+      .catch(() => {})
   }
 }

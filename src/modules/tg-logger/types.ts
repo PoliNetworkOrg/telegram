@@ -1,6 +1,5 @@
 import type { GrammyError, HttpError } from "grammy"
 import type { Chat, Message, User } from "grammy/types"
-import type { Duration } from "@/utils/duration"
 
 export type BanAllLog = {
   target: User
@@ -45,12 +44,12 @@ export type GroupManagement = {
       type: "DELETE"
     }
   | {
-      type: "CREATE"
+      type: "CREATE" | "UPDATE"
       addedBy: User
       inviteLink: string
     }
   | {
-      type: "CREATE_FAIL"
+      type: "UPDATE_FAIL" | "CREATE_FAIL"
       reason: string
       inviteLink?: string
     }
@@ -68,7 +67,7 @@ export type GrantLog = {} & (
       target: User
       by: User
       since: Date
-      duration: Duration
+      until: Date
       reason?: string
     }
   | {

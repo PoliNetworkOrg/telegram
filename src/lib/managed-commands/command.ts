@@ -2,6 +2,7 @@ import type { Conversation } from "@grammyjs/conversations"
 import type { Context } from "grammy"
 import type { Message } from "grammy/types"
 import type { z } from "zod"
+import type { MaybeArray } from "@/utils/types"
 import type { ConversationContext } from "./context"
 
 interface BaseArgumentOptions {
@@ -43,39 +44,62 @@ export type CommandReplyTo = "required" | "optional" | undefined
 export type CommandScope = "private" | "group" | "both"
 
 interface PrivatePermissions<TRole extends string> {
+  /** The roles that are allowed to use the command */
   allowedRoles?: TRole[]
+  /** The roles that are excluded from using the command */
   excludedRoles?: TRole[]
 }
 interface GroupPermissions<TRole extends string> extends PrivatePermissions<TRole> {
-  allowedGroupAdmins: boolean
+  /**
+   * Whether to allow group admins to use the command, without considering their external role
+   *
+   * You can use hooks to override what is considered a group admin, by default it considers users with
+   * Telegram Chat Role of "administrator" or "creator" as group admins
+   */
+  allowGroupAdmins: boolean
+  /** Group IDs where the command is allowed */
   allowedGroupsId?: number[]
+  /** Group IDs where the command is not allowed, if a group ID is in both allowedGroupsId and excludedGroupsId, the exclusion takes precedence */
   excludedGroupsId?: number[]
 }
 type Permissions<TRole extends string, S extends CommandScope> = S extends "private"
   ? PrivatePermissions<TRole>
   : GroupPermissions<TRole>
 
-export type CommandScopedContext<S extends CommandScope = CommandScope> = S extends "private"
-  ? ConversationContext<"private">
+export type CommandScopedContext<
+  S extends CommandScope = CommandScope,
+  C extends Context = Context,
+> = S extends "private"
+  ? ConversationContext<"private", C>
   : S extends "group"
-    ? ConversationContext<"group"> | ConversationContext<"supergroup">
-    : ConversationContext<"private"> | ConversationContext<"group"> | ConversationContext<"supergroup">
+    ? ConversationContext<"group", C> | ConversationContext<"supergroup", C>
+    : ConversationContext<"private", C> | ConversationContext<"group", C> | ConversationContext<"supergroup", C>
 
 export type CommandConversation<S extends CommandScope = CommandScope, C extends Context = Context> = Conversation<
   C,
-  CommandScopedContext<S>
+  CommandScopedContext<S, C>
 >
 
+/**
+ * Represents a command that can be registered in the ManagedCommands collection.
+ *
+ * @template A The type of the command arguments, this should be an array of {@link ArgumentOptions}
+ * @template R The type of the command reply, this should be "required", "optional" or undefined
+ * @template S The scope of the command, this should be "private", "group" or "both"
+ * @template TRole The type of the roles used in permissions, this should be a string literal type representing the possible roles in the bot (e.g. "admin" | "moderator" | "user")
+ */
 export interface Command<
   A extends CommandArgs,
   R extends CommandReplyTo,
   S extends CommandScope,
   TRole extends string = string,
+  C extends Context = Context,
 > {
   /**
    * The command trigger, the string that will be used to call the command.
+   * If an array is provided, all entries will be used as aliases for the command
    */
-  trigger: string
+  trigger: MaybeArray<string>
   /**
    * The scope of the command, can be "private", "group" or "both".
    * @default "both"
@@ -112,13 +136,13 @@ export interface Command<
      *
      * See {@link https://grammy.dev/ref/core/context Context}
      */
-    context: CommandScopedContext<S>
+    context: CommandScopedContext<S, C>
     /**
      * A conversation object to handle complex interactions.
      *
      * See {@link https://grammy.dev/plugins/conversations Conversation}
      */
-    conversation: CommandConversation<S>
+    conversation: CommandConversation<S, C>
     /**
      * The arguments passed to the command, this is an object with the keys as the argument keys.
      *
@@ -132,6 +156,17 @@ export interface Command<
     repliedTo: RepliedTo<R>
   }) => Promise<void>
 }
+
+/**
+ * A generic command
+ */
+export type AnyCommand<TRole extends string = string, C extends Context = Context> = Command<
+  CommandArgs,
+  CommandReplyTo,
+  CommandScope,
+  TRole,
+  C
+>
 
 /**
  * Type guard to check if a command is allowed in groups.
@@ -151,9 +186,12 @@ export interface Command<
  * })
  * ```
  */
-export function isAllowedInGroups<A extends CommandArgs, R extends CommandReplyTo, TRole extends string = string>(
-  cmd: Command<A, R, CommandScope, TRole>
-): cmd is Command<A, R, "group" | "both", TRole> {
+export function isAllowedInGroups<
+  A extends CommandArgs,
+  R extends CommandReplyTo,
+  TRole extends string = string,
+  C extends Context = Context,
+>(cmd: Command<A, R, CommandScope, TRole, C>): cmd is Command<A, R, "group" | "both", TRole, C> {
   return cmd.scope !== "private"
 }
 
@@ -175,8 +213,11 @@ export function isAllowedInGroups<A extends CommandArgs, R extends CommandReplyT
  * })
  * ```
  */
-export function isAllowedInPrivateOnly<A extends CommandArgs, R extends CommandReplyTo, TRole extends string = string>(
-  cmd: Command<A, R, CommandScope, TRole>
-): cmd is Command<A, R, "private", TRole> {
+export function isAllowedInPrivateOnly<
+  A extends CommandArgs,
+  R extends CommandReplyTo,
+  TRole extends string = string,
+  C extends Context = Context,
+>(cmd: Command<A, R, CommandScope, TRole, C>): cmd is Command<A, R, "private", TRole, C> {
   return cmd.scope === "private"
 }

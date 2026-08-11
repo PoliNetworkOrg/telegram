@@ -10,7 +10,7 @@
  * @param limit The time limit in milliseconds
  * @returns A throttled version of the function
  */
-export function throttle<A extends unknown[]>(func: (...args: A) => void, limit: number): (...args: A) => void {
+export function throttle<A extends unknown[]>(func: (...args: A) => unknown, limit: number): (...args: A) => void {
   let timeout: NodeJS.Timeout | null = null
   let lastArgs: A
   let again: boolean = false
