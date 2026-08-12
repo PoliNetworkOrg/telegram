@@ -16,11 +16,15 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
       - name: Resolve pnpm store path
         id: pnpm-store-path
         run: |
           echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - uses: docker/setup-qemu-action@v3
       - name: Setup Docker Buildx
         id: setup-buildx
         uses: docker/setup-buildx-action@v3
