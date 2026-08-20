@@ -24,7 +24,7 @@ export const logReport = async (context: Filter<Context, "message"> | CommandSco
     reply_parameters: { message_id: repliedTo.message_id },
   })
 
-  if (reportSent !== "SENT") void ephemeral(feedback)
+  void ephemeral(feedback)
 }
 
 export const report = new CommandsCollection<Role>().createCommand({
