@@ -68,13 +68,15 @@ export const mute = new CommandsCollection<Role>("Muting")
     handler: async ({ args, context, repliedTo }) => {
       const userOverload = await getOverloadUser(context, repliedTo, args.reasonOrUser, args.reason)
       if (userOverload.isErr()) {
-        void ephemeral(
-          context.reply(
-            repliedTo
-              ? fmt(({ n }) => n`There was an error`)
-              : fmt(({ n }) => n`Target user not found, please try replying to their message`)
+        if (userOverload.error !== "SILENT_ERROR") {
+          void ephemeral(
+            context.reply(
+              repliedTo
+                ? fmt(({ n }) => n`There was an error`)
+                : fmt(({ n }) => n`Target user not found, please try replying to their message`)
+            )
           )
-        )
+        }
         logger.error({ args, repliedTo }, `MUTE: ${userOverload.error}`)
         return
       }

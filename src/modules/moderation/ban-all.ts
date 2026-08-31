@@ -54,7 +54,7 @@ interface BanAllFlow extends FlowJob {
   queueName: typeof CONFIG.ORCHESTRATOR_QUEUE
   data: {
     banAll: BanAll // entire BanAll data, to re-render the message with progress
-    messageId: number // message ID to update the progress message
+    messageId?: number // message ID to update the progress message (undefined if logger unavailable)
   }
   children: BanFlow[]
 }
@@ -170,7 +170,19 @@ export class BanAllQueue extends Module<ModuleShared> {
   /** Flow producer to create parent/child job batch in a single ban_all command */
   private flowProducer = new FlowProducer({ connection })
 
-  public async initiateBanAll(banAll: BanAll, messageId: number) {
+  /**
+   * Creates a BullMQ flow job that spawns one child job per non-hidden group.
+   *
+   * Children execute the actual `banChatMember` / `unbanChatMember` calls in
+   * the executor queue.  The parent orchestrator job tracks overall progress
+   * and emits progress events that update the logger message.
+   *
+   * @param banAll  - The ban_all descriptor (target, reporter, type, state)
+   * @param messageId - Telegram message ID of the progress post in the logger
+   *                    group.  `undefined` when the logger is unreachable —
+   *                    progress updates are skipped in that case.
+   */
+  public async initiateBanAll(banAll: BanAll, messageId?: number) {
     const allGroups = await api.tg.groups.getAll.query()
     const chats = allGroups.filter((g) => !g.hide).map((g) => g.telegramId)
     const banType = banAll.type === "BAN" ? "ban" : "unban"
@@ -258,6 +270,8 @@ export class BanAllQueue extends Module<ModuleShared> {
       // on progress of a ban_all job (in the orchestrator queue),
       // update the message with the new progress (throttled)
       if (!isBanAllState(progress)) return
+      // No logger message to update - skip progress tracking
+      if (job.data.messageId == null) return
       const banAll = { ...job.data.banAll, state: progress }
       updateMessage(banAll, job.data.messageId)
       await job.updateData({ ...job.data, banAll }) // update data just to be sure

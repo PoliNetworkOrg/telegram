@@ -3,6 +3,9 @@ import type { Message, User } from "grammy/types"
 import { Err, Ok, type Result } from "neverthrow"
 import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { getTelegramId } from "./telegram-id"
+import { logger } from "@/logger"
+import { fmt } from "@/utils/format"
+import { ephemeral } from "@/utils/messages"
 
 export async function getUser<C extends Context>(userId: number, ctx: C | null): Promise<User | null> {
   // TODO: check if this works correctly
@@ -37,22 +40,50 @@ export async function getOverloadUser<C extends Context>(
 ): Promise<Result<{ user: User; reason?: string }, string>> {
   if (repliedTo) {
     if (!repliedTo.from) {
-      // error
-      return new Err("[getOverloadUser] no repliedTo.from field (the msg was sent in a channel)")
+      return new Err("[getOverloadUser] no repliedTo.from field")
     }
     return new Ok({ user: repliedTo.from, reason: [firstArg, secondArg].filter(Boolean).join(" ") })
   }
 
-  if (!firstArg) return new Err("[getOverloadUser] No firstArg passed (without repliedTo)")
-
-  const userId = typeof firstArg === "number" ? firstArg : await getTelegramId(firstArg).catch(() => null)
-  if (!userId) return new Err("[getOverloadUser] Cannot retrieve the userId from arg or redis")
-
-  const user = await getUser(userId, context).catch(() => null)
-  if (!user) return new Err("[getOverloadUser] Cannot retrieve the User from chatMember or storage")
+  const user = await resolveUser(firstArg, context)
+  if (!user) {
+    return new Err("SILENT_ERROR")
+  }
 
   return new Ok({
     user,
-    reason: secondArg,
+    reason: secondArg as string | undefined,
   })
+}
+
+
+export async function resolveUser(
+  usernameOrId: string | number | undefined,
+  c: Context
+): Promise<User | null> {
+  if (!usernameOrId) return null
+
+  const userId: number | null =
+    typeof usernameOrId === "string"
+      ? await getTelegramId(usernameOrId.replaceAll("@", "")).catch(() => null)
+      : typeof usernameOrId === "number"
+        ? usernameOrId
+        : null
+
+  if (!userId) {
+    logger.debug(`warns: no userId for username/id ${usernameOrId}`)
+    const msg = await c.reply(fmt(({ b }) => b`@${c.from?.username} user not found`))
+    void ephemeral(msg)
+    return null
+  }
+
+  const user = await getUser(userId, c).catch(() => null)
+  if (!user) {
+    const msg = await c.reply(fmt(({ n }) => n`Error: cannot find this user`))
+    logger.error({ userId }, "WARNS: cannot retrieve the user")
+    void ephemeral(msg)
+    return null
+  }
+
+  return user
 }

@@ -37,6 +37,9 @@ const MOD_ACTION_TITLE = (props: ModerationAction) =>
     UNBAN: fmt(({ b }) => b`✅ Unban`),
     UNMUTE: fmt(({ b }) => b`🎤 Unmute`),
     SILENT: fmt(({ b }) => b`🔶 Possible Harmful Content Detection`),
+    WARN: fmt(({ b }) => b`⚠️ Warn`),
+    UNWARN: fmt(({ b }) => b`♻️ Unwarn`),
+    WARNS: fmt(({ b }) => b`📋 Warnings`),
   })[props.action]
 
 export class TgLogger extends Module<ModuleShared> {
@@ -172,6 +175,20 @@ export class TgLogger extends Module<ModuleShared> {
     }
   }
 
+  /**
+   * Initiates a ban_all or unban_all procedure.
+   *
+   * Posts the initial progress message to the logger group, then delegates to the
+   * BanAllQueue to execute the individual bans.  If the logger group is unreachable
+   * (e.g. the bot was removed), the bans still proceed — progress tracking is
+   * simply skipped.
+   *
+   * @param target - User object or numeric ID to ban/unban
+   * @param reporter - The moderator who issued the command
+   * @param type - "BAN" or "UNBAN"
+   * @param reason - Optional reason shown in the log message
+   * @returns A user-facing result string, or null on unexpected errors
+   */
   public async banAll(
     target: User | number,
     reporter: User,
@@ -190,33 +207,37 @@ export class TgLogger extends Module<ModuleShared> {
       },
     }
 
+    // Try to post the initial progress message - this can fail if the bot is no
+    // longer a member of the logger group.  We still proceed with the bans;
+    // only progress-tracking edits are lost.
     const msg = await this.log(this.topics.banAll, getBanAllText(banAll))
+    const messageId = msg?.message_id
 
-    if (!msg?.message_id) {
-      logger.error("[banall] There was an error when initiating banall, no msg.msgId")
-      return fmt(
-        ({ n, b }) => [
-          b`${type} All ERROR!`,
-          n`Cannot log the message in tgLogger, therefore cannot start the procedure`,
-          n`This should be inspected as it should not never happen`,
-        ],
-        { sep: "\n" }
-      )
+    if (!messageId) {
+      logger.warn("[banall] Cannot log initial message in tgLogger, proceeding without progress tracking")
     }
 
-    await modules.get("banAll").initiateBanAll(banAll, msg.message_id)
+    await modules.get("banAll").initiateBanAll(banAll, messageId)
     return fmt(
       ({ n, b, link }) => [
         b`${type} All started!`,
-        msg
-          ? n`Check ${link("here", `https://t.me/c/${this.groupId}/${this.topics.banAll}/${msg.message_id}`)}`
-          : undefined,
+        messageId
+          ? n`Check ${link("here", `https://t.me/c/${this.groupId}/${this.topics.banAll}/${messageId}`)}`
+          : n`Progress tracking unavailable (logger group not accessible)`,
       ],
       { sep: "\n" }
     )
   }
 
-  public async banAllProgress(banAll: BanAll, messageId: number): Promise<void> {
+  /**
+   * Edits the ban_all progress message in the logger group with updated state.
+   *
+   * No-op when `messageId` is not set (logger group was unavailable when the
+   * procedure started).
+   */
+  public async banAllProgress(banAll: BanAll, messageId?: number): Promise<void> {
+    // No message to edit - the initial log failed so we skip progress updates
+    if (messageId == null) return
     await this.shared.api.editMessageText(this.groupId, messageId, getBanAllText(banAll), {
       reply_markup: undefined,
       link_preview_options: { is_disabled: true },
