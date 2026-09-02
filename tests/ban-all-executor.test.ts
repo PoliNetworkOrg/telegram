@@ -68,6 +68,20 @@ describe("BanAll executor", () => {
     ).rejects.toBeInstanceOf(UnrecoverableError)
   })
 
+  it("retries message cleanup when the ban error is permanent but cleanup fails temporarily", async () => {
+    const api = createApi()
+    const cleanupError = new Error("backend unavailable")
+    vi.mocked(api.banChatMember).mockRejectedValue(
+      telegramError(400, "Bad Request: not enough rights to restrict/unrestrict chat member")
+    )
+
+    await expect(
+      executeBanAllJob(api, { name: "ban", data: { chatId: -1001, targetId: 42 } }, async () => {
+        throw cleanupError
+      })
+    ).rejects.toBe(cleanupError)
+  })
+
   it("keeps Telegram flood-control errors retryable", async () => {
     const api = createApi()
     const error = telegramError(429, "Too Many Requests: retry after 1")
