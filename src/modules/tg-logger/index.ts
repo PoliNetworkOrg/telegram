@@ -233,7 +233,7 @@ export class TgLogger extends Module<ModuleShared> {
       message: fmt(
         ({ n, b, link }) => [
           b`${type} All started!`,
-          n`Check ${link("here", `https://t.me/c/${this.groupId}/${this.topics.banAll}/${msg.message_id}`)}`,
+          n`Check ${link("here", `https://t.me/c/${stripChatId(this.groupId)}/${this.topics.banAll}/${msg.message_id}`)}`,
         ],
         { sep: "\n" }
       ),

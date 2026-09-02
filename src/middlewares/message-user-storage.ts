@@ -22,6 +22,7 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
   }
 
   private memoryStorage: Message[] = []
+  private inFlightMessages: Message[] = []
   private userStorage: Map<number, User> = new Map()
   private flushMessages = serialize(async () => this.writeMessages())
   private flushUsers = serialize(async () => this.writeUsers())
@@ -70,7 +71,8 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
 
   async get(chatId: number, messageId: number): Promise<Message | null> {
     const paddedChatId = padChatId(chatId)
-    const memoryMsg = this.memoryStorage.find((m) => m.messageId === messageId && m.chatId === paddedChatId)
+    const isRequestedMessage = (message: Message) => message.messageId === messageId && message.chatId === paddedChatId
+    const memoryMsg = this.memoryStorage.find(isRequestedMessage) ?? this.inFlightMessages.find(isRequestedMessage)
     if (memoryMsg) return memoryMsg
 
     const { error, message: dbMsg } = await api.tg.messages.get.query({ chatId: paddedChatId, messageId })
@@ -99,6 +101,7 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
     if (this.memoryStorage.length === 0) return
     const messages = this.memoryStorage
     this.memoryStorage = []
+    this.inFlightMessages = messages
 
     try {
       const { error } = await api.tg.messages.add.mutate({ messages })
@@ -109,6 +112,8 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
       this.memoryStorage.unshift(...messages)
       logger.error({ error }, "memoryStorage: Failed to save messages in the backend")
       throw error
+    } finally {
+      this.inFlightMessages = []
     }
   }
 
