@@ -33,3 +33,51 @@ export function throttle<A extends unknown[]>(func: (...args: A) => unknown, lim
     } else again = true
   }
 }
+
+/**
+ * Throttles calls independently for each key.
+ *
+ * A shared throttle lets a busy key replace the trailing call for every other
+ * key. Keeping one small throttle state per active key preserves the latest
+ * call for each key and removes that state once the key becomes idle.
+ */
+export function throttleByKey<A extends unknown[], K>(
+  func: (...args: A) => unknown,
+  getKey: (...args: A) => K,
+  limit: number
+): (...args: A) => void {
+  type Entry = {
+    timeout: NodeJS.Timeout
+    lastArgs?: A
+  }
+
+  const entries = new Map<K, Entry>()
+
+  const schedule = (key: K, entry: Entry) => {
+    entry.timeout = setTimeout(() => {
+      if (entry.lastArgs) {
+        const args = entry.lastArgs
+        entry.lastArgs = undefined
+        func(...args)
+        schedule(key, entry)
+        return
+      }
+
+      entries.delete(key)
+    }, limit)
+  }
+
+  return (...args: A): void => {
+    const key = getKey(...args)
+    const entry = entries.get(key)
+    if (entry) {
+      entry.lastArgs = args
+      return
+    }
+
+    const newEntry = {} as Entry
+    entries.set(key, newEntry)
+    schedule(key, newEntry)
+    func(...args)
+  }
+}
