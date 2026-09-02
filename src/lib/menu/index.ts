@@ -1,4 +1,4 @@
-import { Composer, type Context, type Filter, InlineKeyboard, type MiddlewareObj } from "grammy"
+import { Composer, type Context, type Filter, GrammyError, InlineKeyboard, type MiddlewareObj } from "grammy"
 import { nanoid } from "nanoid"
 
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
@@ -128,7 +128,7 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
   private menus: Map<string, Menu<unknown>> = new Map()
 
   private constructor() {
-    this.composer.on("callback_query:data", (ctx, next) => {
+    this.composer.on("callback_query:data", async (ctx, next) => {
       // Handle callback query
       const callbackData = ctx.callbackQuery.data
       if (!callbackData.startsWith(CONSTANTS.prefix)) return next()
@@ -140,21 +140,46 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
       const menu = this.menus.get(menuHash)
       if (!menu) return next()
 
-      return menu
-        .call(ctx, row, col, keyboardId)
-        .then(async (result) => {
-          if (result?.newData) await menu.updateData(keyboardId, result.newData)
-          return ctx.answerCallbackQuery({ text: result?.feedback })
-        })
-        .catch(async (e: unknown) => {
-          logger.error({ e }, "ERROR WHILE CALLING MENU CB")
-          await ctx.editMessageReplyMarkup().catch(() => {})
-          const result = await menu.onExpiredButtonPress?.({ data: null, ctx })
-          await ctx.answerCallbackQuery({
-            text: result?.feedback ?? "This button is no longer available",
-            show_alert: true,
+      let result: { feedback?: string; newData?: unknown } | null = null
+      let cbError: unknown = null
+
+      try {
+        result = await menu.call(ctx, row, col, keyboardId)
+        if (result?.newData) {
+          await menu.updateData(keyboardId, result.newData).catch((e) => {
+            logger.warn({ e }, "[MenuGen] Failed to update menu data")
           })
+        }
+      } catch (e) {
+        cbError = e
+        logger.error({ e }, "ERROR WHILE CALLING MENU CB")
+        await ctx.editMessageReplyMarkup().catch(() => {})
+        try {
+          const expiredResult = await menu.onExpiredButtonPress?.({ data: null, ctx })
+          result = { feedback: expiredResult?.feedback ?? "This button is no longer available" }
+        } catch (expiredError) {
+          logger.error({ expiredError }, "ERROR IN onExpiredButtonPress")
+        }
+      }
+
+      // Always answer callback query safely in try/catch so failures don't disrupt the handler or bubble to bot.catch()
+      try {
+        await ctx.answerCallbackQuery({
+          text: result?.feedback,
+          show_alert: cbError !== null,
         })
+      } catch (e) {
+        if (
+          e instanceof GrammyError &&
+          (e.description.includes("query is too old") ||
+            e.description.includes("response timeout expired") ||
+            e.description.includes("QUERY_ID_INVALID"))
+        ) {
+          logger.warn({ e: e.description }, "[MenuGen] Callback query expired or invalid before answer")
+        } else {
+          logger.warn({ e }, "[MenuGen] Failed to answer callback query")
+        }
+      }
     })
   }
 

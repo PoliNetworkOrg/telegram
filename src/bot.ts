@@ -17,6 +17,7 @@ import { GroupSpecificActions } from "./middlewares/group-specific-actions"
 import { MentionListener } from "./middlewares/mention-listener"
 import { MessageLink } from "./middlewares/message-link"
 import { MessageUserStorage } from "./middlewares/message-user-storage"
+import { raidBackpressure } from "./middlewares/raid-backpressure"
 import { modules, sharedDataInit } from "./modules"
 import { Moderation } from "./modules/moderation"
 import { telemetry } from "./modules/telemetry/middleware"
@@ -65,9 +66,16 @@ bot.api.config.use(parseMode("MarkdownV2"))
 bot.api.config.use(tgApiTelemetry())
 bot.use(
   sequentialize((ctx) => {
-    return [ctx.chat?.id, ctx.from?.id].filter((e) => e !== undefined).map((e) => e.toString())
+    if (ctx.callbackQuery) {
+      // Callback queries must not wait behind chat message queues during raids
+      return ctx.from?.id ? [`user-${ctx.from.id}`] : []
+    }
+    return [ctx.chat?.id ? `chat-${ctx.chat.id}` : undefined, ctx.from?.id ? `user-${ctx.from.id}` : undefined].filter(
+      (e): e is string => e !== undefined
+    )
   })
 )
+bot.use(raidBackpressure())
 bot.use(telemetry())
 
 bot.init().then(() => {
@@ -133,6 +141,9 @@ const runner = run(bot, {
     fetch: {
       allowed_updates: ALLOWED_UPDATES,
     },
+  },
+  sink: {
+    concurrency: 50, // Backpressure: limit concurrency to prevent Telegram API 429 floods
   },
 })
 

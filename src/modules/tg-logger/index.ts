@@ -6,6 +6,7 @@ import { logger } from "@/logger"
 import { redis } from "@/redis"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
+import { canMessageBeForwarded, isMessageDeleted, markMessageAsDeleted } from "@/utils/messages"
 import type { ModuleShared } from "@/utils/types"
 import { after } from "@/utils/wait"
 import { modules } from ".."
@@ -78,8 +79,11 @@ export class TgLogger extends Module<ModuleShared> {
   private async forward(topicId: number, chatId: number, messageIds: number[]): Promise<number[]> {
     if (messageIds.length === 0) return []
 
+    const validMessageIds = messageIds.filter((id) => !isMessageDeleted(chatId, id))
+    if (validMessageIds.length === 0) return []
+
     try {
-      const res = await this.shared.api.forwardMessages(this.groupId, chatId, messageIds, {
+      const res = await this.shared.api.forwardMessages(this.groupId, chatId, validMessageIds, {
         message_thread_id: topicId,
         disable_notification: true,
       })
@@ -88,17 +92,28 @@ export class TgLogger extends Module<ModuleShared> {
       if (e instanceof GrammyError) {
         if (
           e.description.includes("message to forward not found") ||
-          e.description.includes("there are no messages to forward")
+          e.description.includes("there are no messages to forward") ||
+          e.description.includes("messages can't be forwarded") ||
+          e.description.includes("CHAT_FORWARDS_RESTRICTED")
         ) {
-          logger.warn({ e }, "[TgLogger:forward] Message(s) to forward not found")
+          logger.warn(
+            { description: e.description, chatId, messageIds: validMessageIds },
+            "[TgLogger:forward] Message(s) cannot be forwarded (deleted, service message, or restricted)"
+          )
+          for (const id of validMessageIds) {
+            markMessageAsDeleted(chatId, id)
+          }
         } else if (e.description.includes("MESSAGE_ID_INVALID")) {
-          logger.warn({ e, chatId, messageIds }, "[TgLogger:forward] Message ID(s) is not valid for telegram API")
+          logger.warn(
+            { e, chatId, messageIds: validMessageIds },
+            "[TgLogger:forward] Message ID(s) is not valid for telegram API"
+          )
         } else {
-          await this.exception({ type: "BOT_ERROR", error: e }, "TgLogger.forward")
+          await this.exception({ type: "BOT_ERROR", error: e }, "TgLogger.forward").catch(() => {})
           logger.error({ e }, "[TgLogger:forward] There was an error while trying to forward a message")
         }
       } else if (e instanceof Error) {
-        await this.exception({ type: "GENERIC", error: e }, "TgLogger.forward")
+        await this.exception({ type: "GENERIC", error: e }, "TgLogger.forward").catch(() => {})
       }
     }
     return []
@@ -123,7 +138,9 @@ export class TgLogger extends Module<ModuleShared> {
 
     if (!reportMsg) return "ERROR"
 
-    await this.forward(this.topics.actionRequired, message.chat.id, [message.message_id])
+    if (canMessageBeForwarded(message)) {
+      await this.forward(this.topics.actionRequired, message.chat.id, [message.message_id]).catch(() => [])
+    }
     return "SENT"
   }
 
@@ -135,6 +152,9 @@ export class TgLogger extends Module<ModuleShared> {
     deleter: User = this.shared.botInfo
   ): Promise<PreDeleteResult | null> {
     if (!messages.length) return null
+
+    // Skip service messages, protected content, and already deleted messages
+    const forwardableMessages = messages.filter(canMessageBeForwarded)
     const sender = messages[0].from
 
     const sent = await this.log(
@@ -153,9 +173,14 @@ export class TgLogger extends Module<ModuleShared> {
     if (!sent) return null
 
     const forwardedIds: number[] = []
-    for (const [chatId, mIds] of groupMessagesByChat(messages)) {
+    for (const [chatId, mIds] of groupMessagesByChat(forwardableMessages)) {
       if (mIds.length === 0) continue
-      forwardedIds.push(...(await this.forward(this.topics.deletedMessages, chatId, mIds)))
+      try {
+        const fIds = await this.forward(this.topics.deletedMessages, chatId, mIds)
+        forwardedIds.push(...fIds)
+      } catch (err) {
+        logger.warn({ err, chatId, mIds }, "[TgLogger:preDelete] Failed to forward messages")
+      }
     }
 
     logger.debug({ forwardedIds }, "preDel")
@@ -362,7 +387,9 @@ export class TgLogger extends Module<ModuleShared> {
           message: props.message,
         })
         await this.log(this.topics.grants, msg, { reply_markup: usageMenu, disable_notification: false })
-        await this.forward(this.topics.grants, props.chat.id, [props.message.message_id])
+        if (canMessageBeForwarded(props.message)) {
+          await this.forward(this.topics.grants, props.chat.id, [props.message.message_id]).catch(() => [])
+        }
         return msg
       }
 

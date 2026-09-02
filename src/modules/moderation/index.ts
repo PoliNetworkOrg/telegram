@@ -7,6 +7,7 @@ import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { type Duration, duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
+import { isMessageDeleted, markMessageAsDeleted } from "@/utils/messages"
 import { modules } from ".."
 import type { ModerationAction, ModerationError, ModerationErrorCode, PreDeleteResult } from "./types"
 
@@ -164,7 +165,13 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
         chatId,
         messages.map((m) => m.messageId)
       )
-      .catch(() => {})
+      .catch(() => false)
+
+    if (success) {
+      for (const m of messages) {
+        markMessageAsDeleted(chatId, m.messageId)
+      }
+    }
 
     logger.debug(
       { userId, chatId, messagesCount: messages.length, success },
@@ -238,29 +245,44 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
   ): Promise<Result<PreDeleteResult | null, "DELETE_ERROR" | "NOT_FOUND">> {
     if (messages.length === 0) return ok(null)
 
+    // Filter out messages that are already known to be deleted
+    const pendingMessages = messages.filter((m) => !isMessageDeleted(m.chat.id, m.message_id))
+    if (pendingMessages.length === 0) return err("NOT_FOUND")
+
     const tgLogger = modules.get("tgLogger")
-    const preRes = await tgLogger.preDelete(messages, reason, executor)
-    if (preRes === null || preRes.count === 0) return err("NOT_FOUND")
+    let preRes: PreDeleteResult | null = null
+    try {
+      preRes = await tgLogger.preDelete(pendingMessages, reason, executor)
+    } catch (e) {
+      logger.warn({ e }, "[Moderation:deleteMessages] preDelete failed, proceeding with deletion")
+    }
 
     let delCount = 0
-    for (const [chatId, mIds] of groupMessagesByChat(messages)) {
+    for (const [chatId, mIds] of groupMessagesByChat(pendingMessages)) {
       const delOk = await modules.shared.api.deleteMessages(chatId, mIds).catch(() => false)
-      if (delOk) delCount += mIds.length
+      if (delOk) {
+        delCount += mIds.length
+        for (const mId of mIds) {
+          markMessageAsDeleted(chatId, mId)
+        }
+      }
     }
 
     if (delCount === 0) {
       logger.error(
-        { initialMessages: messages, executor, forwardedCount: preRes.count, deletedCount: 0 },
+        { initialMessages: pendingMessages, executor, forwardedCount: preRes?.count ?? 0, deletedCount: 0 },
         "[Moderation:deleteMessages] no message(s) could be deleted"
       )
-      void modules.shared.api.deleteMessages(tgLogger.groupId, preRes.logMessageIds)
+      if (preRes) {
+        void modules.shared.api.deleteMessages(tgLogger.groupId, preRes.logMessageIds).catch(() => {})
+      }
       return err("DELETE_ERROR")
     }
 
-    if (delCount / preRes.count < 0.2) {
+    if (preRes && preRes.count > 0 && delCount / preRes.count < 0.2) {
       logger.warn(
         {
-          initialMessages: messages,
+          initialMessages: pendingMessages,
           executor,
           forwardedCount: preRes.count,
           deletedCount: delCount,
@@ -283,13 +305,18 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
             messagesToDelete,
             p.from,
             `${p.action}${"reason" in p && p.reason ? ` -- ${p.reason}` : ""}`
-          )
+          ).catch((e) => {
+            logger.error({ e }, "[Moderation:moderate] deleteMessages threw unexpectedly")
+            return err("DELETE_ERROR" as const)
+          })
         : ok(null)
 
     const performOk = await this.perform(p)
     if (!performOk) return err(this.getModerationError(p, "PERFORM_ERROR")) // TODO: make the perform output a Result
 
-    await this.post(p, preDeleteRes.unwrapOr(null))
+    await this.post(p, preDeleteRes.unwrapOr(null)).catch((e) => {
+      logger.warn({ e }, "[Moderation:moderate] post moderation action failed")
+    })
     return ok()
   }
 
