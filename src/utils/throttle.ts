@@ -41,30 +41,37 @@ export function throttle<A extends unknown[]>(func: (...args: A) => unknown, lim
  * key. Keeping one small throttle state per active key preserves the latest
  * call for each key and removes that state once the key becomes idle.
  */
-export function throttleByKey<A extends unknown[], K>(
-  func: (...args: A) => unknown,
+export function throttleAsyncByKey<A extends unknown[], K>(
+  func: (...args: A) => Promise<void>,
   getKey: (...args: A) => K,
-  limit: number
+  limit: number,
+  onError: (error: unknown, key: K) => void
 ): (...args: A) => void {
   type Entry = {
-    timeout: NodeJS.Timeout
     lastArgs?: A
   }
 
   const entries = new Map<K, Entry>()
 
-  const schedule = (key: K, entry: Entry) => {
-    entry.timeout = setTimeout(() => {
-      if (entry.lastArgs) {
-        const args = entry.lastArgs
-        entry.lastArgs = undefined
-        func(...args)
-        schedule(key, entry)
-        return
-      }
+  const run = async (key: K, entry: Entry, args: A) => {
+    const startedAt = Date.now()
+    try {
+      await func(...args)
+    } catch (error) {
+      onError(error, key)
+    } finally {
+      const remaining = Math.max(0, limit - (Date.now() - startedAt))
+      setTimeout(() => {
+        if (entry.lastArgs) {
+          const nextArgs = entry.lastArgs
+          entry.lastArgs = undefined
+          void run(key, entry, nextArgs)
+          return
+        }
 
-      entries.delete(key)
-    }, limit)
+        entries.delete(key)
+      }, remaining)
+    }
   }
 
   return (...args: A): void => {
@@ -75,9 +82,8 @@ export function throttleByKey<A extends unknown[], K>(
       return
     }
 
-    const newEntry = {} as Entry
+    const newEntry: Entry = {}
     entries.set(key, newEntry)
-    schedule(key, newEntry)
-    func(...args)
+    void run(key, newEntry, args)
   }
 }

@@ -8,7 +8,6 @@ import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { type Duration, duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { modules } from ".."
-import { deleteStoredMessages } from "./delete-stored-messages"
 import type { ModerationAction, ModerationError, ModerationErrorCode, PreDeleteResult } from "./types"
 
 function deduceModerationAction(oldMember: ChatMember, newMember: ChatMember): ModerationAction["action"] | null {
@@ -154,11 +153,16 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
     chatId: number,
     options: { requireSuccess?: boolean } = {}
   ): Promise<void> {
-    try {
-      await MessageUserStorage.getInstance().sync()
-    } catch (error) {
-      logger.warn({ error, userId, chatId }, "[Moderation:deleteAllLastMessages] failed to flush stored messages")
+    const fail = (error: unknown, message: string, messagesCount?: number) => {
+      logger.warn({ error, userId, chatId, messagesCount }, message)
       if (options.requireSuccess) throw error
+    }
+
+    try {
+      await MessageUserStorage.getInstance().syncMessages()
+    } catch (error) {
+      fail(error, "[Moderation:deleteAllLastMessages] failed to flush stored messages")
+      return
     }
 
     // both the limit of tRPC endpoint and Telegram API hard limit: https://core.telegram.org/bots/api#deletemessages
@@ -166,8 +170,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
     try {
       response = await api.tg.messages.getLastByUser.query({ userId, chatId, limit: 100 })
     } catch (error) {
-      logger.warn({ error, userId, chatId }, "[Moderation:deleteAllLastMessages] failed to load stored messages")
-      if (options.requireSuccess) throw error
+      fail(error, "[Moderation:deleteAllLastMessages] failed to load stored messages")
       return
     }
 
@@ -175,28 +178,17 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
       if (response.error === "NOT_FOUND") return
 
       const error = new Error(`Backend returned ${response.error}`)
-      logger.warn({ error, userId, chatId }, "[Moderation:deleteAllLastMessages] failed to load stored messages")
-      if (options.requireSuccess) throw error
+      fail(error, "[Moderation:deleteAllLastMessages] failed to load stored messages")
       return
     }
 
     const messageIds = response.messages.map((message) => message.messageId)
-    const success = await deleteStoredMessages(modules.shared.api, chatId, messageIds).catch((error) => {
-      logger.warn(
-        { error, userId, chatId, messagesCount: messageIds.length },
-        "[Moderation:deleteAllLastMessages] failed to delete stored messages"
-      )
-      if (options.requireSuccess) throw error
-      return null
-    })
+    if (messageIds.length === 0) return
 
-    if (success === false) {
-      const error = new Error("Telegram did not delete stored messages")
-      logger.warn(
-        { error, userId, chatId, messagesCount: messageIds.length },
-        "[Moderation:deleteAllLastMessages] Telegram did not delete stored messages"
-      )
-      if (options.requireSuccess) throw error
+    try {
+      await modules.shared.api.deleteMessages(chatId, messageIds)
+    } catch (error) {
+      fail(error, "[Moderation:deleteAllLastMessages] failed to delete stored messages", messageIds.length)
     }
   }
 

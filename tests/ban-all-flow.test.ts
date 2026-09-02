@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { BAN_ALL_QUEUE_CONFIG, createBanAllFlow } from "@/modules/moderation/ban-all-flow"
+import {
+  assertBanAllQueueCapacity,
+  BAN_ALL_QUEUE_CONFIG,
+  BanAllQueueCapacityError,
+  createBanAllFlow,
+} from "@/modules/moderation/ban-all-flow"
 import type { BanAll } from "@/modules/tg-logger/ban-all"
 
 const banAll = {
@@ -14,6 +19,8 @@ describe("BanAll flow", () => {
     const flow = createBanAllFlow(banAll, 99, [-1001, -1002])
 
     expect(flow.opts).toMatchObject({
+      attempts: 3,
+      backoff: { type: "exponential", delay: 1_000 },
       removeOnComplete: { age: 3_600, count: 1_000 },
       removeOnFail: { age: 86_400, count: 1_000 },
     })
@@ -33,5 +40,12 @@ describe("BanAll flow", () => {
 
   it("leaves Telegram API headroom for explicit message deletion", () => {
     expect(BAN_ALL_QUEUE_CONFIG.EXECUTOR_RATE_LIMIT).toEqual({ max: 8, duration: 1_000 })
+  })
+
+  it("rejects a flow that would exceed the outstanding-job cap", () => {
+    const maximum = BAN_ALL_QUEUE_CONFIG.MAX_OUTSTANDING_EXECUTOR_JOBS
+
+    expect(() => assertBanAllQueueCapacity(maximum - 652, 652)).not.toThrow()
+    expect(() => assertBanAllQueueCapacity(maximum - 651, 652)).toThrow(BanAllQueueCapacityError)
   })
 })

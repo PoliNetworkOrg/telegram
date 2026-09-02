@@ -10,6 +10,9 @@ export const BAN_ALL_QUEUE_CONFIG = {
     max: 8,
     duration: 1000,
   },
+  // Covers the largest observed 28,000-job burst while limiting first-attempt
+  // starts to about one hour of work at the configured rate.
+  MAX_OUTSTANDING_EXECUTOR_JOBS: 30_000,
 } as const
 
 export type BanJobCommand = "ban" | "unban"
@@ -37,7 +40,16 @@ export interface BanAllFlow extends FlowJob {
   children: BanFlow[]
 }
 
-const PARENT_RETENTION_OPTIONS = {
+const RETRY_OPTIONS = {
+  attempts: 3,
+  backoff: {
+    type: "exponential",
+    delay: 1000,
+  },
+} satisfies JobsOptions
+
+const PARENT_OPTIONS = {
+  ...RETRY_OPTIONS,
   removeOnComplete: {
     age: 60 * 60,
     count: 1000,
@@ -49,11 +61,7 @@ const PARENT_RETENTION_OPTIONS = {
 } satisfies JobsOptions
 
 const CHILD_OPTIONS = {
-  attempts: 3,
-  backoff: {
-    type: "exponential",
-    delay: 1000,
-  },
+  ...RETRY_OPTIONS,
   ignoreDependencyOnFailure: true,
   removeOnComplete: {
     age: 60 * 60,
@@ -67,6 +75,25 @@ const CHILD_OPTIONS = {
   },
 } satisfies JobsOptions
 
+export class BanAllQueueCapacityError extends Error {
+  constructor(
+    readonly outstandingJobs: number,
+    readonly requestedJobs: number,
+    readonly maximumJobs: number
+  ) {
+    super(
+      `BanAll queue capacity exceeded: ${outstandingJobs} outstanding, ${requestedJobs} requested, ${maximumJobs} maximum`
+    )
+    this.name = "BanAllQueueCapacityError"
+  }
+}
+
+export function assertBanAllQueueCapacity(outstandingJobs: number, requestedJobs: number): void {
+  const maximumJobs = BAN_ALL_QUEUE_CONFIG.MAX_OUTSTANDING_EXECUTOR_JOBS
+  if (requestedJobs <= maximumJobs - outstandingJobs) return
+  throw new BanAllQueueCapacityError(outstandingJobs, requestedJobs, maximumJobs)
+}
+
 export function createBanAllFlow(banAll: BanAll, messageId: number, chats: number[]): BanAllFlow {
   const banType = banAll.type === "BAN" ? "ban" : "unban"
   const targetId = typeof banAll.target === "number" ? banAll.target : banAll.target.id
@@ -75,7 +102,7 @@ export function createBanAllFlow(banAll: BanAll, messageId: number, chats: numbe
     name: `${banType}_all`,
     queueName: BAN_ALL_QUEUE_CONFIG.ORCHESTRATOR_QUEUE,
     data: { banAll, messageId },
-    opts: PARENT_RETENTION_OPTIONS,
+    opts: PARENT_OPTIONS,
     children: chats.map((chatId) => ({
       name: banType,
       queueName: BAN_ALL_QUEUE_CONFIG.EXECUTOR_QUEUE,
