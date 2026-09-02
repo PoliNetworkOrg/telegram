@@ -99,6 +99,15 @@ export class BanAllQueue extends Module<ModuleShared> {
   /** Flow producer to create parent/child job batch in a single ban_all command */
   private flowProducer = new FlowProducer({ connection })
 
+  constructor() {
+    super()
+    this.executor.on("error", (error) => logger.error({ error }, "[BanAllQueue] Executor worker error"))
+    this.orchestrator.on("error", (error) => logger.error({ error }, "[BanAllQueue] Orchestrator worker error"))
+    this.execQueue.on("error", (error) => logger.error({ error }, "[BanAllQueue] Executor queue error"))
+    this.orchestrateQueue.on("error", (error) => logger.error({ error }, "[BanAllQueue] Orchestrator queue error"))
+    this.flowProducer.on("error", (error) => logger.error({ error }, "[BanAllQueue] Flow producer error"))
+  }
+
   private enqueueBanAll = serialize(async (banAll: BanAll, messageId: number) => {
     const allGroups = await api.tg.groups.getAll.query()
     const chats = allGroups.filter((g) => !g.hide).map((g) => g.telegramId)
@@ -196,9 +205,6 @@ export class BanAllQueue extends Module<ModuleShared> {
 
     this.orchestrateQueue.on("progress", handleProgress)
     this.orchestrator.on("progress", handleProgress)
-    this.executor.on("error", (error) => logger.error({ error }, "[BanAllQueue] Executor worker error"))
-    this.orchestrator.on("error", (error) => logger.error({ error }, "[BanAllQueue] Orchestrator worker error"))
-
     void this.executor.run().catch((error) => logger.error({ error }, "[BanAllQueue] Executor stopped"))
     void this.orchestrator.run().catch((error) => logger.error({ error }, "[BanAllQueue] Orchestrator stopped"))
   }
