@@ -5,6 +5,7 @@ import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
 import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { padChatId } from "@/utils/chat"
+import { singleFlight } from "@/utils/single-flight"
 import { toGrammyUser } from "@/utils/types"
 
 export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
@@ -22,6 +23,10 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
 
   private memoryStorage: Message[] = []
   private userStorage: Map<number, User> = new Map()
+  private flush = singleFlight(async () => {
+    await Promise.all([this.syncMessages(), this.syncUsers()])
+  })
+
   private constructor() {
     super("message_user_storage")
     new Cron("0 */1 * * * *", () => this.sync())
@@ -75,21 +80,29 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
   }
 
   async sync(): Promise<void> {
-    await Promise.all([this.syncMessages(), this.syncUsers()])
+    await this.flush()
   }
 
   private async syncMessages(): Promise<void> {
     if (this.memoryStorage.length === 0) return
-    const { error } = await api.tg.messages.add.mutate({ messages: this.memoryStorage })
-    if (error) {
-      logger.error(
-        "memoryStorage: There was an error while encrypting messages in the backend, cannot save messages in table"
-      )
-      return
-    }
-
-    logger.debug(`memoryStorage: ${this.memoryStorage.length} messages written to the database`)
+    const messages = this.memoryStorage
     this.memoryStorage = []
+
+    try {
+      const { error } = await api.tg.messages.add.mutate({ messages })
+      if (error) {
+        this.memoryStorage.unshift(...messages)
+        logger.error(
+          "memoryStorage: There was an error while encrypting messages in the backend, cannot save messages in table"
+        )
+        return
+      }
+
+      logger.debug(`memoryStorage: ${messages.length} messages written to the database`)
+    } catch (error) {
+      this.memoryStorage.unshift(...messages)
+      logger.error({ error }, "memoryStorage: Failed to save messages in the backend")
+    }
   }
 
   public async getStoredUser(userId: number): Promise<User | null> {
