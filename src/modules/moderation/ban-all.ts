@@ -1,63 +1,34 @@
-import { type ConnectionOptions, type FlowJob, FlowProducer, type Job, Queue, Worker } from "bullmq"
+import { type ConnectionOptions, FlowProducer, type Job, Queue, Worker } from "bullmq"
 import { api } from "@/backend"
 import { env } from "@/env"
 import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
-import { throttle } from "@/utils/throttle"
+import { serialize } from "@/utils/serialize"
+import { throttleAsyncByKey } from "@/utils/throttle"
 import type { ModuleShared } from "@/utils/types"
 import { modules } from ".."
 import { type BanAll, type BanAllState, isBanAllState } from "../tg-logger/ban-all"
 import { Moderation } from "."
+import { executeBanAllJob } from "./ban-all-executor"
+import {
+  assertBanAllQueueCapacity,
+  type BanAllFlow,
+  type BanFlow,
+  BAN_ALL_QUEUE_CONFIG as CONFIG,
+  createBanAllFlow,
+} from "./ban-all-flow"
 
 /**
  * Utility type that get the Worker type for a Job
  */
 type WorkerFor<J extends Job> = J extends Job<infer D, infer R, infer C> ? Worker<D, R, C> : never
 
-/**
- * Utility type that get the Job type for a FlowJob
- */
-type JobForFlow<J extends FlowJob> = J extends FlowJob
-  ? J extends { name: infer N extends string; data: infer D }
-    ? Job<D, void, N>
-    : never
+type JobForFlow<J extends { name: string; data?: unknown }> = J extends {
+  name: infer N extends string
+  data: infer D
+}
+  ? Job<D, void, N>
   : never
-
-/** Configuration for the BanAll queue system */
-const CONFIG = {
-  ORCHESTRATOR_QUEUE: "[ban_all.orchestrator]",
-  EXECUTOR_QUEUE: "[ban_all.exec]",
-  UPDATE_MESSAGE_THROTTLE_MS: 5000,
-}
-
-/** Possible commands for ban jobs */
-type BanJobCommand = "ban" | "unban"
-/** Possible commands for ban all jobs, each child will have the equivalent command */
-type BanAllCommand = `${BanJobCommand}_all`
-
-/** Data for a single ban job */
-type BanJobData = {
-  chatId: number
-  targetId: number
-}
-
-/** Flow description for a single ban job */
-interface BanFlow extends FlowJob {
-  name: BanJobCommand
-  queueName: typeof CONFIG.EXECUTOR_QUEUE
-  data: BanJobData
-  children?: undefined
-}
-/** Flow description for a ban all job */
-interface BanAllFlow extends FlowJob {
-  name: BanAllCommand
-  queueName: typeof CONFIG.ORCHESTRATOR_QUEUE
-  data: {
-    banAll: BanAll // entire BanAll data, to re-render the message with progress
-    messageId: number // message ID to update the progress message
-  }
-  children: BanFlow[]
-}
 
 /** Job type for a single ban job */
 type BanJob = JobForFlow<BanFlow>
@@ -94,35 +65,11 @@ export class BanAllQueue extends Module<ModuleShared> {
    */
   private executor: WorkerFor<BanJob> = new Worker(
     CONFIG.EXECUTOR_QUEUE,
-    async (job) => {
-      switch (job.name) {
-        case "ban": {
-          const [success] = await Promise.all([
-            this.shared.api
-              .banChatMember(job.data.chatId, job.data.targetId, { revoke_messages: true })
-              .catch(() => false),
-            Moderation.deleteAllLastMessages(job.data.targetId, job.data.chatId),
-          ])
-
-          logger.debug({ chatId: job.data.chatId, targetId: job.data.targetId, success }, "[BanAllQueue] ban result")
-          if (!success) {
-            throw new Error("Failed to ban user")
-          }
-          return
-        }
-        case "unban": {
-          const success = await this.shared.api.unbanChatMember(job.data.chatId, job.data.targetId)
-          if (!success) {
-            throw new Error("Failed to unban user")
-          }
-          logger.debug({ chatId: job.data.chatId, targetId: job.data.targetId, success }, "[BanAllQueue] unban result")
-          return
-        }
-        default:
-          throw new Error("Unknown job command")
-      }
-    },
-    { connection, concurrency: 3 }
+    async (job) =>
+      executeBanAllJob(this.shared.api, job, (userId, chatId) =>
+        Moderation.deleteAllLastMessages(userId, chatId, { requireSuccess: true })
+      ),
+    { connection, concurrency: 3, limiter: CONFIG.EXECUTOR_RATE_LIMIT, autorun: false }
   )
 
   /**
@@ -134,46 +81,44 @@ export class BanAllQueue extends Module<ModuleShared> {
   private orchestrator: WorkerFor<BanAllJob> = new Worker(
     CONFIG.ORCHESTRATOR_QUEUE,
     async (job) => {
-      const { failed, ignored, processed } = await job.getDependenciesCount()
+      const state = await this.getProgress(job)
+      await job.updateProgress(state)
       logger.info(
-        `[BanAllQueue] Finished executing ${job.name} job for target ${typeof job.data.banAll.target === "number" ? job.data.banAll.target : job.data.banAll.target.id} in ${processed} chats (ignored: ${ignored}, failed: ${failed})`
+        `[BanAllQueue] Finished executing ${job.name} job for target ${typeof job.data.banAll.target === "number" ? job.data.banAll.target : job.data.banAll.target.id} in ${state.successCount} chats (failed: ${state.failedCount})`
       )
     },
-    { connection }
+    { connection, autorun: false }
   )
-
-  /**
-   * Queue used to add new ban jobs, each ban_all command will dispatch a batch in this queue
-   */
-  private execQueue = new Queue<BanJob>(CONFIG.EXECUTOR_QUEUE, {
-    connection,
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: {
-        type: "exponential",
-        delay: 1000, // start with 1 second
-      },
-      removeOnComplete: {
-        age: 60 * 60, // keep for 1 hour
-        count: 1000, // keep only the last 1000
-      },
-      removeOnFail: {
-        age: 24 * 60 * 60, // keep for 24 hours
-        count: 1000, // keep only the last 1000
-      },
-    },
-  })
 
   /** queue for the orchestrator, each ban_all command is a job in this queue */
   private orchestrateQueue = new Queue<BanAllJob>(CONFIG.ORCHESTRATOR_QUEUE, { connection })
 
+  /** queue used to inspect executor backlog before accepting another flow */
+  private execQueue = new Queue<BanJob>(CONFIG.EXECUTOR_QUEUE, { connection })
+
   /** Flow producer to create parent/child job batch in a single ban_all command */
   private flowProducer = new FlowProducer({ connection })
 
-  public async initiateBanAll(banAll: BanAll, messageId: number) {
+  constructor() {
+    super()
+    this.executor.on("error", (error) => logger.error({ error }, "[BanAllQueue] Executor worker error"))
+    this.orchestrator.on("error", (error) => logger.error({ error }, "[BanAllQueue] Orchestrator worker error"))
+    this.execQueue.on("error", (error) => logger.error({ error }, "[BanAllQueue] Executor queue error"))
+    this.orchestrateQueue.on("error", (error) => logger.error({ error }, "[BanAllQueue] Orchestrator queue error"))
+    this.flowProducer.on("error", (error) => logger.error({ error }, "[BanAllQueue] Flow producer error"))
+  }
+
+  private enqueueBanAll = serialize(async (banAll: BanAll, messageId: number) => {
     const allGroups = await api.tg.groups.getAll.query()
     const chats = allGroups.filter((g) => !g.hide).map((g) => g.telegramId)
-    const banType = banAll.type === "BAN" ? "ban" : "unban"
+    const outstandingJobs = await this.execQueue.getJobCountByTypes(
+      "active",
+      "waiting",
+      "paused",
+      "delayed",
+      "prioritized"
+    )
+    assertBanAllQueueCapacity(outstandingJobs, chats.length)
 
     await api.tg.auditLog.create
       .mutate({
@@ -188,55 +133,46 @@ export class BanAllQueue extends Module<ModuleShared> {
         logger.warn("[BanAllQueue] Failed to create audit log for ban all command")
       })
 
-    const job = await this.flowProducer.add({
-      name: `${banType}_all`,
-      queueName: CONFIG.ORCHESTRATOR_QUEUE,
-      data: { banAll, messageId },
-      children: chats.map((chat) => ({
-        name: banType,
-        queueName: CONFIG.EXECUTOR_QUEUE,
-        opts: { continueParentOnFailure: true },
-        data: {
-          chatId: chat,
-          targetId: typeof banAll.target === "number" ? banAll.target : banAll.target.id,
-        },
-      })),
-    } satisfies BanAllFlow)
+    const job = await this.flowProducer.add(createBanAllFlow(banAll, messageId, chats))
     return job
+  })
+
+  public async initiateBanAll(banAll: BanAll, messageId: number) {
+    return await this.enqueueBanAll(banAll, messageId)
+  }
+
+  private async getProgress(job: BanAllJob): Promise<BanAllState> {
+    const counts = await job.getDependenciesCount({
+      processed: true,
+      failed: true,
+      ignored: true,
+      unprocessed: true,
+    })
+    const { failed = 0, ignored = 0, processed = 0, unprocessed = 0 } = counts
+
+    return {
+      jobCount: processed + unprocessed + ignored + failed,
+      successCount: processed,
+      failedCount: failed + ignored,
+    }
   }
 
   /**
    * Register event listeners when the module is loaded
    */
   override async start() {
-    const reportProgress = async (job: BanJob) => {
-      // this listener recomputes the progress for the parent job every time a child job is completed
-      const parentID = job.parent?.id
-      if (!parentID) return
-      const parent = await this.orchestrateQueue.getJob(parentID)
-      if (!parent) return
-      const rawNumbers = await parent.getDependenciesCount({
-        processed: true,
-        failed: true,
-        ignored: true,
-        unprocessed: true,
-      })
-
-      // get child counts
-      const { failed, ignored, processed, unprocessed } = {
-        failed: 0,
-        ignored: 0,
-        processed: 0,
-        unprocessed: 0,
-        ...rawNumbers,
-      }
-
-      await parent.updateProgress({
-        jobCount: processed + unprocessed + ignored + failed,
-        successCount: processed,
-        failedCount: failed + ignored,
-      } satisfies BanAllState)
-    }
+    const reportProgress = throttleAsyncByKey(
+      async (job: BanJob) => {
+        // this listener recomputes the progress for the parent job every time a child job is completed
+        const parentID = job.parent?.id
+        if (!parentID) return
+        const parent = await this.orchestrateQueue.getJob(parentID)
+        if (parent) await parent.updateProgress(await this.getProgress(parent))
+      },
+      (job) => job.parent?.id ?? job.id,
+      CONFIG.PROGRESS_REFRESH_THROTTLE_MS,
+      (error, parentID) => logger.warn({ error, parentID }, "[BanAllQueue] Failed to report progress")
+    )
 
     this.executor.on("completed", (job) => reportProgress(job))
     this.executor.on("failed", (job) => {
@@ -244,24 +180,33 @@ export class BanAllQueue extends Module<ModuleShared> {
     })
 
     // throttled call to update the message, to avoid spamming Telegram API
-    const updateMessage = throttle((banAll: BanAll, messageId: number) => {
-      logger.debug("[BanAllQueue] Updating ban all progress message")
-      void modules
-        .get("tgLogger")
-        .banAllProgress(banAll, messageId)
-        .catch((error) => {
-          logger.warn({ error }, "[BanAllQueue] Failed to update ban all progress message")
-        })
-    }, CONFIG.UPDATE_MESSAGE_THROTTLE_MS)
+    const updateMessage = throttleAsyncByKey(
+      async (job: BanAllJob, progress: BanAllState) => {
+        logger.debug("[BanAllQueue] Updating ban all progress message")
+        const banAll = { ...job.data.banAll, state: progress }
+        const results = await Promise.allSettled([
+          modules.get("tgLogger").banAllProgress(banAll, job.data.messageId),
+          job.updateData({ ...job.data, banAll }),
+        ])
+        const failure = results.find((result) => result.status === "rejected")
+        if (failure) throw failure.reason
+      },
+      (job) => job.id,
+      CONFIG.UPDATE_MESSAGE_THROTTLE_MS,
+      (error, jobId) => logger.warn({ error, jobId }, "[BanAllQueue] Failed to update ban all progress message")
+    )
 
-    this.orchestrateQueue.on("progress", async (job, progress) => {
+    const handleProgress = (job: BanAllJob, progress: unknown) => {
       // on progress of a ban_all job (in the orchestrator queue),
       // update the message with the new progress (throttled)
       if (!isBanAllState(progress)) return
-      const banAll = { ...job.data.banAll, state: progress }
-      updateMessage(banAll, job.data.messageId)
-      await job.updateData({ ...job.data, banAll }) // update data just to be sure
-    })
+      updateMessage(job, progress)
+    }
+
+    this.orchestrateQueue.on("progress", handleProgress)
+    this.orchestrator.on("progress", handleProgress)
+    void this.executor.run().catch((error) => logger.error({ error }, "[BanAllQueue] Executor stopped"))
+    void this.orchestrator.run().catch((error) => logger.error({ error }, "[BanAllQueue] Orchestrator stopped"))
   }
 
   /**

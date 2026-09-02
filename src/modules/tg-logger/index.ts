@@ -9,6 +9,7 @@ import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
 import { after } from "@/utils/wait"
 import { modules } from ".."
+import { BanAllQueueCapacityError } from "../moderation/ban-all-flow"
 import type { ModerationAction, PreDeleteResult } from "../moderation/types"
 import { type BanAll, getBanAllText } from "./ban-all"
 import { grantCreatedMenu, grantMessageMenu } from "./grants"
@@ -16,6 +17,11 @@ import { getReportText, type Report, reportMenu } from "./report"
 import type * as Types from "./types"
 
 type REPORT_RESULT = "SENT" | "ALREADY_SENT" | "ERROR"
+
+export type BanAllStartResult = {
+  started: boolean
+  message: string
+}
 
 type Topics = {
   actionRequired: number
@@ -177,7 +183,7 @@ export class TgLogger extends Module<ModuleShared> {
     reporter: User,
     type: "BAN" | "UNBAN",
     reason?: string
-  ): Promise<string | null> {
+  ): Promise<BanAllStartResult> {
     const banAll: BanAll = {
       type,
       reporter: reporter,
@@ -194,26 +200,44 @@ export class TgLogger extends Module<ModuleShared> {
 
     if (!msg?.message_id) {
       logger.error("[banall] There was an error when initiating banall, no msg.msgId")
-      return fmt(
-        ({ n, b }) => [
-          b`${type} All ERROR!`,
-          n`Cannot log the message in tgLogger, therefore cannot start the procedure`,
-          n`This should be inspected as it should not never happen`,
-        ],
-        { sep: "\n" }
-      )
+      return {
+        started: false,
+        message: fmt(({ n, b }) => [b`${type} All ERROR!`, n`Could not create the moderation log.`], {
+          sep: "\n",
+        }),
+      }
     }
 
-    await modules.get("banAll").initiateBanAll(banAll, msg.message_id)
-    return fmt(
-      ({ n, b, link }) => [
-        b`${type} All started!`,
-        msg
-          ? n`Check ${link("here", `https://t.me/c/${this.groupId}/${this.topics.banAll}/${msg.message_id}`)}`
-          : undefined,
-      ],
-      { sep: "\n" }
-    )
+    try {
+      await modules.get("banAll").initiateBanAll(banAll, msg.message_id)
+    } catch (error) {
+      const reason =
+        error instanceof BanAllQueueCapacityError
+          ? `The BanAll queue already has ${error.outstandingJobs} jobs. Try again after the current operations finish.`
+          : "The jobs could not be added to the BanAll queue."
+      if (error instanceof BanAllQueueCapacityError) logger.warn({ error }, "[banall] BanAll queue is full")
+      else logger.error({ error }, "[banall] Failed to enqueue BanAll")
+      await this.shared.api
+        .editMessageText(
+          this.groupId,
+          msg.message_id,
+          fmt(({ n, b }) => [b`${type} All not started`, n`${reason}`], { sep: "\n" }),
+          { reply_markup: undefined, link_preview_options: { is_disabled: true } }
+        )
+        .catch((editError) => logger.error({ error: editError }, "[banall] Failed to mark BanAll as rejected"))
+      return { started: false, message: reason }
+    }
+
+    return {
+      started: true,
+      message: fmt(
+        ({ n, b, link }) => [
+          b`${type} All started!`,
+          n`Check ${link("here", `https://t.me/c/${stripChatId(this.groupId)}/${this.topics.banAll}/${msg.message_id}`)}`,
+        ],
+        { sep: "\n" }
+      ),
+    }
   }
 
   public async banAllProgress(banAll: BanAll, messageId: number): Promise<void> {

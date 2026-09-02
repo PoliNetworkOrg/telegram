@@ -61,10 +61,8 @@ export const banAll = new CommandsCollection<Role>("Ban All")
           }
         : userId
 
-      await modules.get("tgLogger").banAll(target, context.from, "BAN", args.reason)
-      await context.reply(
-        fmt(({ n, link }) => n`Ban All started for userId ${link(userId.toString(), `tg://user?id=${userId}`)}`)
-      )
+      const result = await modules.get("tgLogger").banAll(target, context.from, "BAN", args.reason)
+      await context.reply(result.message)
     },
   })
   .createCommand({
@@ -103,9 +101,7 @@ export const banAll = new CommandsCollection<Role>("Ban All")
           }
         : userId
 
-      await modules.get("tgLogger").banAll(target, context.from, "UNBAN")
-      await context.reply(
-        fmt(({ n, link }) => n`UN-Ban All started for userId ${link(userId.toString(), `tg://user?id=${userId}`)}`)
-      )
+      const result = await modules.get("tgLogger").banAll(target, context.from, "UNBAN")
+      await context.reply(result.message)
     },
   })

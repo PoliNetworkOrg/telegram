@@ -5,6 +5,7 @@ import { type ApiInput, api } from "@/backend"
 import { logger } from "@/logger"
 import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { padChatId } from "@/utils/chat"
+import { serialize } from "@/utils/serialize"
 import { toGrammyUser } from "@/utils/types"
 
 export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
@@ -21,10 +22,23 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
   }
 
   private memoryStorage: Message[] = []
+  private inFlightMessages: Message[] = []
   private userStorage: Map<number, User> = new Map()
+  private flushMessages = serialize(async () => this.writeMessages())
+  private flushUsers = serialize(async () => this.writeUsers())
+
+  private async flushAll(): Promise<void> {
+    const results = await Promise.allSettled([this.flushMessages(), this.flushUsers()])
+    const failures = results.filter((result) => result.status === "rejected")
+    if (failures.length === 1) throw failures[0].reason
+    if (failures.length > 1) throw new AggregateError(failures.map((failure) => failure.reason))
+  }
+
   private constructor() {
     super("message_user_storage")
-    new Cron("0 */1 * * * *", () => this.sync())
+    new Cron("0 */1 * * * *", () => {
+      void this.sync().catch((error) => logger.error({ error }, "memoryStorage: Scheduled flush failed"))
+    })
 
     this.composer.on(["message:text", "message:caption"], (ctx, next) => {
       if (ctx.chat.type === "private") {
@@ -57,7 +71,8 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
 
   async get(chatId: number, messageId: number): Promise<Message | null> {
     const paddedChatId = padChatId(chatId)
-    const memoryMsg = this.memoryStorage.find((m) => m.messageId === messageId && m.chatId === paddedChatId)
+    const isRequestedMessage = (message: Message) => message.messageId === messageId && message.chatId === paddedChatId
+    const memoryMsg = this.memoryStorage.find(isRequestedMessage) ?? this.inFlightMessages.find(isRequestedMessage)
     if (memoryMsg) return memoryMsg
 
     const { error, message: dbMsg } = await api.tg.messages.get.query({ chatId: paddedChatId, messageId })
@@ -75,21 +90,31 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
   }
 
   async sync(): Promise<void> {
-    await Promise.all([this.syncMessages(), this.syncUsers()])
+    await this.flushAll()
   }
 
-  private async syncMessages(): Promise<void> {
-    if (this.memoryStorage.length === 0) return
-    const { error } = await api.tg.messages.add.mutate({ messages: this.memoryStorage })
-    if (error) {
-      logger.error(
-        "memoryStorage: There was an error while encrypting messages in the backend, cannot save messages in table"
-      )
-      return
-    }
+  async syncMessages(): Promise<void> {
+    await this.flushMessages()
+  }
 
-    logger.debug(`memoryStorage: ${this.memoryStorage.length} messages written to the database`)
+  private async writeMessages(): Promise<void> {
+    if (this.memoryStorage.length === 0) return
+    const messages = this.memoryStorage
     this.memoryStorage = []
+    this.inFlightMessages = messages
+
+    try {
+      const { error } = await api.tg.messages.add.mutate({ messages })
+      if (error) throw new Error(`Backend returned ${error}`)
+
+      logger.debug(`memoryStorage: ${messages.length} messages written to the database`)
+    } catch (error) {
+      this.memoryStorage.unshift(...messages)
+      logger.error({ error }, "memoryStorage: Failed to save messages in the backend")
+      throw error
+    } finally {
+      this.inFlightMessages = []
+    }
   }
 
   public async getStoredUser(userId: number): Promise<User | null> {
@@ -108,9 +133,10 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
     return null
   }
 
-  private async syncUsers(): Promise<void> {
+  private async writeUsers(): Promise<void> {
     if (this.userStorage.size === 0) return
-    const users: DBUsers = this.userStorage
+    const pendingUsers = new Map(this.userStorage)
+    const users: DBUsers = pendingUsers
       .values()
       .toArray()
       .map((u) => ({
@@ -124,15 +150,17 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
 
     this.userStorage.clear()
 
-    const { error } = await api.tg.users.add.mutate({ users })
-    if (error === "ENCRYPT_ERROR") {
-      logger.error("userStorage: There was an error while encrypting users in the backend, users voided")
-      return
-    } else if (error === "INTERNAL_SERVER_ERROR") {
-      logger.error("userStorage: There was an UNEXPECTED error while saving users in backend, users voided")
-      return
-    }
+    try {
+      const { error } = await api.tg.users.add.mutate({ users })
+      if (error) throw new Error(`Backend returned ${error}`)
 
-    logger.debug(`userStorage: ${users.length} users upserted in the database`)
+      logger.debug(`userStorage: ${users.length} users upserted in the database`)
+    } catch (error) {
+      for (const [userId, user] of pendingUsers) {
+        if (!this.userStorage.has(userId)) this.userStorage.set(userId, user)
+      }
+      logger.error({ error }, "userStorage: Failed to save users in the backend")
+      throw error
+    }
   }
 }

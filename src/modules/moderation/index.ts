@@ -148,28 +148,48 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
    *
    * Used when banning a user to delete all their messages in the chat
    */
-  public async deleteAllLastMessages(userId: number, chatId: number): Promise<void> {
-    await MessageUserStorage.getInstance()
-      .sync()
-      .catch(() => {})
+  public async deleteAllLastMessages(
+    userId: number,
+    chatId: number,
+    options: { requireSuccess?: boolean } = {}
+  ): Promise<void> {
+    const fail = (error: unknown, message: string, messagesCount?: number) => {
+      logger.warn({ error, userId, chatId, messagesCount }, message)
+      if (options.requireSuccess) throw error
+    }
+
+    try {
+      await MessageUserStorage.getInstance().syncMessages()
+    } catch (error) {
+      fail(error, "[Moderation:deleteAllLastMessages] failed to flush stored messages")
+      return
+    }
 
     // both the limit of tRPC endpoint and Telegram API hard limit: https://core.telegram.org/bots/api#deletemessages
-    const messages = await api.tg.messages.getLastByUser
-      .query({ userId, chatId, limit: 100 })
-      .then((res) => res.messages ?? [])
-      .catch(() => [])
+    let response: Awaited<ReturnType<typeof api.tg.messages.getLastByUser.query>>
+    try {
+      response = await api.tg.messages.getLastByUser.query({ userId, chatId, limit: 100 })
+    } catch (error) {
+      fail(error, "[Moderation:deleteAllLastMessages] failed to load stored messages")
+      return
+    }
 
-    const success = await modules.shared.api
-      .deleteMessages(
-        chatId,
-        messages.map((m) => m.messageId)
-      )
-      .catch(() => {})
+    if (response.error) {
+      if (response.error === "NOT_FOUND") return
 
-    logger.debug(
-      { userId, chatId, messagesCount: messages.length, success },
-      "[Moderation:deleteAllLastMessages] deleted last messages of the user in the chat"
-    )
+      const error = new Error(`Backend returned ${response.error}`)
+      fail(error, "[Moderation:deleteAllLastMessages] failed to load stored messages")
+      return
+    }
+
+    const messageIds = response.messages.map((message) => message.messageId)
+    if (messageIds.length === 0) return
+
+    try {
+      await modules.shared.api.deleteMessages(chatId, messageIds)
+    } catch (error) {
+      fail(error, "[Moderation:deleteAllLastMessages] failed to delete stored messages", messageIds.length)
+    }
   }
 
   private async perform(p: ModerationAction) {
