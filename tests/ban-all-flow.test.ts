@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { createBanAllFlow } from "@/modules/moderation/ban-all-flow"
+import { BAN_ALL_QUEUE_CONFIG, createBanAllFlow } from "@/modules/moderation/ban-all-flow"
 import type { BanAll } from "@/modules/tg-logger/ban-all"
 
 const banAll = {
@@ -29,5 +29,9 @@ describe("BanAll flow", () => {
       })
       expect(child.opts).not.toHaveProperty("continueParentOnFailure")
     }
+  })
+
+  it("leaves Telegram API headroom for explicit message deletion", () => {
+    expect(BAN_ALL_QUEUE_CONFIG.EXECUTOR_RATE_LIMIT).toEqual({ max: 8, duration: 1_000 })
   })
 })

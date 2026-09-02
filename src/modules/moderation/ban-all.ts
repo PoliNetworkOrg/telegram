@@ -7,6 +7,8 @@ import { throttleByKey } from "@/utils/throttle"
 import type { ModuleShared } from "@/utils/types"
 import { modules } from ".."
 import { type BanAll, type BanAllState, isBanAllState } from "../tg-logger/ban-all"
+import { Moderation } from "."
+import { executeBanAllJob } from "./ban-all-executor"
 import { type BanAllFlow, type BanFlow, BAN_ALL_QUEUE_CONFIG as CONFIG, createBanAllFlow } from "./ban-all-flow"
 
 /**
@@ -56,29 +58,10 @@ export class BanAllQueue extends Module<ModuleShared> {
    */
   private executor: WorkerFor<BanJob> = new Worker(
     CONFIG.EXECUTOR_QUEUE,
-    async (job) => {
-      switch (job.name) {
-        case "ban": {
-          const success = await this.shared.api.banChatMember(job.data.chatId, job.data.targetId, {
-            revoke_messages: true,
-          })
-
-          if (!success) {
-            throw new Error("Failed to ban user")
-          }
-          return
-        }
-        case "unban": {
-          const success = await this.shared.api.unbanChatMember(job.data.chatId, job.data.targetId)
-          if (!success) {
-            throw new Error("Failed to unban user")
-          }
-          return
-        }
-        default:
-          throw new Error("Unknown job command")
-      }
-    },
+    async (job) =>
+      executeBanAllJob(this.shared.api, job, (userId, chatId) =>
+        Moderation.deleteAllLastMessages(userId, chatId, { requireSuccess: true })
+      ),
     { connection, concurrency: 3, limiter: CONFIG.EXECUTOR_RATE_LIMIT }
   )
 

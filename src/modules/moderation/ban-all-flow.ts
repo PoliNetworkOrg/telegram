@@ -7,7 +7,7 @@ export const BAN_ALL_QUEUE_CONFIG = {
   PROGRESS_REFRESH_THROTTLE_MS: 1000,
   UPDATE_MESSAGE_THROTTLE_MS: 5000,
   EXECUTOR_RATE_LIMIT: {
-    max: 12,
+    max: 8,
     duration: 1000,
   },
 } as const
@@ -57,7 +57,7 @@ const CHILD_OPTIONS = {
   ignoreDependencyOnFailure: true,
   removeOnComplete: {
     age: 60 * 60,
-    // The worker can finish at most 43,200 jobs per hour at its configured
+    // The worker can finish at most 28,800 jobs per hour at its configured
     // rate. This cap bounds Redis without removing dependencies mid-flow.
     count: 50_000,
   },
