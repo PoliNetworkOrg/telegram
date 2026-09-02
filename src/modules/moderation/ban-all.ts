@@ -9,11 +9,13 @@ import type { ModuleShared } from "@/utils/types"
 import { modules } from ".."
 import { type BanAll, type BanAllState, isBanAllState } from "../tg-logger/ban-all"
 import { Moderation } from "."
+import { backendModerationLog } from "./backend-log"
 import { executeBanAllJob } from "./ban-all-executor"
 import {
   assertBanAllQueueCapacity,
   type BanAllFlow,
   type BanFlow,
+  type BanJobResult,
   BAN_ALL_QUEUE_CONFIG as CONFIG,
   createBanAllFlow,
 } from "./ban-all-flow"
@@ -31,7 +33,7 @@ type JobForFlow<J extends { name: string; data?: unknown }> = J extends {
   : never
 
 /** Job type for a single ban job */
-type BanJob = JobForFlow<BanFlow>
+type BanJob = Job<BanFlow["data"], BanJobResult, BanFlow["name"]>
 /** Job type for a ban all job, only executed when all child jobs are completed (every ban executed) */
 type BanAllJob = JobForFlow<BanAllFlow>
 
@@ -65,6 +67,7 @@ export class BanAllQueue extends Module<ModuleShared> {
    */
   private executor: WorkerFor<BanJob> = new Worker(
     CONFIG.EXECUTOR_QUEUE,
+    // Child jobs use the raw Telegram API so one BanAll never emits per-group ban audits.
     async (job) =>
       executeBanAllJob(this.shared.api, job, (userId, chatId) =>
         Moderation.deleteAllLastMessages(userId, chatId, { requireSuccess: true })
@@ -82,6 +85,20 @@ export class BanAllQueue extends Module<ModuleShared> {
     CONFIG.ORCHESTRATOR_QUEUE,
     async (job) => {
       const state = await this.getProgress(job)
+      const status = state.failedCount === 0 ? "completed" : state.successCount === 0 ? "failed" : "partial"
+      if (job.data.banAll.auditLogId !== null) {
+        await backendModerationLog
+          .update(job.data.banAll.auditLogId, {
+            status,
+            deletedMessageCount: state.deletedMessageCount,
+            totalGroupCount: state.jobCount,
+            successGroupCount: state.successCount,
+            failedGroupCount: state.failedCount,
+          })
+          .catch((error: unknown) => {
+            logger.warn({ error, auditLogId: job.data.banAll.auditLogId }, "[BanAllQueue] Failed final audit update")
+          })
+      }
       await job.updateProgress(state)
       logger.info(
         `[BanAllQueue] Finished executing ${job.name} job for target ${typeof job.data.banAll.target === "number" ? job.data.banAll.target : job.data.banAll.target.id} in ${state.successCount} chats (failed: ${state.failedCount})`
@@ -120,18 +137,19 @@ export class BanAllQueue extends Module<ModuleShared> {
     )
     assertBanAllQueueCapacity(outstandingJobs, chats.length)
 
-    await api.tg.auditLog.create
-      .mutate({
-        adminId: banAll.reporter.id,
-        targetId: typeof banAll.target === "number" ? banAll.target : banAll.target.id,
-        type: banAll.type === "BAN" ? "ban_all" : "unban_all",
-        reason: banAll.reason,
-        groupId: null,
-        until: null,
-      })
-      .catch(() => {
-        logger.warn("[BanAllQueue] Failed to create audit log for ban all command")
-      })
+    if (banAll.auditLogId !== null) {
+      await backendModerationLog
+        .update(banAll.auditLogId, {
+          status: "running",
+          totalGroupCount: chats.length,
+          successGroupCount: 0,
+          failedGroupCount: 0,
+          deletedMessageCount: 0,
+        })
+        .catch((error: unknown) => {
+          logger.warn({ error, auditLogId: banAll.auditLogId }, "[BanAllQueue] Failed initial audit update")
+        })
+    }
 
     const job = await this.flowProducer.add(createBanAllFlow(banAll, messageId, chats))
     return job
@@ -149,11 +167,20 @@ export class BanAllQueue extends Module<ModuleShared> {
       unprocessed: true,
     })
     const { failed = 0, ignored = 0, processed = 0, unprocessed = 0 } = counts
+    const childResults = await job.getChildrenValues<BanJobResult>()
+    const deletionCounts = Object.values(childResults).map((result) => result.deletedMessageCount)
+    const deletedMessageCount =
+      job.name === "ban_all" && failed + ignored > 0
+        ? null
+        : deletionCounts.includes(null)
+          ? null
+          : deletionCounts.reduce<number>((sum, count) => sum + (count ?? 0), 0)
 
     return {
       jobCount: processed + unprocessed + ignored + failed,
       successCount: processed,
       failedCount: failed + ignored,
+      deletedMessageCount,
     }
   }
 
@@ -179,28 +206,39 @@ export class BanAllQueue extends Module<ModuleShared> {
       if (job) void reportProgress(job)
     })
 
-    // throttled call to update the message, to avoid spamming Telegram API
-    const updateMessage = throttleAsyncByKey(
+    const updateProgress = throttleAsyncByKey(
       async (job: BanAllJob, progress: BanAllState) => {
-        logger.debug("[BanAllQueue] Updating ban all progress message")
         const banAll = { ...job.data.banAll, state: progress }
-        const results = await Promise.allSettled([
+        const updates: Promise<unknown>[] = [
           modules.get("tgLogger").banAllProgress(banAll, job.data.messageId),
           job.updateData({ ...job.data, banAll }),
-        ])
-        const failure = results.find((result) => result.status === "rejected")
-        if (failure) throw failure.reason
+        ]
+        if (banAll.auditLogId !== null && progress.successCount + progress.failedCount < progress.jobCount) {
+          updates.push(
+            backendModerationLog.update(banAll.auditLogId, {
+              status: "running",
+              deletedMessageCount: progress.deletedMessageCount,
+              totalGroupCount: progress.jobCount,
+              successGroupCount: progress.successCount,
+              failedGroupCount: progress.failedCount,
+            })
+          )
+        }
+
+        const results = await Promise.allSettled(updates)
+        for (const result of results) {
+          if (result.status === "rejected")
+            logger.warn({ error: result.reason }, "[BanAllQueue] Progress update failed")
+        }
       },
       (job) => job.id,
-      CONFIG.UPDATE_MESSAGE_THROTTLE_MS,
-      (error, jobId) => logger.warn({ error, jobId }, "[BanAllQueue] Failed to update ban all progress message")
+      CONFIG.UPDATE_PROGRESS_THROTTLE_MS,
+      (error, jobId) => logger.warn({ error, jobId }, "[BanAllQueue] Failed to update progress")
     )
 
     const handleProgress = (job: BanAllJob, progress: unknown) => {
-      // on progress of a ban_all job (in the orchestrator queue),
-      // update the message with the new progress (throttled)
       if (!isBanAllState(progress)) return
-      updateMessage(job, progress)
+      updateProgress(job, progress)
     }
 
     this.orchestrateQueue.on("progress", handleProgress)

@@ -5,6 +5,9 @@ export type PreDeleteResult = {
   count: number
   logMessageIds: number[]
   link: string
+  recentMessageCount: number | null
+  successfulChatIds: number[]
+  failedChatIds: number[]
 }
 
 export type ModerationAction = {

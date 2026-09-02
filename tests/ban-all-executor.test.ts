@@ -21,25 +21,38 @@ function telegramError(errorCode: number, description: string) {
   )
 }
 
+function createJob(name: "ban" | "unban") {
+  const job = {
+    name,
+    data: { chatId: -1001, targetId: 42 },
+    updateData: vi.fn(async (data: { chatId: number; targetId: number; deletedMessageCount?: number | null }) => {
+      job.data = data
+    }),
+  }
+  return job
+}
+
 describe("BanAll executor", () => {
   it("explicitly deletes the banned user's stored messages", async () => {
     const api = createApi()
-    const deleteAllLastMessages = vi.fn(async () => {})
+    const deleteAllLastMessages = vi.fn(async () => 12)
 
-    await executeBanAllJob(api, { name: "ban", data: { chatId: -1001, targetId: 42 } }, deleteAllLastMessages)
+    const result = await executeBanAllJob(api, createJob("ban"), deleteAllLastMessages)
 
     expect(api.banChatMember).toHaveBeenCalledWith(-1001, 42, { revoke_messages: true })
     expect(deleteAllLastMessages).toHaveBeenCalledWith(42, -1001)
+    expect(result).toEqual({ deletedMessageCount: 12 })
   })
 
   it("does not delete messages when unbanning", async () => {
     const api = createApi()
-    const deleteAllLastMessages = vi.fn(async () => {})
+    const deleteAllLastMessages = vi.fn(async () => 0)
 
-    await executeBanAllJob(api, { name: "unban", data: { chatId: -1001, targetId: 42 } }, deleteAllLastMessages)
+    const result = await executeBanAllJob(api, createJob("unban"), deleteAllLastMessages)
 
     expect(api.unbanChatMember).toHaveBeenCalledWith(-1001, 42)
     expect(deleteAllLastMessages).not.toHaveBeenCalled()
+    expect(result).toEqual({ deletedMessageCount: 0 })
   })
 
   it("fails the child job when manual deletion throws so BullMQ can retry it", async () => {
@@ -48,9 +61,7 @@ describe("BanAll executor", () => {
       throw new Error("delete failed")
     })
 
-    await expect(
-      executeBanAllJob(api, { name: "ban", data: { chatId: -1001, targetId: 42 } }, deleteAllLastMessages)
-    ).rejects.toThrow("delete failed")
+    await expect(executeBanAllJob(api, createJob("ban"), deleteAllLastMessages)).rejects.toThrow("delete failed")
   })
 
   it("fails permanent Telegram client errors without retrying the child job", async () => {
@@ -62,24 +73,22 @@ describe("BanAll executor", () => {
     await expect(
       executeBanAllJob(
         api,
-        { name: "ban", data: { chatId: -1001, targetId: 42 } },
-        vi.fn(async () => {})
+        createJob("ban"),
+        vi.fn(async () => 0)
       )
     ).rejects.toBeInstanceOf(UnrecoverableError)
   })
 
-  it("retries message cleanup when the ban error is permanent but cleanup fails temporarily", async () => {
+  it("reuses a persisted deletion count when BullMQ retries the ban", async () => {
     const api = createApi()
-    const cleanupError = new Error("backend unavailable")
-    vi.mocked(api.banChatMember).mockRejectedValue(
-      telegramError(400, "Bad Request: not enough rights to restrict/unrestrict chat member")
-    )
+    const deleteAllLastMessages = vi.fn(async () => 12)
+    const job = createJob("ban")
+    vi.mocked(api.banChatMember).mockRejectedValueOnce(new Error("temporary failure")).mockResolvedValueOnce(true)
 
-    await expect(
-      executeBanAllJob(api, { name: "ban", data: { chatId: -1001, targetId: 42 } }, async () => {
-        throw cleanupError
-      })
-    ).rejects.toBe(cleanupError)
+    await expect(executeBanAllJob(api, job, deleteAllLastMessages)).rejects.toThrow("temporary failure")
+    await expect(executeBanAllJob(api, job, deleteAllLastMessages)).resolves.toEqual({ deletedMessageCount: 12 })
+    expect(deleteAllLastMessages).toHaveBeenCalledTimes(1)
+    expect(job.updateData).toHaveBeenCalledWith(expect.objectContaining({ deletedMessageCount: 12 }))
   })
 
   it("keeps Telegram flood-control errors retryable", async () => {
@@ -90,8 +99,8 @@ describe("BanAll executor", () => {
     await expect(
       executeBanAllJob(
         api,
-        { name: "ban", data: { chatId: -1001, targetId: 42 } },
-        vi.fn(async () => {})
+        createJob("ban"),
+        vi.fn(async () => 0)
       )
     ).rejects.toBe(error)
   })

@@ -5,13 +5,14 @@ import {
   BanAllQueueCapacityError,
   createBanAllFlow,
 } from "@/modules/moderation/ban-all-flow"
-import type { BanAll } from "@/modules/tg-logger/ban-all"
+import { type BanAll, getProgressText } from "@/modules/tg-logger/ban-all"
 
 const banAll = {
   type: "BAN",
   target: 42,
   reporter: { id: 7 },
-  state: { jobCount: 0, successCount: 0, failedCount: 0 },
+  state: { jobCount: 0, successCount: 0, failedCount: 0, deletedMessageCount: 0 },
+  auditLogId: 123,
 } as BanAll
 
 describe("BanAll flow", () => {
@@ -25,6 +26,7 @@ describe("BanAll flow", () => {
       removeOnFail: { age: 86_400, count: 1_000 },
     })
     expect(flow.children).toHaveLength(2)
+    expect(flow.data).toEqual({ banAll, messageId: 99 })
 
     for (const child of flow.children) {
       expect(child.opts).toMatchObject({
@@ -40,6 +42,15 @@ describe("BanAll flow", () => {
 
   it("leaves Telegram API headroom for explicit message deletion", () => {
     expect(BAN_ALL_QUEUE_CONFIG.EXECUTOR_RATE_LIMIT).toEqual({ max: 8, duration: 1_000 })
+  })
+
+  it("shows the recent-message deletion count in Telegram progress", () => {
+    expect(getProgressText({ jobCount: 2, successCount: 2, failedCount: 0, deletedMessageCount: 12 })).toContain(
+      "Recent messages deleted: 12"
+    )
+    expect(getProgressText({ jobCount: 2, successCount: 1, failedCount: 1, deletedMessageCount: null })).toContain(
+      "Recent messages deleted: count unavailable"
+    )
   })
 
   it("rejects a flow that would exceed the outstanding-job cap", () => {

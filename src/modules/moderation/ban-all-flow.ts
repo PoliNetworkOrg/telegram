@@ -5,7 +5,7 @@ export const BAN_ALL_QUEUE_CONFIG = {
   ORCHESTRATOR_QUEUE: "[ban_all.orchestrator]",
   EXECUTOR_QUEUE: "[ban_all.exec]",
   PROGRESS_REFRESH_THROTTLE_MS: 1000,
-  UPDATE_MESSAGE_THROTTLE_MS: 5000,
+  UPDATE_PROGRESS_THROTTLE_MS: 5000,
   EXECUTOR_RATE_LIMIT: {
     max: 8,
     duration: 1000,
@@ -21,6 +21,11 @@ export type BanAllCommand = `${BanJobCommand}_all`
 export type BanJobData = {
   chatId: number
   targetId: number
+  deletedMessageCount?: number | null
+}
+
+export type BanJobResult = {
+  deletedMessageCount: number | null
 }
 
 export interface BanFlow extends FlowJob {

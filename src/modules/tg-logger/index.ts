@@ -9,6 +9,7 @@ import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
 import { after } from "@/utils/wait"
 import { modules } from ".."
+import { backendModerationLog } from "../moderation/backend-log"
 import { BanAllQueueCapacityError } from "../moderation/ban-all-flow"
 import type { ModerationAction, PreDeleteResult } from "../moderation/types"
 import { type BanAll, getBanAllText } from "./ban-all"
@@ -134,7 +135,6 @@ export class TgLogger extends Module<ModuleShared> {
   }
 
   // NOTE: this does not delete the messages
-  // TODO: better return type
   async preDelete(
     messages: Message[],
     reason: string,
@@ -159,12 +159,9 @@ export class TgLogger extends Module<ModuleShared> {
     if (!sent) return null
 
     const forwardedIds: number[] = []
-    for (const [chatId, mIds] of groupMessagesByChat(messages)) {
-      if (mIds.length === 0) continue
-      forwardedIds.push(...(await this.forward(this.topics.deletedMessages, chatId, mIds)))
+    for (const [chatId, messageIds] of groupMessagesByChat(messages)) {
+      forwardedIds.push(...(await this.forward(this.topics.deletedMessages, chatId, messageIds)))
     }
-
-    logger.debug({ forwardedIds }, "preDel")
 
     if (forwardedIds.length === 0) {
       void this.shared.api.deleteMessage(this.groupId, sent.message_id).catch(() => {})
@@ -175,6 +172,9 @@ export class TgLogger extends Module<ModuleShared> {
       logMessageIds: [sent.message_id, ...forwardedIds],
       count: forwardedIds.length,
       link: `https://t.me/c/${stripChatId(this.groupId)}/${this.topics.deletedMessages}/${sent.message_id}`,
+      recentMessageCount: 0,
+      successfulChatIds: [],
+      failedChatIds: [],
     }
   }
 
@@ -184,6 +184,21 @@ export class TgLogger extends Module<ModuleShared> {
     type: "BAN" | "UNBAN",
     reason?: string
   ): Promise<BanAllStartResult> {
+    const auditLogId = await backendModerationLog
+      .create({
+        adminId: reporter.id,
+        targetId: typeof target === "number" ? target : target.id,
+        groupId: null,
+        type: type === "BAN" ? "ban_all" : "unban_all",
+        until: null,
+        reason,
+        status: "pending",
+      })
+      .catch((error: unknown) => {
+        logger.error({ error, target, type }, "[banall] Failed to create backend audit record")
+        return null
+      })
+
     const banAll: BanAll = {
       type,
       reporter: reporter,
@@ -193,12 +208,15 @@ export class TgLogger extends Module<ModuleShared> {
         successCount: 0,
         failedCount: 0,
         jobCount: 0,
+        deletedMessageCount: 0,
       },
+      auditLogId,
     }
 
     const msg = await this.log(this.topics.banAll, getBanAllText(banAll))
 
     if (!msg?.message_id) {
+      if (auditLogId !== null) await backendModerationLog.update(auditLogId, { status: "failed" }).catch(() => {})
       logger.error("[banall] There was an error when initiating banall, no msg.msgId")
       return {
         started: false,
@@ -211,6 +229,7 @@ export class TgLogger extends Module<ModuleShared> {
     try {
       await modules.get("banAll").initiateBanAll(banAll, msg.message_id)
     } catch (error) {
+      if (auditLogId !== null) await backendModerationLog.update(auditLogId, { status: "failed" }).catch(() => {})
       const reason =
         error instanceof BanAllQueueCapacityError
           ? `The BanAll queue already has ${error.outstandingJobs} jobs. Try again after the current operations finish.`
@@ -249,37 +268,28 @@ export class TgLogger extends Module<ModuleShared> {
 
   public async moderationAction(props: ModerationAction): Promise<string> {
     const isAutoModeration = props.from.id === this.shared.botInfo.id
-
     const others: string[] = []
     const { invite_link } = await this.shared.api.getChat(props.chat.id)
 
     if (props.action === "MULTI_CHAT_SPAM") {
-      const groupByChat = groupMessagesByChat(props.messages)
       others.push(fmt(({ b }) => b`\nChats involved:`))
-      for (const [chatId, mIds] of groupByChat) {
+      for (const [chatId, messageIds] of groupMessagesByChat(props.messages)) {
         const chat = await this.shared.api.getChat(chatId)
-        others.push(fmt(({ n, i }) => n`${fmtChat(chat, chat.invite_link)} \n${i`Messages: ${mIds.length}`}`))
+        others.push(fmt(({ n, i }) => n`${fmtChat(chat, chat.invite_link)} \n${i`Messages: ${messageIds.length}`}`))
       }
     }
 
     const mainMsg = fmt(
       ({ n, b, skip }) => [
         skip`${MOD_ACTION_TITLE(props)}`,
-
         n`${b`Target:`} ${fmtUser(props.target)}`,
         !isAutoModeration ? n`${b`Moderator:`} ${fmtUser(props.from)}` : undefined,
-
-        // for MULTI_CHAT we have specific per-chat info
         props.action !== "MULTI_CHAT_SPAM" ? `${b`Group:`} ${fmtChat(props.chat, invite_link)}` : undefined,
-
         "duration" in props && props.duration
           ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`
           : undefined,
-
         "reason" in props && props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
-
-        /// per-action specific info, like MULTI_CHAT
-        ...others.map((o) => skip`${o}`),
+        ...others.map((other) => skip`${other}`),
       ],
       { sep: "\n" }
     )

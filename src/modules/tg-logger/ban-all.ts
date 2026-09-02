@@ -14,9 +14,8 @@ export type BanAllState = {
   jobCount: number
   successCount: number
   failedCount: number
+  deletedMessageCount: number | null
 }
-
-const spaces = (n: number) => " ".repeat(n)
 
 export function isBanAllState(obj: unknown): obj is BanAllState {
   return !!(
@@ -25,9 +24,11 @@ export function isBanAllState(obj: unknown): obj is BanAllState {
     "jobCount" in obj &&
     "successCount" in obj &&
     "failedCount" in obj &&
+    "deletedMessageCount" in obj &&
     typeof obj.jobCount === "number" &&
     typeof obj.successCount === "number" &&
-    typeof obj.failedCount === "number"
+    typeof obj.failedCount === "number" &&
+    (typeof obj.deletedMessageCount === "number" || obj.deletedMessageCount === null)
   )
 }
 
@@ -37,32 +38,33 @@ export type BanAll = {
   reporter: User
   reason?: string
   state: BanAllState
+  auditLogId: number | null
 }
 
-export const getProgressText = (state: BanAll["state"]): string => {
+const spaces = (count: number) => " ".repeat(count)
+
+export function getProgressText(state: BanAllState): string {
   if (state.jobCount === 0) return fmt(({ i }) => i`\nFetching groups...`)
 
   const progress = (state.successCount + state.failedCount) / state.jobCount
   const percent = (progress * 100).toFixed(1)
-  const barLength = 18
-
   const stateEmoji = `🟢 ${state.successCount}${spaces(10)}🔴 ${state.failedCount}${spaces(10)}⏸️ ${state.jobCount - state.successCount - state.failedCount}`
+  const deletedMessages =
+    state.deletedMessageCount === null
+      ? "Recent messages deleted: count unavailable"
+      : `Recent messages deleted: ${state.deletedMessageCount}`
+
   return fmt(
     ({ n, b, i }) => [
       n`\n${b`Progress`} ${i`(${state.jobCount} groups)`}`,
-      n`${unicodeProgressBar(progress, barLength)} ${percent}% `,
+      n`${unicodeProgressBar(progress, 18)} ${percent}% `,
       n`${stateEmoji}`,
+      n`${deletedMessages}`,
     ],
     { sep: "\n" }
   )
 }
 
-/**
- * Generate the message text of the BanAll case, based on current voting situation.
- *
- * @param data - The BanAll data including message and reporter.
- * @returns A formatted string of the message text.
- */
 export const getBanAllText = (data: BanAll) =>
   fmt(
     ({ n, b, skip, i, link }) => [
