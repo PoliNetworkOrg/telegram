@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import {
-  buttonDomainFingerprint,
-  extractCampaignSignals,
-  handleFingerprint,
-} from "@/middlewares/campaign-spam/classifier"
 import type { CampaignSpamConfig } from "@/middlewares/campaign-spam/config"
-import { type CampaignRedis, CampaignReputation } from "@/middlewares/campaign-spam/reputation"
+import {
+  CAMPAIGN_REPUTATION_KEY_PREFIX,
+  type CampaignRedis,
+  CampaignReputation,
+} from "@/middlewares/campaign-spam/reputation"
+import { CAMPAIGN_TEST_SECRET, campaignTestFingerprint } from "./fixtures/campaign-spam"
+
+const {
+  buttonDomain: buttonDomainFingerprint,
+  extractSignals: extractCampaignSignals,
+  handle: handleFingerprint,
+} = campaignTestFingerprint
 
 class MemoryRedis implements CampaignRedis {
   private strings = new Map<string, string>()
@@ -18,6 +24,14 @@ class MemoryRedis implements CampaignRedis {
 
   readSet(key: string): string[] {
     return [...(this.sets.get(key) ?? [])]
+  }
+
+  snapshot(): string {
+    return JSON.stringify({
+      strings: [...this.strings],
+      sets: [...this.sets].map(([key, values]) => [key, [...values]]),
+      sortedSets: [...this.sortedSets].map(([key, values]) => [key, [...values]]),
+    })
   }
 
   async get(key: string): Promise<string | null> {
@@ -90,6 +104,7 @@ class MemoryRedis implements CampaignRedis {
 }
 
 const config: CampaignSpamConfig = {
+  fingerprintSecret: CAMPAIGN_TEST_SECRET,
   mode: "enforce",
   joinGate: true,
   quarantineDuration: "10m",
@@ -101,10 +116,10 @@ const config: CampaignSpamConfig = {
   pendingMemberSeconds: 86_400,
   profileAuthorThreshold: 3,
   confirmedSignatureHashes: new Set(),
-  deniedUserIds: new Set(),
+  deniedUserHashes: new Set(),
   deniedHandleHashes: new Set(),
   deniedButtonDomainHashes: new Set(),
-  deniedViaBotIds: new Set(),
+  deniedViaBotHashes: new Set(),
 }
 
 describe("campaign reputation", () => {
@@ -192,7 +207,7 @@ describe("campaign reputation", () => {
         ...config,
         deniedHandleHashes: new Set([handleFingerprint("work_channel_2")]),
         deniedButtonDomainHashes: new Set([buttonDomainFingerprint("bad.example")]),
-        deniedViaBotIds: new Set([42]),
+        deniedViaBotHashes: new Set([campaignTestFingerprint.indicatorHash("via_bot", "42")]),
       },
       () => now
     )
@@ -212,7 +227,10 @@ describe("campaign reputation", () => {
   it("uses configured user IDs before the guard has learned them", async () => {
     const configuredReputation = new CampaignReputation(
       new MemoryRedis(),
-      { ...config, deniedUserIds: new Set([8]) },
+      {
+        ...config,
+        deniedUserHashes: new Set([campaignTestFingerprint.indicatorHash("user_id", "8")]),
+      },
       () => now
     )
     const signals = extractCampaignSignals({ text: "A plain message" })
@@ -236,23 +254,23 @@ describe("campaign reputation", () => {
     })
 
     await reputation.inspectAndRecord(signals, 7, -1001)
-    const firstSeenKey = `moderation:campaign:v1:first-seen:${signals.signatureHash}`
-    const lastSeenKey = `moderation:campaign:v1:last-seen:${signals.signatureHash}`
+    const firstSeenKey = `${CAMPAIGN_REPUTATION_KEY_PREFIX}:first-seen:${signals.signatureHash}`
+    const lastSeenKey = `${CAMPAIGN_REPUTATION_KEY_PREFIX}:last-seen:${signals.signatureHash}`
     expect(client.readString(firstSeenKey)).toBe("1000000")
 
     now += 1_000
     await reputation.inspectAndRecord(signals, 8, -1002)
     expect(client.readString(firstSeenKey)).toBe("1000000")
     expect(client.readString(lastSeenKey)).toBe("1001000")
-    expect(client.readSet(`moderation:campaign:v1:evidence-mentionedUsers:${signals.signatureHash}`)).toEqual(
-      signals.mentionedUserIdHashes
-    )
-    expect(client.readSet(`moderation:campaign:v1:evidence-buttonUrls:${signals.signatureHash}`)).toEqual(
+    expect(
+      client.readSet(`${CAMPAIGN_REPUTATION_KEY_PREFIX}:evidence-mentionedUsers:${signals.signatureHash}`)
+    ).toEqual(signals.mentionedUserIdHashes)
+    expect(client.readSet(`${CAMPAIGN_REPUTATION_KEY_PREFIX}:evidence-buttonUrls:${signals.signatureHash}`)).toEqual(
       signals.buttonUrlHashes
     )
-    expect(client.readSet(`moderation:campaign:v1:evidence-viaBotUsernames:${signals.signatureHash}`)).toEqual([
-      signals.viaBotUsernameHash,
-    ])
+    expect(
+      client.readSet(`${CAMPAIGN_REPUTATION_KEY_PREFIX}:evidence-viaBotUsernames:${signals.signatureHash}`)
+    ).toEqual([signals.viaBotUsernameHash])
   })
 
   it("requires three confirmed actors before declining a reused profile", async () => {
@@ -331,6 +349,23 @@ describe("campaign reputation", () => {
 
     await reputation.clearConfirmed(second)
     expect(await reputation.inspectAndRecord(signals, 9, -1002)).toMatchObject({ confirmedSignature: false })
+  })
+
+  it("never persists raw Telegram user or chat IDs", async () => {
+    const actorId = 987_654_321
+    const chatId = -100_987_654_321
+    const signals = extractCampaignSignals({ text: "聘群演每日600+ @cash_helper_47", viaBotId: 876_543_219 })
+
+    await reputation.recordJoin(actorId)
+    await reputation.inspectAndRecord(signals, actorId, chatId)
+    await reputation.recordConfirmed(signals, { id: actorId, firstName: "Student", lastName: "Wang" })
+    await reputation.markPending(chatId, actorId)
+
+    const persisted = client.snapshot()
+    expect(persisted).toContain(CAMPAIGN_REPUTATION_KEY_PREFIX)
+    expect(persisted).not.toContain(String(actorId))
+    expect(persisted).not.toContain(String(chatId))
+    expect(persisted).not.toContain("876543219")
   })
 
   it("deduplicates BanAll work and tracks first-post restrictions", async () => {

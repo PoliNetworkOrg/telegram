@@ -2,6 +2,7 @@ import { env } from "@/env"
 import { createCampaignSpamConfig } from "./config"
 
 export const campaignSpamConfig = createCampaignSpamConfig({
+  fingerprintSecret: env.CAMPAIGN_SPAM_FINGERPRINT_SECRET ?? env.BOT_TOKEN,
   mode: env.CAMPAIGN_SPAM_MODE,
   joinGate: env.CAMPAIGN_SPAM_JOIN_GATE,
   quarantineDuration: env.CAMPAIGN_SPAM_QUARANTINE_DURATION,

@@ -1,9 +1,9 @@
 import type { User } from "grammy/types"
 import type { CampaignMessageSignals, CampaignReputationSnapshot } from "./classifier"
-import { EMPTY_CAMPAIGN_REPUTATION, profileFingerprint } from "./classifier"
+import { campaignIndicatorHash, EMPTY_CAMPAIGN_REPUTATION, profileFingerprint } from "./classifier"
 import type { CampaignSpamConfig } from "./config"
 
-const KEY_PREFIX = "moderation:campaign:v1"
+export const CAMPAIGN_REPUTATION_KEY_PREFIX = "moderation:campaign:v2"
 
 export type CampaignRedis = {
   get(key: string): Promise<string | null>
@@ -50,21 +50,45 @@ export class CampaignReputation {
     private readonly now: () => number = Date.now
   ) {}
 
-  private key(kind: string, value: string | number): string {
-    return `${KEY_PREFIX}:${kind}:${value}`
+  /** Builds a versioned Redis key from an already protected identifier. */
+  private key(kind: string, value: string): string {
+    return `${CAMPAIGN_REPUTATION_KEY_PREFIX}:${kind}:${value}`
   }
 
+  /** Protects a Telegram user ID before it enters a Redis key or collection. */
+  private userFingerprint(actorId: number): string {
+    return campaignIndicatorHash("user_id", String(actorId), this.config.fingerprintSecret)
+  }
+
+  /** Protects a Telegram chat ID before it enters a Redis collection. */
+  private chatFingerprint(chatId: number): string {
+    return campaignIndicatorHash("chat_id", String(chatId), this.config.fingerprintSecret)
+  }
+
+  /** Builds an actor-scoped key without exposing the Telegram user ID. */
+  private userKey(kind: string, actorId: number): string {
+    return this.key(kind, this.userFingerprint(actorId))
+  }
+
+  /** Builds a pending-member key from protected chat and user fingerprints. */
+  private pendingKey(chatId: number, actorId: number): string {
+    return this.key("pending", `${this.chatFingerprint(chatId)}:${this.userFingerprint(actorId)}`)
+  }
+
+  /** Reads operator-managed indicators without touching Redis. */
   private configuredSnapshot(signals: CampaignMessageSignals, actorId: number): CampaignReputationSnapshot {
+    const actorHash = this.userFingerprint(actorId)
     return {
       ...EMPTY_CAMPAIGN_REPUTATION,
       confirmedSignature: this.config.confirmedSignatureHashes.has(signals.signatureHash),
-      deniedUser: this.config.deniedUserIds.has(actorId),
+      deniedUser: this.config.deniedUserHashes.has(actorHash),
       knownHandle: signals.mentionedHandleHashes.some((hash) => this.config.deniedHandleHashes.has(hash)),
       knownButtonDomain: signals.buttonDomainHashes.some((hash) => this.config.deniedButtonDomainHashes.has(hash)),
-      knownViaBot: signals.viaBotId !== undefined && this.config.deniedViaBotIds.has(signals.viaBotId),
+      knownViaBot: signals.viaBotIdHash !== undefined && this.config.deniedViaBotHashes.has(signals.viaBotIdHash),
     }
   }
 
+  /** Records distinct protected actors and chats inside the burst window. */
   private async recordBurst(signals: CampaignMessageSignals, actorId: number, chatId: number) {
     const authorsKey = this.key("burst-authors", signals.signatureHash)
     const chatsKey = this.key("burst-chats", signals.signatureHash)
@@ -72,8 +96,8 @@ export class CampaignReputation {
     const cutoff = observedAt - this.config.burstWindowSeconds * 1000
 
     await Promise.all([
-      this.client.zAdd(authorsKey, { score: observedAt, value: String(actorId) }),
-      this.client.zAdd(chatsKey, { score: observedAt, value: String(chatId) }),
+      this.client.zAdd(authorsKey, { score: observedAt, value: this.userFingerprint(actorId) }),
+      this.client.zAdd(chatsKey, { score: observedAt, value: this.chatFingerprint(chatId) }),
       this.client.zRemRangeByScore(authorsKey, 0, cutoff),
       this.client.zRemRangeByScore(chatsKey, 0, cutoff),
       this.client.expire(authorsKey, this.config.burstWindowSeconds),
@@ -87,6 +111,7 @@ export class CampaignReputation {
     return { distinctAuthors, distinctChats }
   }
 
+  /** Retains only protected evidence values and coarse message metadata. */
   private async recordEvidence(signals: CampaignMessageSignals): Promise<void> {
     const signatureHash = signals.signatureHash
     const observedAt = String(this.now())
@@ -95,7 +120,7 @@ export class CampaignReputation {
       mentionedUsers: signals.mentionedUserIdHashes,
       buttonUrls: signals.buttonUrlHashes,
       buttonDomains: signals.buttonDomainHashes,
-      viaBotIds: signals.viaBotId === undefined ? [] : [String(signals.viaBotId)],
+      viaBotIds: signals.viaBotIdHash === undefined ? [] : [signals.viaBotIdHash],
       viaBotUsernames: signals.viaBotUsernameHash ? [signals.viaBotUsernameHash] : [],
       entities: signals.entityTypes,
       flags: signals.hasInlineKeyboard ? ["inline_keyboard"] : [],
@@ -129,9 +154,9 @@ export class CampaignReputation {
 
     const [confirmedSignature, deniedUser, allowedUser, joinedAt] = await Promise.all([
       this.client.exists(this.key("signature", signals.signatureHash)),
-      this.client.exists(this.key("user", actorId)),
-      this.client.exists(this.key("user-allow", actorId)),
-      this.client.get(this.key("joined-at", actorId)),
+      this.client.exists(this.userKey("user", actorId)),
+      this.client.exists(this.userKey("user-allow", actorId)),
+      this.client.get(this.userKey("joined-at", actorId)),
     ])
 
     let distinctAuthors = 0
@@ -176,7 +201,7 @@ export class CampaignReputation {
 
   /** Marks an account as fresh for the configured first-post window. */
   async recordJoin(actorId: number): Promise<void> {
-    await this.client.set(this.key("joined-at", actorId), String(this.now()), {
+    await this.client.set(this.userKey("joined-at", actorId), String(this.now()), {
       EX: this.config.freshWindowSeconds,
     })
   }
@@ -184,20 +209,21 @@ export class CampaignReputation {
   /** Learns a confirmed account, profile, and message signature. */
   async recordConfirmed(signals: CampaignConfirmationSignals, actor: CampaignActor): Promise<void> {
     const observedAt = this.now()
-    const profile = profileFingerprint(actor.firstName, actor.lastName)
+    const profile = profileFingerprint(actor.firstName, actor.lastName, this.config.fingerprintSecret)
+    const actorHash = this.userFingerprint(actor.id)
     const profileUsersKey = this.key("profile-users", profile)
-    const actorProfilesKey = this.key("actor-profiles", actor.id)
+    const actorProfilesKey = this.key("actor-profiles", actorHash)
     const signatureUsersKey = this.key("signature-users", signals.signatureHash)
-    const actorSignaturesKey = this.key("actor-signatures", actor.id)
+    const actorSignaturesKey = this.key("actor-signatures", actorHash)
     const expiringWrites: Promise<unknown>[] = [
       this.client.set(this.key("signature", signals.signatureHash), "1", {
         EX: this.config.evidenceRetentionSeconds,
       }),
-      this.client.set(this.key("user", actor.id), "1", { EX: this.config.evidenceRetentionSeconds }),
-      this.client.del(this.key("user-allow", actor.id)),
-      this.client.zAdd(profileUsersKey, { score: observedAt, value: String(actor.id) }),
+      this.client.set(this.userKey("user", actor.id), "1", { EX: this.config.evidenceRetentionSeconds }),
+      this.client.del(this.userKey("user-allow", actor.id)),
+      this.client.zAdd(profileUsersKey, { score: observedAt, value: actorHash }),
       this.client.sAdd(actorProfilesKey, profile),
-      this.client.zAdd(signatureUsersKey, { score: observedAt, value: String(actor.id) }),
+      this.client.zAdd(signatureUsersKey, { score: observedAt, value: actorHash }),
       this.client.sAdd(actorSignaturesKey, signals.signatureHash),
       this.client.expire(profileUsersKey, this.config.evidenceRetentionSeconds),
       this.client.expire(actorProfilesKey, this.config.evidenceRetentionSeconds),
@@ -210,12 +236,13 @@ export class CampaignReputation {
 
   /** Learns an administrator-confirmed account and its exact profile fingerprint. */
   async recordDeniedActor(actor: CampaignActor): Promise<void> {
-    const profile = profileFingerprint(actor.firstName, actor.lastName)
+    const profile = profileFingerprint(actor.firstName, actor.lastName, this.config.fingerprintSecret)
+    const actorHash = this.userFingerprint(actor.id)
     const profileUsersKey = this.key("profile-users", profile)
-    const actorProfilesKey = this.key("actor-profiles", actor.id)
+    const actorProfilesKey = this.key("actor-profiles", actorHash)
     await Promise.all([
       this.recordDeniedUser(actor.id),
-      this.client.zAdd(profileUsersKey, { score: this.now(), value: String(actor.id) }),
+      this.client.zAdd(profileUsersKey, { score: this.now(), value: actorHash }),
       this.client.sAdd(actorProfilesKey, profile),
       this.client.expire(profileUsersKey, this.config.evidenceRetentionSeconds),
       this.client.expire(actorProfilesKey, this.config.evidenceRetentionSeconds),
@@ -225,33 +252,36 @@ export class CampaignReputation {
   /** Learns an administrator-confirmed account when profile data is unavailable. */
   async recordDeniedUser(actorId: number): Promise<void> {
     await Promise.all([
-      this.client.set(this.key("user", actorId), "1", { EX: this.config.evidenceRetentionSeconds }),
-      this.client.del(this.key("user-allow", actorId)),
+      this.client.set(this.userKey("user", actorId), "1", { EX: this.config.evidenceRetentionSeconds }),
+      this.client.del(this.userKey("user-allow", actorId)),
     ])
   }
 
   /** Applies a moderator reversal and removes reputation learned from the account. */
   async clearConfirmed(actor: CampaignActor | { id: number }): Promise<void> {
-    const actorSignaturesKey = this.key("actor-signatures", actor.id)
-    const actorProfilesKey = this.key("actor-profiles", actor.id)
+    const actorHash = this.userFingerprint(actor.id)
+    const actorSignaturesKey = this.key("actor-signatures", actorHash)
+    const actorProfilesKey = this.key("actor-profiles", actorHash)
     const [signatureHashes, storedProfileHashes] = await Promise.all([
       this.client.sMembers(actorSignaturesKey),
       this.client.sMembers(actorProfilesKey),
     ])
     const profileHashes = new Set(storedProfileHashes)
-    if ("firstName" in actor) profileHashes.add(profileFingerprint(actor.firstName, actor.lastName))
+    if ("firstName" in actor) {
+      profileHashes.add(profileFingerprint(actor.firstName, actor.lastName, this.config.fingerprintSecret))
+    }
     const removals: Promise<unknown>[] = [
-      this.client.del(this.key("user", actor.id)),
-      this.client.set(this.key("user-allow", actor.id), "1", { EX: this.config.evidenceRetentionSeconds }),
-      this.client.del(this.key("ban-all-claimed", actor.id)),
+      this.client.del(this.userKey("user", actor.id)),
+      this.client.set(this.userKey("user-allow", actor.id), "1", { EX: this.config.evidenceRetentionSeconds }),
+      this.client.del(this.userKey("ban-all-claimed", actor.id)),
       this.client.del(actorSignaturesKey),
       this.client.del(actorProfilesKey),
     ]
     for (const profileHash of profileHashes) {
-      removals.push(this.client.zRem(this.key("profile-users", profileHash), String(actor.id)))
+      removals.push(this.client.zRem(this.key("profile-users", profileHash), actorHash))
     }
     for (const signatureHash of signatureHashes) {
-      removals.push(this.client.zRem(this.key("signature-users", signatureHash), String(actor.id)))
+      removals.push(this.client.zRem(this.key("signature-users", signatureHash), actorHash))
     }
     await Promise.all(removals)
 
@@ -266,17 +296,18 @@ export class CampaignReputation {
 
   /** Checks exact account and active profile evidence before a join decision. */
   async inspectJoin(actor: CampaignActor): Promise<CampaignJoinReputation> {
-    const profile = profileFingerprint(actor.firstName, actor.lastName)
+    const profile = profileFingerprint(actor.firstName, actor.lastName, this.config.fingerprintSecret)
     const profileUsersKey = this.key("profile-users", profile)
     const cutoff = this.now() - this.config.evidenceRetentionSeconds * 1000
     await this.client.zRemRangeByScore(profileUsersKey, 0, cutoff)
     const [deniedUser, allowedUser, profileAuthors] = await Promise.all([
-      this.client.exists(this.key("user", actor.id)),
-      this.client.exists(this.key("user-allow", actor.id)),
+      this.client.exists(this.userKey("user", actor.id)),
+      this.client.exists(this.userKey("user-allow", actor.id)),
       this.client.zCard(profileUsersKey),
     ])
     return {
-      deniedUser: (this.config.deniedUserIds.has(actor.id) && allowedUser === 0) || deniedUser > 0,
+      deniedUser:
+        (this.config.deniedUserHashes.has(this.userFingerprint(actor.id)) && allowedUser === 0) || deniedUser > 0,
       confirmedProfile: profileAuthors >= this.config.profileAuthorThreshold,
       profileAuthors,
     }
@@ -284,7 +315,7 @@ export class CampaignReputation {
 
   /** Claims one network-wide ban job for an account. */
   async claimBanAll(actorId: number): Promise<boolean> {
-    const result = await this.client.set(this.key("ban-all-claimed", actorId), "1", {
+    const result = await this.client.set(this.userKey("ban-all-claimed", actorId), "1", {
       EX: this.config.evidenceRetentionSeconds,
       NX: true,
     })
@@ -293,23 +324,23 @@ export class CampaignReputation {
 
   /** Releases a failed network-wide ban claim so operators can retry it. */
   async releaseBanAllClaim(actorId: number): Promise<void> {
-    await this.client.del(this.key("ban-all-claimed", actorId))
+    await this.client.del(this.userKey("ban-all-claimed", actorId))
   }
 
   /** Marks a newly approved member as awaiting first-post classification. */
   async markPending(chatId: number, actorId: number): Promise<void> {
-    await this.client.set(this.key("pending", `${chatId}:${actorId}`), "1", {
+    await this.client.set(this.pendingKey(chatId, actorId), "1", {
       EX: this.config.pendingMemberSeconds,
     })
   }
 
   /** Checks whether a member still has first-post restrictions. */
   async isPending(chatId: number, actorId: number): Promise<boolean> {
-    return (await this.client.exists(this.key("pending", `${chatId}:${actorId}`))) > 0
+    return (await this.client.exists(this.pendingKey(chatId, actorId))) > 0
   }
 
   /** Clears the first-post marker after release or a failed restriction. */
   async clearPending(chatId: number, actorId: number): Promise<void> {
-    await this.client.del(this.key("pending", `${chatId}:${actorId}`))
+    await this.client.del(this.pendingKey(chatId, actorId))
   }
 }

@@ -37,6 +37,7 @@ export const env = createEnv({
     CAMPAIGN_SPAM_DENIED_HANDLES_JSON: z.string().default("[]"),
     CAMPAIGN_SPAM_DENIED_BUTTON_DOMAINS_JSON: z.string().default("[]"),
     CAMPAIGN_SPAM_DENIED_VIA_BOT_IDS_JSON: z.string().default("[]"),
+    CAMPAIGN_SPAM_FINGERPRINT_SECRET: z.string().min(32).optional(),
   },
 
   runtimeEnv: process.env,

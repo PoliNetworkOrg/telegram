@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest"
-import {
-  buttonDomainFingerprint,
-  handleFingerprint,
-  normalizeCampaignText,
-} from "@/middlewares/campaign-spam/classifier"
+import { normalizeCampaignText } from "@/middlewares/campaign-spam/classifier"
 import { type CampaignSpamConfigInput, createCampaignSpamConfig } from "@/middlewares/campaign-spam/config"
+import { CAMPAIGN_TEST_SECRET, campaignTestFingerprint } from "./fixtures/campaign-spam"
 
 const baseInput: CampaignSpamConfigInput = {
+  fingerprintSecret: CAMPAIGN_TEST_SECRET,
   mode: "observe",
   joinGate: false,
   quarantineDuration: "10m",
@@ -36,10 +34,10 @@ describe("campaign spam config", () => {
     })
 
     expect(config.confirmedSignatureHashes.size).toBe(1)
-    expect(config.deniedUserIds).toContain(123456789)
-    expect(config.deniedHandleHashes).toContain(handleFingerprint("cash_helper_47"))
-    expect(config.deniedButtonDomainHashes).toContain(buttonDomainFingerprint("bad.example"))
-    expect(config.deniedViaBotIds).toContain(42)
+    expect(config.deniedUserHashes).toContain(campaignTestFingerprint.indicatorHash("user_id", "123456789"))
+    expect(config.deniedHandleHashes).toContain(campaignTestFingerprint.handle("cash_helper_47"))
+    expect(config.deniedButtonDomainHashes).toContain(campaignTestFingerprint.buttonDomain("bad.example"))
+    expect(config.deniedViaBotHashes).toContain(campaignTestFingerprint.indicatorHash("via_bot", "42"))
     expect(normalizeCampaignText("聘群演每日６００+ @Cash_Helper_47")).toBe("聘群演每日#+ <mention>")
   })
 
@@ -47,6 +45,12 @@ describe("campaign spam config", () => {
     expect(() => createCampaignSpamConfig({ ...baseInput, deniedHandlesJson: "not-json" })).toThrow()
     expect(() => createCampaignSpamConfig({ ...baseInput, deniedViaBotIdsJson: '["42"]' })).toThrow(
       "must contain only positive safe integers"
+    )
+  })
+
+  it("rejects weak fingerprint secrets", () => {
+    expect(() => createCampaignSpamConfig({ ...baseInput, fingerprintSecret: "too-short" })).toThrow(
+      "at least 32 characters"
     )
   })
 })

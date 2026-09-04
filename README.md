@@ -63,6 +63,12 @@ button URLs and domains, mention targets, and inline-bot usernames. Telemetry re
 join outcomes, first-post catches, and campaign review feedback. A review release temporarily overrides a configured
 user ID for 30 days, giving operators time to remove a false positive from the environment list.
 
+Persisted identifiers use versioned HMAC-SHA-256 fingerprints. Set a stable, random
+`CAMPAIGN_SPAM_FINGERPRINT_SECRET` before rollout; the bot token is the secure compatibility fallback. The v2 Redis
+namespace ignores older unkeyed v1 evidence and lets it expire normally. Changing the secret intentionally starts a
+fresh learned-reputation fingerprint space, while configured indicators and BanAll audit history continue to seed
+decisions. Review callback state is authenticated and encrypted before the menu adapter stores it.
+
 Set `CAMPAIGN_SPAM_JOIN_GATE=true` only after every managed group uses join requests and the bot has
 `can_invite_users` and `can_restrict_members`. In `quarantine` or `enforce` mode, the bot approves unknown requests
 with text-only permissions. It restores normal permissions after the first allowed message. In `enforce` mode, it

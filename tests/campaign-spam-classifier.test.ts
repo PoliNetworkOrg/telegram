@@ -1,21 +1,39 @@
 import { describe, expect, it } from "vitest"
 import {
-  buttonDomainFingerprint,
-  buttonUrlFingerprint,
-  campaignIndicatorHash,
   classifyCampaignJoin,
   classifyCampaignMessage,
+  createCampaignFingerprintSecret,
   EMPTY_CAMPAIGN_REPUTATION,
-  extractCampaignSignals,
-  handleFingerprint,
   normalizeCampaignText,
-  profileFingerprint,
+  campaignIndicatorHash as protectedCampaignIndicatorHash,
 } from "@/middlewares/campaign-spam/classifier"
+import { CAMPAIGN_TEST_SECRET, campaignTestFingerprint } from "./fixtures/campaign-spam"
+
+const {
+  buttonDomain: buttonDomainFingerprint,
+  buttonUrl: buttonUrlFingerprint,
+  extractSignals: extractCampaignSignals,
+  handle: handleFingerprint,
+  indicatorHash: campaignIndicatorHash,
+  profile: profileFingerprint,
+} = campaignTestFingerprint
 
 describe("campaign spam classifier", () => {
   it("normalizes compatibility characters, rotating numbers, handles, and invisible controls", () => {
     expect(normalizeCampaignText("聘群演每日６００+\u200B @Cash_Helper_47")).toBe("聘群演每日#+ <mention>")
     expect(normalizeCampaignText("小额  收点赚\n@work_channel_2")).toBe("小额 收点赚 <mention>")
+  })
+
+  it("uses a keyed, versioned digest for persisted indicators", () => {
+    const first = protectedCampaignIndicatorHash("user_id", "123456789", CAMPAIGN_TEST_SECRET)
+    const second = protectedCampaignIndicatorHash(
+      "user_id",
+      "123456789",
+      createCampaignFingerprintSecret(`${CAMPAIGN_TEST_SECRET}-other`)
+    )
+
+    expect(first).not.toBe(second)
+    expect(first).not.toContain("123456789")
   })
 
   it("extracts message and inline-button signals without retaining raw indicators", () => {
@@ -33,7 +51,7 @@ describe("campaign spam classifier", () => {
       hasMention: true,
       entityTypes: ["bold", "mention"],
       hasInlineKeyboard: true,
-      viaBotId: 42,
+      viaBotIdHash: campaignIndicatorHash("via_bot", "42"),
     })
     expect(signals.mentionedHandleHashes).toEqual([handleFingerprint("work_channel_2")])
     expect(signals.mentionedUserIdHashes).toEqual([campaignIndicatorHash("mention_user", "99")])

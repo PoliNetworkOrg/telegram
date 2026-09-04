@@ -1,4 +1,4 @@
-import { nanohash } from "@/utils/crypto"
+import { keyedHash } from "@/utils/crypto"
 
 const HAN_PATTERN = /\p{Script=Han}/u
 const MENTION_PATTERN = /@[\p{L}\p{N}_]{3,}/gu
@@ -8,22 +8,35 @@ const NUMBER_PATTERN = /\p{N}+/gu
 const SPACE_PATTERN = /\s+/g
 
 export const CAMPAIGN_SPAM_MODEL_VERSION = "deterministic-v1"
+export const CAMPAIGN_SPAM_FINGERPRINT_VERSION = "hmac-v2"
+
+declare const campaignFingerprintSecretBrand: unique symbol
+export type CampaignFingerprintSecret = string & { readonly [campaignFingerprintSecretBrand]: true }
+
+/** Validates and brands a secret before campaign cryptographic operations can use it. */
+export function createCampaignFingerprintSecret(value: string): CampaignFingerprintSecret {
+  if (value.length < 32) throw new TypeError("campaign fingerprint secret must contain at least 32 characters")
+  return value as CampaignFingerprintSecret
+}
 
 export type CampaignSpamDecision = "allow" | "quarantine" | "ban_all"
 
-export type CampaignSpamReason =
-  | "confirmed_signature"
-  | "confirmed_profile"
-  | "denied_user"
-  | "fresh_user"
-  | "global_burst"
-  | "han_with_mention"
-  | "inline_keyboard"
-  | "known_button_domain"
-  | "known_handle"
-  | "known_via_bot"
-  | "partial_profile"
-  | "via_bot"
+export const CAMPAIGN_SPAM_REASONS = [
+  "confirmed_signature",
+  "confirmed_profile",
+  "denied_user",
+  "fresh_user",
+  "global_burst",
+  "han_with_mention",
+  "inline_keyboard",
+  "known_button_domain",
+  "known_handle",
+  "known_via_bot",
+  "partial_profile",
+  "via_bot",
+] as const
+
+export type CampaignSpamReason = (typeof CAMPAIGN_SPAM_REASONS)[number]
 
 export type CampaignJoinClassification = {
   decision: "decline" | "restrict"
@@ -51,7 +64,7 @@ export type CampaignMessageSignals = {
   buttonDomainHashes: string[]
   entityTypes: string[]
   hasInlineKeyboard: boolean
-  viaBotId?: number
+  viaBotIdHash?: string
   viaBotUsernameHash?: string
 }
 
@@ -108,17 +121,31 @@ export function normalizeProfileName(firstName: string, lastName?: string): stri
     .trim()
 }
 
-/** Creates a namespaced SHA-256-derived identifier without retaining the source value. */
+/** Creates a versioned, keyed HMAC-SHA-256 fingerprint without retaining the source value. */
 export function campaignIndicatorHash(
-  kind: "button_domain" | "button_url" | "handle" | "mention_user" | "profile" | "signature",
-  value: string
+  kind:
+    | "button_domain"
+    | "button_url"
+    | "chat_id"
+    | "handle"
+    | "mention_user"
+    | "profile"
+    | "signature"
+    | "user_id"
+    | "via_bot",
+  value: string,
+  fingerprintSecret: CampaignFingerprintSecret
 ): string {
-  return nanohash(`${kind}:${value}`, 24)
+  return keyedHash(`${CAMPAIGN_SPAM_FINGERPRINT_VERSION}:${kind}:${value}`, fingerprintSecret)
 }
 
 /** Returns the stable hash used for exact display-name reputation. */
-export function profileFingerprint(firstName: string, lastName?: string): string {
-  return campaignIndicatorHash("profile", normalizeProfileName(firstName, lastName))
+export function profileFingerprint(
+  firstName: string,
+  lastName: string | undefined,
+  fingerprintSecret: CampaignFingerprintSecret
+): string {
+  return campaignIndicatorHash("profile", normalizeProfileName(firstName, lastName), fingerprintSecret)
 }
 
 function normalizeHandle(handle: string): string {
@@ -126,8 +153,8 @@ function normalizeHandle(handle: string): string {
 }
 
 /** Returns the stable hash used for case-insensitive Telegram handles. */
-export function handleFingerprint(handle: string): string {
-  return campaignIndicatorHash("handle", normalizeHandle(handle))
+export function handleFingerprint(handle: string, fingerprintSecret: CampaignFingerprintSecret): string {
+  return campaignIndicatorHash("handle", normalizeHandle(handle), fingerprintSecret)
 }
 
 function normalizedButtonUrl(url: string): string | null {
@@ -147,19 +174,26 @@ function buttonDomain(url: string): string | null {
 }
 
 /** Hashes a normalized full button URL, including its path and query. */
-export function buttonUrlFingerprint(url: string): string {
-  return campaignIndicatorHash("button_url", normalizedButtonUrl(url) ?? url.trim().normalize("NFKC"))
+export function buttonUrlFingerprint(url: string, fingerprintSecret: CampaignFingerprintSecret): string {
+  return campaignIndicatorHash(
+    "button_url",
+    normalizedButtonUrl(url) ?? url.trim().normalize("NFKC"),
+    fingerprintSecret
+  )
 }
 
 /** Hashes a normalized hostname for domain-level button matching. */
-export function buttonDomainFingerprint(domain: string): string {
+export function buttonDomainFingerprint(domain: string, fingerprintSecret: CampaignFingerprintSecret): string {
   const trimmed = domain.trim()
   const normalizedDomain = buttonDomain(trimmed.includes("://") ? trimmed : `https://${trimmed}`) ?? trimmed
-  return campaignIndicatorHash("button_domain", normalizedDomain.toLowerCase().replace(/^www\./, ""))
+  return campaignIndicatorHash("button_domain", normalizedDomain.toLowerCase().replace(/^www\./, ""), fingerprintSecret)
 }
 
 /** Converts message text and Telegram metadata into privacy-preserving classifier signals. */
-export function extractCampaignSignals(input: CampaignMessageInput): CampaignMessageSignals {
+export function extractCampaignSignals(
+  input: CampaignMessageInput,
+  fingerprintSecret: CampaignFingerprintSecret
+): CampaignMessageSignals {
   const normalizedText = normalizeCampaignText(input.text)
   const entityTypes = [...new Set(input.entityTypes ?? [])].sort()
   const mentionedHandles = [...input.text.matchAll(MENTION_PATTERN)].map(([handle]) => handle)
@@ -170,17 +204,22 @@ export function extractCampaignSignals(input: CampaignMessageInput): CampaignMes
 
   return {
     normalizedText,
-    signatureHash: campaignIndicatorHash("signature", normalizedText),
+    signatureHash: campaignIndicatorHash("signature", normalizedText, fingerprintSecret),
     hasHan: HAN_PATTERN.test(normalizedText),
     hasMention: hasEntityMention || mentionedHandles.length > 0,
-    mentionedHandleHashes: [...new Set(mentionedHandles.map(handleFingerprint))],
-    mentionedUserIdHashes: mentionedUserIds.map((userId) => campaignIndicatorHash("mention_user", String(userId))),
-    buttonUrlHashes: [...new Set(buttonUrls.map(buttonUrlFingerprint))],
-    buttonDomainHashes: [...new Set(domains.map(buttonDomainFingerprint))],
+    mentionedHandleHashes: [...new Set(mentionedHandles.map((handle) => handleFingerprint(handle, fingerprintSecret)))],
+    mentionedUserIdHashes: mentionedUserIds.map((userId) =>
+      campaignIndicatorHash("mention_user", String(userId), fingerprintSecret)
+    ),
+    buttonUrlHashes: [...new Set(buttonUrls.map((url) => buttonUrlFingerprint(url, fingerprintSecret)))],
+    buttonDomainHashes: [...new Set(domains.map((domain) => buttonDomainFingerprint(domain, fingerprintSecret)))],
     entityTypes,
     hasInlineKeyboard: input.hasInlineKeyboard ?? (input.buttonUrls?.length ?? 0) > 0,
-    viaBotId: input.viaBotId,
-    viaBotUsernameHash: input.viaBotUsername ? handleFingerprint(input.viaBotUsername) : undefined,
+    viaBotIdHash:
+      input.viaBotId === undefined
+        ? undefined
+        : campaignIndicatorHash("via_bot", String(input.viaBotId), fingerprintSecret),
+    viaBotUsernameHash: input.viaBotUsername ? handleFingerprint(input.viaBotUsername, fingerprintSecret) : undefined,
   }
 }
 
@@ -202,7 +241,7 @@ export function classifyCampaignMessage(
 
   const supportingReasons: CampaignSpamReason[] = []
   if (reputation.freshUser) supportingReasons.push("fresh_user")
-  if (signals.viaBotId !== undefined) supportingReasons.push("via_bot")
+  if (signals.viaBotIdHash !== undefined) supportingReasons.push("via_bot")
   if (signals.hasInlineKeyboard) supportingReasons.push("inline_keyboard")
 
   if (supportingReasons.length === 0) return { decision: "allow", reasons: [] }

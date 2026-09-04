@@ -1,8 +1,16 @@
-import { buttonDomainFingerprint, campaignIndicatorHash, handleFingerprint, normalizeCampaignText } from "./classifier"
+import {
+  buttonDomainFingerprint,
+  type CampaignFingerprintSecret,
+  campaignIndicatorHash,
+  createCampaignFingerprintSecret,
+  handleFingerprint,
+  normalizeCampaignText,
+} from "./classifier"
 
 export type CampaignSpamMode = "off" | "observe" | "quarantine" | "enforce"
 
 export type CampaignSpamConfig = {
+  fingerprintSecret: CampaignFingerprintSecret
   mode: CampaignSpamMode
   joinGate: boolean
   quarantineDuration: string
@@ -14,16 +22,22 @@ export type CampaignSpamConfig = {
   pendingMemberSeconds: number
   profileAuthorThreshold: number
   confirmedSignatureHashes: ReadonlySet<string>
-  deniedUserIds: ReadonlySet<number>
+  deniedUserHashes: ReadonlySet<string>
   deniedHandleHashes: ReadonlySet<string>
   deniedButtonDomainHashes: ReadonlySet<string>
-  deniedViaBotIds: ReadonlySet<number>
+  deniedViaBotHashes: ReadonlySet<string>
 }
 
 export type CampaignSpamConfigInput = Omit<
   CampaignSpamConfig,
-  "confirmedSignatureHashes" | "deniedUserIds" | "deniedHandleHashes" | "deniedButtonDomainHashes" | "deniedViaBotIds"
+  | "fingerprintSecret"
+  | "confirmedSignatureHashes"
+  | "deniedUserHashes"
+  | "deniedHandleHashes"
+  | "deniedButtonDomainHashes"
+  | "deniedViaBotHashes"
 > & {
+  fingerprintSecret: string
   confirmedSignaturesJson: string
   deniedUserIdsJson: string
   deniedHandlesJson: string
@@ -31,12 +45,14 @@ export type CampaignSpamConfigInput = Omit<
   deniedViaBotIdsJson: string
 }
 
+/** Parses a JSON setting and rejects non-array values. */
 function parseJsonArray(value: string, name: string): unknown[] {
   const parsed: unknown = JSON.parse(value)
   if (!Array.isArray(parsed)) throw new TypeError(`${name} must be a JSON array`)
   return parsed
 }
 
+/** Validates an operator-managed array of non-empty strings. */
 function parseStringArray(value: string, name: string): string[] {
   return parseJsonArray(value, name).map((item) => {
     if (typeof item !== "string" || item.trim().length === 0) {
@@ -46,6 +62,7 @@ function parseStringArray(value: string, name: string): string[] {
   })
 }
 
+/** Validates an operator-managed array of positive Telegram IDs. */
 function parseNumberArray(value: string, name: string): number[] {
   return parseJsonArray(value, name).map((item) => {
     if (typeof item !== "number" || !Number.isSafeInteger(item) || item <= 0) {
@@ -57,6 +74,7 @@ function parseNumberArray(value: string, name: string): number[] {
 
 /** Parses operator-managed indicators and hashes values that should not be retained in Redis. */
 export function createCampaignSpamConfig(input: CampaignSpamConfigInput): CampaignSpamConfig {
+  const fingerprintSecret = createCampaignFingerprintSecret(input.fingerprintSecret)
   const confirmedSignatures = parseStringArray(input.confirmedSignaturesJson, "CAMPAIGN_SPAM_CONFIRMED_SIGNATURES_JSON")
   const deniedUserIds = parseNumberArray(input.deniedUserIdsJson, "CAMPAIGN_SPAM_DENIED_USER_IDS_JSON")
   const deniedHandles = parseStringArray(input.deniedHandlesJson, "CAMPAIGN_SPAM_DENIED_HANDLES_JSON")
@@ -67,6 +85,7 @@ export function createCampaignSpamConfig(input: CampaignSpamConfigInput): Campai
   const deniedViaBotIds = parseNumberArray(input.deniedViaBotIdsJson, "CAMPAIGN_SPAM_DENIED_VIA_BOT_IDS_JSON")
 
   return {
+    fingerprintSecret,
     mode: input.mode,
     joinGate: input.joinGate,
     quarantineDuration: input.quarantineDuration,
@@ -78,11 +97,19 @@ export function createCampaignSpamConfig(input: CampaignSpamConfigInput): Campai
     pendingMemberSeconds: input.pendingMemberSeconds,
     profileAuthorThreshold: input.profileAuthorThreshold,
     confirmedSignatureHashes: new Set(
-      confirmedSignatures.map((signature) => campaignIndicatorHash("signature", normalizeCampaignText(signature)))
+      confirmedSignatures.map((signature) =>
+        campaignIndicatorHash("signature", normalizeCampaignText(signature), fingerprintSecret)
+      )
     ),
-    deniedUserIds: new Set(deniedUserIds),
-    deniedHandleHashes: new Set(deniedHandles.map(handleFingerprint)),
-    deniedButtonDomainHashes: new Set(deniedButtonDomains.map(buttonDomainFingerprint)),
-    deniedViaBotIds: new Set(deniedViaBotIds),
+    deniedUserHashes: new Set(
+      deniedUserIds.map((userId) => campaignIndicatorHash("user_id", String(userId), fingerprintSecret))
+    ),
+    deniedHandleHashes: new Set(deniedHandles.map((handle) => handleFingerprint(handle, fingerprintSecret))),
+    deniedButtonDomainHashes: new Set(
+      deniedButtonDomains.map((domain) => buttonDomainFingerprint(domain, fingerprintSecret))
+    ),
+    deniedViaBotHashes: new Set(
+      deniedViaBotIds.map((userId) => campaignIndicatorHash("via_bot", String(userId), fingerprintSecret))
+    ),
   }
 }

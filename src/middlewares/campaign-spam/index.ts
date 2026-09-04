@@ -21,7 +21,8 @@ import {
   extractCampaignSignals,
 } from "./classifier"
 import { type CampaignJoinReputation, campaignActorFromUser } from "./reputation"
-import { type CampaignSpamReview, campaignSpamReviewMenu, campaignSpamReviewText } from "./review"
+import { campaignSpamReviewKeyboard, campaignSpamReviewText } from "./review"
+import type { CampaignSpamReview } from "./review-payload"
 import { campaignSpamConfig } from "./runtime-config"
 import { campaignSpamReputation } from "./service"
 
@@ -44,10 +45,12 @@ type MessageContext<C extends Context> = Filter<
   "message:text" | "message:caption" | "edited_message:text" | "edited_message:caption"
 >
 
+/** Rate-limits dependency failure logs while the guard fails open. */
 const reportDependencyError = throttle((error: unknown, operation: string) => {
   logger.error({ error, operation }, "[CampaignSpam] Dependency error; failing open")
 }, 60_000)
 
+/** Extracts URL-bearing buttons and keyboard presence from a Telegram message. */
 function inlineKeyboardSignals(message: Message): { buttonUrls: string[]; hasInlineKeyboard: boolean } {
   if (!("reply_markup" in message) || !message.reply_markup) {
     return { buttonUrls: [], hasInlineKeyboard: false }
@@ -66,20 +69,24 @@ function inlineKeyboardSignals(message: Message): { buttonUrls: string[]; hasInl
   }
 }
 
+/** Converts a Telegram message into protected campaign classifier signals. */
 function messageSignals(message: Message): CampaignMessageSignals {
   const text = getText(message).text ?? ""
   const entities =
     "entities" in message ? message.entities : "caption_entities" in message ? message.caption_entities : []
   const inlineKeyboard = inlineKeyboardSignals(message)
-  return extractCampaignSignals({
-    text,
-    entityTypes: entities?.map((entity) => entity.type),
-    mentionedUserIds: entities?.flatMap((entity) => (entity.type === "text_mention" ? [entity.user.id] : [])),
-    buttonUrls: inlineKeyboard.buttonUrls,
-    hasInlineKeyboard: inlineKeyboard.hasInlineKeyboard,
-    viaBotId: message.via_bot?.id,
-    viaBotUsername: message.via_bot?.username,
-  })
+  return extractCampaignSignals(
+    {
+      text,
+      entityTypes: entities?.map((entity) => entity.type),
+      mentionedUserIds: entities?.flatMap((entity) => (entity.type === "text_mention" ? [entity.user.id] : [])),
+      buttonUrls: inlineKeyboard.buttonUrls,
+      hasInlineKeyboard: inlineKeyboard.hasInlineKeyboard,
+      viaBotId: message.via_bot?.id,
+      viaBotUsername: message.via_bot?.username,
+    },
+    campaignSpamConfig.fingerprintSecret
+  )
 }
 
 /** Orchestrates campaign classification, admission controls, review, and enforcement. */
@@ -109,6 +116,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
       .use((ctx) => this.handleMemberUpdate(ctx))
   }
 
+  /** Exempts trusted senders and fails open when trust cannot be verified. */
   private async isMessageExempt(ctx: MessageContext<C>): Promise<boolean> {
     try {
       const { status } = await ctx.getAuthor()
@@ -125,6 +133,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  /** Returns null when join exemption checks fail so the caller can approve safely. */
   private async isJoinExempt(userId: number): Promise<boolean | null> {
     try {
       const [{ roles }, grant] = await Promise.all([
@@ -138,6 +147,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  /** Checks whether audit history currently places the exact account under BanAll. */
   private async wasBanAllTarget(userId: number): Promise<boolean> {
     try {
       return hasActiveBanAll(await api.tg.auditLog.getById.query({ targetId: userId }))
@@ -147,6 +157,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  /** Attaches explainable classifier inputs and outcomes to update telemetry. */
   private recordMessageTelemetry(
     ctx: MessageContext<C>,
     decision: CampaignSpamDecision,
@@ -165,6 +176,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
       .intField("campaign_spam_distinct_chats", distinctChats)
   }
 
+  /** Reads reputation with a static-only fallback when Redis is unavailable. */
   private async inspectAndRecordReputation(signals: CampaignMessageSignals, actorId: number, chatId: number) {
     try {
       return await this.reputation.inspectAndRecord(signals, actorId, chatId)
@@ -174,6 +186,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  /** Checks first-post state without making Redis failure block a message. */
   private async isPendingMember(chatId: number, actorId: number): Promise<boolean> {
     try {
       return await this.reputation.isPending(chatId, actorId)
@@ -183,9 +196,10 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  /** Sends a review item to the action-required topic without blocking enforcement. */
   private async queueReview(review: CampaignSpamReview, sourceMessage?: Message): Promise<void> {
     try {
-      const keyboard = await campaignSpamReviewMenu(review)
+      const keyboard = await campaignSpamReviewKeyboard(review)
       const queued = await modules
         .get("tgLogger")
         .actionRequired(campaignSpamReviewText(review), keyboard, sourceMessage)
@@ -195,6 +209,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  /** Classifies a message and applies the configured rollout behavior. */
   private async handleMessage(ctx: MessageContext<C>) {
     if (
       ctx.chat.type === "private" ||
@@ -230,7 +245,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
           signatureHash: signals.signatureHash,
           entityTypes: signals.entityTypes,
           hasInlineKeyboard: signals.hasInlineKeyboard,
-          viaBotId: signals.viaBotId,
+          viaBotIdHash: signals.viaBotIdHash,
           distinctAuthors: reputation.distinctAuthors,
           distinctChats: reputation.distinctChats,
         },
@@ -277,6 +292,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     await this.enforceBanAll(ctx, signals, reason)
   }
 
+  /** Restores normal permissions after an allowed first post. */
   private async releasePendingMember(ctx: MessageContext<C>): Promise<void> {
     try {
       await ctx.api.restrictChatMember(ctx.chatId, ctx.from.id, RestrictPermissions.unmute)
@@ -287,6 +303,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  /** Deduplicates network-wide ban jobs, with a process-local Redis fallback. */
   private async claimBanAll(actorId: number): Promise<boolean> {
     try {
       return await this.reputation.claimBanAll(actorId)
@@ -298,6 +315,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  /** Releases both distributed and local claims after a failed BanAll start. */
   private async releaseBanAllClaim(actorId: number): Promise<void> {
     this.localBanAllClaims.delete(actorId)
     try {
@@ -307,6 +325,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  /** Records confirmed evidence, bans locally, and starts one BanAll job. */
   private async enforceBanAll(ctx: MessageContext<C>, signals: CampaignMessageSignals, reason: string) {
     try {
       await this.reputation.recordConfirmed(signals, campaignActorFromUser(ctx.from))
@@ -330,6 +349,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     logger.error({ actorId: ctx.from.id }, "[CampaignSpam] BanAll could not start")
   }
 
+  /** Records direct joins so freshness works outside the join-request flow. */
   private async handleMemberUpdate(ctx: Filter<C, "chat_member">) {
     const { old_chat_member: oldMember, new_chat_member: newMember } = ctx.chatMember
     if (oldMember.status !== "left" || newMember.status !== "member") return
@@ -340,6 +360,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  /** Applies exact-ID and profile reputation to a join request. */
   private async handleJoinRequest(ctx: Filter<C, "chat_join_request">) {
     const user = ctx.chatJoinRequest.from
     let joinReputation: CampaignJoinReputation = {
