@@ -15,14 +15,10 @@ import type { MaybePromise } from "./types"
  * @returns A wrapped version of `fn` that only runs on the first call
  */
 export function once<R, A extends unknown[]>(fn: (...args: A) => MaybePromise<R>) {
-  let called = false
-  let result: R
+  let result: Promise<Awaited<R>> | undefined
 
-  return async (...args: A) => {
-    if (!called) {
-      called = true
-      result = await fn(...args)
-    }
+  return (...args: A) => {
+    result ??= Promise.resolve(fn(...args))
     return result
   }
 }
