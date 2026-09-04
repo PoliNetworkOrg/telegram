@@ -4,6 +4,7 @@ import { Module } from "@/lib/modules"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
+import { AUTOMATIC_LOG_INTERVAL_MS, IntervalGate } from "@/utils/bot-resilience"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
@@ -46,6 +47,7 @@ const MOD_ACTION_TITLE = (props: ModerationAction) =>
   })[props.action]
 
 export class TgLogger extends Module<ModuleShared> {
+  private automaticLogGate = new IntervalGate(AUTOMATIC_LOG_INTERVAL_MS)
   private reportStorage = new RedisFallbackAdapter<boolean>({
     redis,
     logger,
@@ -142,6 +144,10 @@ export class TgLogger extends Module<ModuleShared> {
   ): Promise<PreDeleteResult | null> {
     if (!messages.length) return null
     const sender = messages[0].from
+    const isAutomatic = deleter.id === this.shared.botInfo.id
+    const unloggedResult: PreDeleteResult = { count: messages.length, logMessageIds: [] }
+
+    if (isAutomatic && !this.automaticLogGate.tryEnter()) return unloggedResult
 
     const sent = await this.log(
       this.topics.deletedMessages,
@@ -156,7 +162,7 @@ export class TgLogger extends Module<ModuleShared> {
         { sep: "\n" }
       )
     )
-    if (!sent) return null
+    if (!sent) return isAutomatic ? unloggedResult : null
 
     const forwardedIds: number[] = []
     for (const [chatId, mIds] of groupMessagesByChat(messages)) {
@@ -168,7 +174,7 @@ export class TgLogger extends Module<ModuleShared> {
 
     if (forwardedIds.length === 0) {
       void this.shared.api.deleteMessage(this.groupId, sent.message_id).catch(() => {})
-      return null
+      return isAutomatic ? unloggedResult : null
     }
 
     return {
@@ -284,9 +290,10 @@ export class TgLogger extends Module<ModuleShared> {
       { sep: "\n" }
     )
 
-    const reply_markup = props.preDeleteRes
+    const reply_markup = props.preDeleteRes?.link
       ? new InlineKeyboard().url("See Deleted Message", props.preDeleteRes.link)
       : undefined
+    if (isAutoModeration && !this.automaticLogGate.tryEnter()) return mainMsg
     await this.log(isAutoModeration ? this.topics.autoModeration : this.topics.adminActions, mainMsg, { reply_markup })
     if (!isAutoModeration) void this.logModActionInChat(props)
     return mainMsg

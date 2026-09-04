@@ -4,7 +4,7 @@ import type { Duration } from "@/utils/duration"
 export type PreDeleteResult = {
   count: number
   logMessageIds: number[]
-  link: string
+  link?: string
 }
 
 export type ModerationAction = {

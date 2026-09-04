@@ -140,6 +140,15 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
       const menu = this.menus.get(menuHash)
       if (!menu) return next()
 
+      const startedAt = Date.now()
+      const logContext = {
+        menuHash,
+        row,
+        col,
+        messageId: ctx.callbackQuery.message?.message_id,
+      }
+      logger.debug(logContext, "[MenuGen] Calling menu callback")
+
       return menu
         .call(ctx, row, col, keyboardId)
         .then(async (result) => {
@@ -154,6 +163,9 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
             text: result?.feedback ?? "This button is no longer available",
             show_alert: true,
           })
+        })
+        .finally(() => {
+          logger.debug({ ...logContext, durationMs: Date.now() - startedAt }, "[MenuGen] Menu callback finished")
         })
     })
   }
