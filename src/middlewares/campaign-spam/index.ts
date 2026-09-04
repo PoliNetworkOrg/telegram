@@ -298,12 +298,15 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
 
   private async handleJoinRequest(ctx: Filter<C, "chat_join_request">) {
     const user = ctx.chatJoinRequest.from
-    let joinReputation: CampaignJoinReputation
+    let joinReputation: CampaignJoinReputation = {
+      deniedUser: false,
+      confirmedProfile: false,
+      profileAuthors: 0,
+    }
     try {
       joinReputation = await this.reputation.inspectJoin(actorFromUser(user))
     } catch (error) {
       reportDependencyError(error, "join request inspection")
-      return
     }
 
     const shouldDecline = joinReputation.deniedUser || joinReputation.confirmedProfile
@@ -326,8 +329,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     if (!campaignSpamConfig.joinGate || campaignSpamConfig.mode === "observe") return
 
     const exempt = await this.isJoinExempt(user.id)
-    if (exempt === null) return
-    if (exempt) {
+    if (exempt === null || exempt) {
       await ctx.api.approveChatJoinRequest(ctx.chat.id, user.id)
       return
     }

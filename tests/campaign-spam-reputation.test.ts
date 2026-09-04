@@ -41,10 +41,6 @@ class MemoryRedis implements CampaignRedis {
     return values.size - before
   }
 
-  async sCard(key: string): Promise<number> {
-    return this.sets.get(key)?.size ?? 0
-  }
-
   async zAdd(key: string, member: { score: number; value: string }): Promise<number> {
     const values = this.sortedSets.get(key) ?? new Map<string, number>()
     const added = values.has(member.value) ? 0 : 1
@@ -209,6 +205,26 @@ describe("campaign reputation", () => {
     expect(await reputation.inspectJoin({ id: 9, firstName: "Student", lastName: "Wang" })).toMatchObject({
       confirmedProfile: true,
       profileAuthors: 3,
+    })
+  })
+
+  it("excludes stale actors from a profile after a later confirmation", async () => {
+    const shortRetention = new CampaignReputation(
+      new MemoryRedis(),
+      { ...config, evidenceRetentionSeconds: 10 },
+      () => now
+    )
+    const signals = extractCampaignSignals({ text: "聘群演每日600+ @cash_helper_47" })
+
+    for (const id of [1, 2]) {
+      await shortRetention.recordConfirmed(signals, { id, firstName: "Student", lastName: "Wang" })
+    }
+    now += 11_000
+    await shortRetention.recordConfirmed(signals, { id: 3, firstName: "Student", lastName: "Wang" })
+
+    expect(await shortRetention.inspectJoin({ id: 9, firstName: "Student", lastName: "Wang" })).toMatchObject({
+      confirmedProfile: false,
+      profileAuthors: 1,
     })
   })
 

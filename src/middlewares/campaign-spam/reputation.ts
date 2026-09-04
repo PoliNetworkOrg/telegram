@@ -10,7 +10,6 @@ export type CampaignRedis = {
   del(key: string): Promise<number>
   exists(key: string): Promise<number>
   sAdd(key: string, member: string): Promise<number>
-  sCard(key: string): Promise<number>
   zAdd(key: string, member: { score: number; value: string }): Promise<number>
   zCard(key: string): Promise<number>
   zRemRangeByScore(key: string, min: number | string, max: number | string): Promise<number>
@@ -135,7 +134,7 @@ export class CampaignReputation {
 
   async recordJoin(actorId: number): Promise<void> {
     await this.client.set(this.key("joined-at", actorId), String(this.now()), {
-      EX: this.config.evidenceRetentionSeconds,
+      EX: this.config.freshWindowSeconds,
     })
   }
 
@@ -147,7 +146,7 @@ export class CampaignReputation {
         EX: this.config.evidenceRetentionSeconds,
       }),
       this.client.set(this.key("user", actor.id), "1", { EX: this.config.evidenceRetentionSeconds }),
-      this.client.sAdd(profileUsersKey, String(actor.id)),
+      this.client.zAdd(profileUsersKey, { score: this.now(), value: String(actor.id) }),
       this.client.expire(profileUsersKey, this.config.evidenceRetentionSeconds),
     ]
 
@@ -156,9 +155,12 @@ export class CampaignReputation {
 
   async inspectJoin(actor: CampaignActor): Promise<CampaignJoinReputation> {
     const profile = profileFingerprint(actor.firstName, actor.lastName)
+    const profileUsersKey = this.key("profile-users", profile)
+    const cutoff = this.now() - this.config.evidenceRetentionSeconds * 1000
+    await this.client.zRemRangeByScore(profileUsersKey, 0, cutoff)
     const [deniedUser, profileAuthors] = await Promise.all([
       this.client.exists(this.key("user", actor.id)),
-      this.client.sCard(this.key("profile-users", profile)),
+      this.client.zCard(profileUsersKey),
     ])
     return {
       deniedUser: deniedUser > 0,
