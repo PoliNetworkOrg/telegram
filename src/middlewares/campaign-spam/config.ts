@@ -14,6 +14,7 @@ export type CampaignSpamConfig = {
   pendingMemberSeconds: number
   profileAuthorThreshold: number
   confirmedSignatureHashes: ReadonlySet<string>
+  deniedUserIds: ReadonlySet<number>
   deniedHandleHashes: ReadonlySet<string>
   deniedButtonDomainHashes: ReadonlySet<string>
   deniedViaBotIds: ReadonlySet<number>
@@ -21,9 +22,10 @@ export type CampaignSpamConfig = {
 
 export type CampaignSpamConfigInput = Omit<
   CampaignSpamConfig,
-  "confirmedSignatureHashes" | "deniedHandleHashes" | "deniedButtonDomainHashes" | "deniedViaBotIds"
+  "confirmedSignatureHashes" | "deniedUserIds" | "deniedHandleHashes" | "deniedButtonDomainHashes" | "deniedViaBotIds"
 > & {
   confirmedSignaturesJson: string
+  deniedUserIdsJson: string
   deniedHandlesJson: string
   deniedButtonDomainsJson: string
   deniedViaBotIdsJson: string
@@ -53,8 +55,10 @@ function parseNumberArray(value: string, name: string): number[] {
   })
 }
 
+/** Parses operator-managed indicators and hashes values that should not be retained in Redis. */
 export function createCampaignSpamConfig(input: CampaignSpamConfigInput): CampaignSpamConfig {
   const confirmedSignatures = parseStringArray(input.confirmedSignaturesJson, "CAMPAIGN_SPAM_CONFIRMED_SIGNATURES_JSON")
+  const deniedUserIds = parseNumberArray(input.deniedUserIdsJson, "CAMPAIGN_SPAM_DENIED_USER_IDS_JSON")
   const deniedHandles = parseStringArray(input.deniedHandlesJson, "CAMPAIGN_SPAM_DENIED_HANDLES_JSON")
   const deniedButtonDomains = parseStringArray(
     input.deniedButtonDomainsJson,
@@ -76,6 +80,7 @@ export function createCampaignSpamConfig(input: CampaignSpamConfigInput): Campai
     confirmedSignatureHashes: new Set(
       confirmedSignatures.map((signature) => campaignIndicatorHash("signature", normalizeCampaignText(signature)))
     ),
+    deniedUserIds: new Set(deniedUserIds),
     deniedHandleHashes: new Set(deniedHandles.map(handleFingerprint)),
     deniedButtonDomainHashes: new Set(deniedButtonDomains.map(buttonDomainFingerprint)),
     deniedViaBotIds: new Set(deniedViaBotIds),

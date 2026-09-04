@@ -45,15 +45,26 @@ Known indicators use JSON arrays:
 
 ```env
 CAMPAIGN_SPAM_CONFIRMED_SIGNATURES_JSON=["known message @replaceable_handle"]
+CAMPAIGN_SPAM_DENIED_USER_IDS_JSON=[123456789]
 CAMPAIGN_SPAM_DENIED_HANDLES_JSON=["known_bad_handle"]
 CAMPAIGN_SPAM_DENIED_BUTTON_DOMAINS_JSON=["bad.example"]
 CAMPAIGN_SPAM_DENIED_VIA_BOT_IDS_JSON=[123456789]
 ```
 
-Only add administrator-reviewed indicators. A denied handle causes quarantine, not BanAll, unless another confirmed
-signal is present.
+Only add administrator-reviewed indicators. Seed `CAMPAIGN_SPAM_DENIED_USER_IDS_JSON` with active BanAll targets
+before enabling the join gate. The gate also checks each applicant's existing BanAll and UnbanAll audit history, so
+previously banned targets work without waiting for the new Redis reputation to learn them. Treat denied handles as
+exact, high-confidence infrastructure because any message that references one will trigger BanAll.
+
+Quarantined messages create an action-required review with `Confirm BanAll` and `Release` buttons. Confirming trains
+the signature, account, and display-name reputation. Releasing removes learned reputation and restores permissions.
+Unrelated BanAll, unban, and unmute actions do not alter campaign reputation. Retained evidence includes hashes for
+button URLs and domains, mention targets, and inline-bot usernames. Telemetry records the classifier version, actual
+join outcomes, first-post catches, and campaign review feedback. A review release temporarily overrides a configured
+user ID for 30 days, giving operators time to remove a false positive from the environment list.
 
 Set `CAMPAIGN_SPAM_JOIN_GATE=true` only after every managed group uses join requests and the bot has
 `can_invite_users` and `can_restrict_members`. In `quarantine` or `enforce` mode, the bot approves unknown requests
 with text-only permissions. It restores normal permissions after the first allowed message. In `enforce` mode, it
-declines exact campaign user IDs and display-name fingerprints repeated by three confirmed campaign accounts.
+declines exact campaign user IDs and display-name fingerprints repeated by three confirmed campaign accounts. A
+partial profile match stays restricted and enters the moderator review queue; profile metadata alone never bans it.

@@ -12,6 +12,14 @@ class MemoryRedis implements CampaignRedis {
   private sets = new Map<string, Set<string>>()
   private sortedSets = new Map<string, Map<string, number>>()
 
+  readString(key: string): string | null {
+    return this.strings.get(key) ?? null
+  }
+
+  readSet(key: string): string[] {
+    return [...(this.sets.get(key) ?? [])]
+  }
+
   async get(key: string): Promise<string | null> {
     return this.strings.get(key) ?? null
   }
@@ -41,6 +49,10 @@ class MemoryRedis implements CampaignRedis {
     return values.size - before
   }
 
+  async sMembers(key: string): Promise<string[]> {
+    return [...(this.sets.get(key) ?? [])]
+  }
+
   async zAdd(key: string, member: { score: number; value: string }): Promise<number> {
     const values = this.sortedSets.get(key) ?? new Map<string, number>()
     const added = values.has(member.value) ? 0 : 1
@@ -51,6 +63,10 @@ class MemoryRedis implements CampaignRedis {
 
   async zCard(key: string): Promise<number> {
     return this.sortedSets.get(key)?.size ?? 0
+  }
+
+  async zRem(key: string, member: string): Promise<number> {
+    return this.sortedSets.get(key)?.delete(member) ? 1 : 0
   }
 
   async zRemRangeByScore(key: string, min: number | string, max: number | string): Promise<number> {
@@ -85,6 +101,7 @@ const config: CampaignSpamConfig = {
   pendingMemberSeconds: 86_400,
   profileAuthorThreshold: 3,
   confirmedSignatureHashes: new Set(),
+  deniedUserIds: new Set(),
   deniedHandleHashes: new Set(),
   deniedButtonDomainHashes: new Set(),
   deniedViaBotIds: new Set(),
@@ -92,11 +109,13 @@ const config: CampaignSpamConfig = {
 
 describe("campaign reputation", () => {
   let now = 1_000_000
+  let client: MemoryRedis
   let reputation: CampaignReputation
 
   beforeEach(() => {
     now = 1_000_000
-    reputation = new CampaignReputation(new MemoryRedis(), config, () => now)
+    client = new MemoryRedis()
+    reputation = new CampaignReputation(client, config, () => now)
   })
 
   it("detects an exact campaign burst across three authors and two chats", async () => {
@@ -190,6 +209,52 @@ describe("campaign reputation", () => {
     })
   })
 
+  it("uses configured user IDs before the guard has learned them", async () => {
+    const configuredReputation = new CampaignReputation(
+      new MemoryRedis(),
+      { ...config, deniedUserIds: new Set([8]) },
+      () => now
+    )
+    const signals = extractCampaignSignals({ text: "A plain message" })
+
+    expect(await configuredReputation.inspectAndRecord(signals, 8, -1002)).toMatchObject({ deniedUser: true })
+    expect(await configuredReputation.inspectJoin({ id: 8, firstName: "Any" })).toMatchObject({ deniedUser: true })
+
+    await configuredReputation.clearConfirmed({ id: 8 })
+    expect(await configuredReputation.inspectJoin({ id: 8, firstName: "Any" })).toMatchObject({ deniedUser: false })
+  })
+
+  it("retains complete hashed evidence and preserves first-seen time", async () => {
+    const signals = extractCampaignSignals({
+      text: "小额收点赚 @work_channel_2",
+      entityTypes: ["mention", "text_mention"],
+      mentionedUserIds: [99],
+      buttonUrls: ["https://bad.example/join?id=1"],
+      hasInlineKeyboard: true,
+      viaBotId: 42,
+      viaBotUsername: "campaign_helper_bot",
+    })
+
+    await reputation.inspectAndRecord(signals, 7, -1001)
+    const firstSeenKey = `moderation:campaign:v1:first-seen:${signals.signatureHash}`
+    const lastSeenKey = `moderation:campaign:v1:last-seen:${signals.signatureHash}`
+    expect(client.readString(firstSeenKey)).toBe("1000000")
+
+    now += 1_000
+    await reputation.inspectAndRecord(signals, 8, -1002)
+    expect(client.readString(firstSeenKey)).toBe("1000000")
+    expect(client.readString(lastSeenKey)).toBe("1001000")
+    expect(client.readSet(`moderation:campaign:v1:evidence-mentionedUsers:${signals.signatureHash}`)).toEqual(
+      signals.mentionedUserIdHashes
+    )
+    expect(client.readSet(`moderation:campaign:v1:evidence-buttonUrls:${signals.signatureHash}`)).toEqual(
+      signals.buttonUrlHashes
+    )
+    expect(client.readSet(`moderation:campaign:v1:evidence-viaBotUsernames:${signals.signatureHash}`)).toEqual([
+      signals.viaBotUsernameHash,
+    ])
+  })
+
   it("requires three confirmed actors before declining a reused profile", async () => {
     const signals = extractCampaignSignals({ text: "聘群演每日600+ @cash_helper_47" })
 
@@ -226,6 +291,46 @@ describe("campaign reputation", () => {
       confirmedProfile: false,
       profileAuthors: 1,
     })
+  })
+
+  it("removes reversed users, profile evidence, and automatic signatures", async () => {
+    const signals = extractCampaignSignals({ text: "聘群演每日600+ @cash_helper_47" })
+    const actor = { id: 7, firstName: "Student", lastName: "Wang" }
+    await reputation.recordConfirmed(signals, actor)
+
+    await reputation.clearConfirmed(actor)
+
+    expect(await reputation.inspectJoin({ id: 7, firstName: "Student", lastName: "Wang" })).toMatchObject({
+      deniedUser: false,
+      profileAuthors: 0,
+    })
+    expect(await reputation.inspectAndRecord(signals, 8, -1002)).toMatchObject({ confirmedSignature: false })
+  })
+
+  it("removes the profile that was learned before a display-name change", async () => {
+    const actor = { id: 7, firstName: "Student", lastName: "Wang" }
+    await reputation.recordDeniedActor(actor)
+
+    await reputation.clearConfirmed({ id: 7, firstName: "Student", lastName: "Li" })
+
+    expect(await reputation.inspectJoin({ id: 9, firstName: "Student", lastName: "Wang" })).toMatchObject({
+      confirmedProfile: false,
+      profileAuthors: 0,
+    })
+  })
+
+  it("keeps a signature while another active confirmation remains", async () => {
+    const signals = extractCampaignSignals({ text: "聘群演每日600+ @cash_helper_47" })
+    const first = { id: 7, firstName: "Student", lastName: "Wang" }
+    const second = { id: 8, firstName: "Student", lastName: "Li" }
+    await reputation.recordConfirmed(signals, first)
+    await reputation.recordConfirmed(signals, second)
+
+    await reputation.clearConfirmed(first)
+    expect(await reputation.inspectAndRecord(signals, 9, -1002)).toMatchObject({ confirmedSignature: true })
+
+    await reputation.clearConfirmed(second)
+    expect(await reputation.inspectAndRecord(signals, 9, -1002)).toMatchObject({ confirmedSignature: false })
   })
 
   it("deduplicates BanAll work and tracks first-post restrictions", async () => {

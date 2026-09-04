@@ -33,6 +33,7 @@ export const env = createEnv({
     CAMPAIGN_SPAM_PENDING_MEMBER_SECONDS: z.coerce.number().int().min(300).default(86_400),
     CAMPAIGN_SPAM_PROFILE_AUTHOR_THRESHOLD: z.coerce.number().int().min(2).default(3),
     CAMPAIGN_SPAM_CONFIRMED_SIGNATURES_JSON: z.string().default("[]"),
+    CAMPAIGN_SPAM_DENIED_USER_IDS_JSON: z.string().default("[]"),
     CAMPAIGN_SPAM_DENIED_HANDLES_JSON: z.string().default("[]"),
     CAMPAIGN_SPAM_DENIED_BUTTON_DOMAINS_JSON: z.string().default("[]"),
     CAMPAIGN_SPAM_DENIED_VIA_BOT_IDS_JSON: z.string().default("[]"),

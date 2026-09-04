@@ -18,6 +18,7 @@ const baseInput: CampaignSpamConfigInput = {
   pendingMemberSeconds: 86_400,
   profileAuthorThreshold: 3,
   confirmedSignaturesJson: "[]",
+  deniedUserIdsJson: "[]",
   deniedHandlesJson: "[]",
   deniedButtonDomainsJson: "[]",
   deniedViaBotIdsJson: "[]",
@@ -28,12 +29,14 @@ describe("campaign spam config", () => {
     const config = createCampaignSpamConfig({
       ...baseInput,
       confirmedSignaturesJson: JSON.stringify(["聘群演每日６００+ @Cash_Helper_47"]),
+      deniedUserIdsJson: "[123456789]",
       deniedHandlesJson: JSON.stringify(["@Cash_Helper_47"]),
       deniedButtonDomainsJson: JSON.stringify(["WWW.Bad.Example"]),
       deniedViaBotIdsJson: "[42]",
     })
 
     expect(config.confirmedSignatureHashes.size).toBe(1)
+    expect(config.deniedUserIds).toContain(123456789)
     expect(config.deniedHandleHashes).toContain(handleFingerprint("cash_helper_47"))
     expect(config.deniedButtonDomainHashes).toContain(buttonDomainFingerprint("bad.example"))
     expect(config.deniedViaBotIds).toContain(42)

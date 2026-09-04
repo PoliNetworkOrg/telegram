@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
   buttonDomainFingerprint,
+  buttonUrlFingerprint,
   campaignIndicatorHash,
+  classifyCampaignJoin,
   classifyCampaignMessage,
   EMPTY_CAMPAIGN_REPUTATION,
   extractCampaignSignals,
@@ -20,8 +22,10 @@ describe("campaign spam classifier", () => {
     const signals = extractCampaignSignals({
       text: "小额收点赚 @Work_Channel_2",
       entityTypes: ["mention", "bold", "mention"],
+      mentionedUserIds: [99, 99],
       buttonUrls: ["https://WWW.Example.com/job/1", "https://example.com/job/2", "tg://resolve?domain=x"],
       viaBotId: 42,
+      viaBotUsername: "Campaign_Helper_Bot",
     })
 
     expect(signals).toMatchObject({
@@ -32,7 +36,14 @@ describe("campaign spam classifier", () => {
       viaBotId: 42,
     })
     expect(signals.mentionedHandleHashes).toEqual([handleFingerprint("work_channel_2")])
+    expect(signals.mentionedUserIdHashes).toEqual([campaignIndicatorHash("mention_user", "99")])
+    expect(signals.buttonUrlHashes).toEqual([
+      buttonUrlFingerprint("https://www.example.com/job/1"),
+      buttonUrlFingerprint("https://example.com/job/2"),
+      buttonUrlFingerprint("tg://resolve?domain=x"),
+    ])
     expect(signals.buttonDomainHashes).toEqual([buttonDomainFingerprint("example.com")])
+    expect(signals.viaBotUsernameHash).toBe(handleFingerprint("campaign_helper_bot"))
     expect(signals.signatureHash).toBe(
       campaignIndicatorHash("signature", normalizeCampaignText("小额收点赚 @Work_Channel_2"))
     )
@@ -58,7 +69,7 @@ describe("campaign spam classifier", () => {
     ).toEqual({ decision: "ban_all", reasons: ["global_burst"] })
   })
 
-  it("does not BanAll an English warning that mentions a denied handle", () => {
+  it("BanAlls an administrator-denied handle even when the visible text changes", () => {
     const signals = extractCampaignSignals({ text: "Do not contact @cash_helper_47; this account is spam." })
 
     expect(
@@ -66,10 +77,10 @@ describe("campaign spam classifier", () => {
         ...EMPTY_CAMPAIGN_REPUTATION,
         knownHandle: true,
       })
-    ).toEqual({ decision: "allow", reasons: [] })
+    ).toEqual({ decision: "ban_all", reasons: ["known_handle"] })
   })
 
-  it("quarantines instead of BanAlling a Han-script message that mentions a denied handle", () => {
+  it("BanAlls a campaign-shaped message that mentions a denied handle", () => {
     const signals = extractCampaignSignals({ text: "请勿联系 @cash_helper_47，这是垃圾账号。" })
 
     expect(
@@ -77,7 +88,7 @@ describe("campaign spam classifier", () => {
         ...EMPTY_CAMPAIGN_REPUTATION,
         knownHandle: true,
       })
-    ).toEqual({ decision: "quarantine", reasons: ["han_with_mention", "known_handle"] })
+    ).toEqual({ decision: "ban_all", reasons: ["known_handle"] })
   })
 
   it("quarantines a fresh Han-script solicitation with a mention", () => {
@@ -124,5 +135,26 @@ describe("campaign spam classifier", () => {
   it("keeps profile fingerprints exact apart from Unicode, case, and whitespace", () => {
     expect(profileFingerprint("Ｓtudent 123", "  Wang")).toBe(profileFingerprint("student 123", "wang"))
     expect(profileFingerprint("Student 123", "Wang")).not.toBe(profileFingerprint("student 456", "wang"))
+  })
+
+  it("reviews partial profile evidence without treating it as a decline signal", () => {
+    expect(classifyCampaignJoin({ deniedUser: false, confirmedProfile: false, profileAuthors: 1 })).toEqual({
+      decision: "restrict",
+      reviewReason: "partial_profile",
+    })
+    expect(classifyCampaignJoin({ deniedUser: false, confirmedProfile: false, profileAuthors: 0 })).toEqual({
+      decision: "restrict",
+    })
+  })
+
+  it("declines exact denied users and threshold-confirmed profiles", () => {
+    expect(classifyCampaignJoin({ deniedUser: true, confirmedProfile: false, profileAuthors: 0 })).toEqual({
+      decision: "decline",
+      reviewReason: "denied_user",
+    })
+    expect(classifyCampaignJoin({ deniedUser: false, confirmedProfile: true, profileAuthors: 3 })).toEqual({
+      decision: "decline",
+      reviewReason: "confirmed_profile",
+    })
   })
 })

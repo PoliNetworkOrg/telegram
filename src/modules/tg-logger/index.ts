@@ -135,6 +135,19 @@ export class TgLogger extends Module<ModuleShared> {
     return "SENT"
   }
 
+  /** Sends an actionable moderation item and forwards its source message when available. */
+  public async actionRequired(text: string, replyMarkup: InlineKeyboard, sourceMessage?: Message): Promise<boolean> {
+    const sent = await this.log(this.topics.actionRequired, text, {
+      reply_markup: replyMarkup,
+      disable_notification: false,
+    })
+    if (!sent) return false
+    if (sourceMessage) {
+      await this.forward(this.topics.actionRequired, sourceMessage.chat.id, [sourceMessage.message_id])
+    }
+    return true
+  }
+
   // NOTE: this does not delete the messages
   // TODO: better return type
   async preDelete(

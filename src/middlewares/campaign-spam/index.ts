@@ -1,19 +1,29 @@
 import type { Filter } from "grammy"
-import type { ChatPermissions, Message, User } from "grammy/types"
+import type { ChatPermissions, Message } from "grammy/types"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { Moderation } from "@/modules/moderation"
 import { measureForkDuration, type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
-import { redis } from "@/redis"
 import { RestrictPermissions } from "@/utils/chat"
 import { duration } from "@/utils/duration"
 import { getText } from "@/utils/messages"
 import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
-import { type CampaignMessageSignals, classifyCampaignMessage, extractCampaignSignals } from "./classifier"
-import { type CampaignActor, type CampaignJoinReputation, type CampaignRedis, CampaignReputation } from "./reputation"
+import { hasActiveBanAll } from "./audit-history"
+import {
+  CAMPAIGN_SPAM_MODEL_VERSION,
+  type CampaignMessageSignals,
+  type CampaignSpamDecision,
+  type CampaignSpamReason,
+  classifyCampaignJoin,
+  classifyCampaignMessage,
+  extractCampaignSignals,
+} from "./classifier"
+import { type CampaignJoinReputation, campaignActorFromUser } from "./reputation"
+import { type CampaignSpamReview, campaignSpamReviewMenu, campaignSpamReviewText } from "./review"
 import { campaignSpamConfig } from "./runtime-config"
+import { campaignSpamReputation } from "./service"
 
 const NETWORK_PRIVILEGED_ROLES = new Set(["president", "owner", "direttivo"])
 const FIRST_POST_PERMISSIONS = {
@@ -37,14 +47,6 @@ type MessageContext<C extends Context> = Filter<
 const reportDependencyError = throttle((error: unknown, operation: string) => {
   logger.error({ error, operation }, "[CampaignSpam] Dependency error; failing open")
 }, 60_000)
-
-function actorFromUser(user: User): CampaignActor {
-  return {
-    id: user.id,
-    firstName: user.first_name,
-    lastName: user.last_name,
-  }
-}
 
 function inlineKeyboardSignals(message: Message): { buttonUrls: string[]; hasInlineKeyboard: boolean } {
   if (!("reply_markup" in message) || !message.reply_markup) {
@@ -72,14 +74,17 @@ function messageSignals(message: Message): CampaignMessageSignals {
   return extractCampaignSignals({
     text,
     entityTypes: entities?.map((entity) => entity.type),
+    mentionedUserIds: entities?.flatMap((entity) => (entity.type === "text_mention" ? [entity.user.id] : [])),
     buttonUrls: inlineKeyboard.buttonUrls,
     hasInlineKeyboard: inlineKeyboard.hasInlineKeyboard,
     viaBotId: message.via_bot?.id,
+    viaBotUsername: message.via_bot?.username,
   })
 }
 
+/** Orchestrates campaign classification, admission controls, review, and enforcement. */
 export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extends TrackedMiddleware<C> {
-  private readonly reputation = new CampaignReputation(redis as CampaignRedis, campaignSpamConfig)
+  private readonly reputation = campaignSpamReputation
   private readonly localBanAllClaims = new Set<number>()
 
   constructor() {
@@ -133,27 +138,60 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
+  private async wasBanAllTarget(userId: number): Promise<boolean> {
+    try {
+      return hasActiveBanAll(await api.tg.auditLog.getById.query({ targetId: userId }))
+    } catch (error) {
+      reportDependencyError(error, "BanAll audit lookup")
+      return false
+    }
+  }
+
   private recordMessageTelemetry(
     ctx: MessageContext<C>,
-    decision: "allow" | "ban_all" | "quarantine",
-    reasons: readonly string[],
+    decision: CampaignSpamDecision,
+    reasons: readonly CampaignSpamReason[],
     distinctAuthors: number,
-    distinctChats: number
+    distinctChats: number,
+    isFirstPost: boolean
   ) {
     ctx.point
       .tag("campaign_spam_mode", campaignSpamConfig.mode)
+      .tag("campaign_spam_model", CAMPAIGN_SPAM_MODEL_VERSION)
       .tag("campaign_spam_decision", decision)
+      .tag("campaign_spam_phase", isFirstPost ? "first_post" : "message")
       .stringField("campaign_spam_reasons", reasons.join(",") || "none")
       .intField("campaign_spam_distinct_authors", distinctAuthors)
       .intField("campaign_spam_distinct_chats", distinctChats)
   }
 
-  private async inspect(signals: CampaignMessageSignals, actorId: number, chatId: number) {
+  private async inspectAndRecordReputation(signals: CampaignMessageSignals, actorId: number, chatId: number) {
     try {
       return await this.reputation.inspectAndRecord(signals, actorId, chatId)
     } catch (error) {
       reportDependencyError(error, "reputation inspection")
-      return this.reputation.configuredOnly(signals)
+      return this.reputation.configuredOnly(signals, actorId)
+    }
+  }
+
+  private async isPendingMember(chatId: number, actorId: number): Promise<boolean> {
+    try {
+      return await this.reputation.isPending(chatId, actorId)
+    } catch (error) {
+      reportDependencyError(error, "pending member lookup")
+      return false
+    }
+  }
+
+  private async queueReview(review: CampaignSpamReview, sourceMessage?: Message): Promise<void> {
+    try {
+      const keyboard = await campaignSpamReviewMenu(review)
+      const queued = await modules
+        .get("tgLogger")
+        .actionRequired(campaignSpamReviewText(review), keyboard, sourceMessage)
+      if (!queued) logger.error({ actorId: review.target.id }, "[CampaignSpam] Review could not be queued")
+    } catch (error) {
+      reportDependencyError(error, "campaign review queue")
     }
   }
 
@@ -167,14 +205,19 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
       return
 
     const signals = messageSignals(ctx.msg)
-    const reputation = await this.inspect(signals, ctx.from.id, ctx.chatId)
+    const [reputation, isPending] = await Promise.all([
+      this.inspectAndRecordReputation(signals, ctx.from.id, ctx.chatId),
+      this.isPendingMember(ctx.chatId, ctx.from.id),
+    ])
+    const isFirstPost = isPending && ctx.update.message !== undefined
     const classification = classifyCampaignMessage(signals, reputation)
     this.recordMessageTelemetry(
       ctx,
       classification.decision,
       classification.reasons,
       reputation.distinctAuthors,
-      reputation.distinctChats
+      reputation.distinctChats,
+      isFirstPost
     )
 
     if (classification.decision !== "allow") {
@@ -198,12 +241,22 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     if (campaignSpamConfig.mode === "observe") return
 
     if (classification.decision === "allow") {
-      await this.releasePendingMember(ctx)
+      if (isFirstPost) await this.releasePendingMember(ctx)
       return
     }
 
     const reason = `Campaign spam: ${classification.reasons.join(", ")}`
     if (classification.decision === "quarantine" || campaignSpamConfig.mode === "quarantine") {
+      await this.queueReview(
+        {
+          source: "message",
+          target: ctx.from,
+          chat: ctx.chat,
+          reasons: classification.reasons,
+          signals: { signatureHash: signals.signatureHash },
+        },
+        ctx.msg
+      )
       const result = await Moderation.mute(
         ctx.from,
         ctx.chat,
@@ -225,15 +278,6 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
   }
 
   private async releasePendingMember(ctx: MessageContext<C>): Promise<void> {
-    let pending = false
-    try {
-      pending = await this.reputation.isPending(ctx.chatId, ctx.from.id)
-    } catch (error) {
-      reportDependencyError(error, "pending member lookup")
-      return
-    }
-    if (!pending) return
-
     try {
       await ctx.api.restrictChatMember(ctx.chatId, ctx.from.id, RestrictPermissions.unmute)
       await this.reputation.clearPending(ctx.chatId, ctx.from.id)
@@ -265,7 +309,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
 
   private async enforceBanAll(ctx: MessageContext<C>, signals: CampaignMessageSignals, reason: string) {
     try {
-      await this.reputation.recordConfirmed(signals, actorFromUser(ctx.from))
+      await this.reputation.recordConfirmed(signals, campaignActorFromUser(ctx.from))
     } catch (error) {
       reportDependencyError(error, "confirmed campaign recording")
     }
@@ -303,14 +347,25 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
       confirmedProfile: false,
       profileAuthors: 0,
     }
-    try {
-      joinReputation = await this.reputation.inspectJoin(actorFromUser(user))
-    } catch (error) {
-      reportDependencyError(error, "join request inspection")
+    const [historicalBanAll, storedJoinReputation] = await Promise.all([
+      this.wasBanAllTarget(user.id),
+      this.reputation.inspectJoin(campaignActorFromUser(user)).catch((error) => {
+        reportDependencyError(error, "join request inspection")
+        return null
+      }),
+    ])
+    if (storedJoinReputation) joinReputation = storedJoinReputation
+    if (historicalBanAll) {
+      joinReputation.deniedUser = true
+      await this.reputation.recordDeniedUser(user.id).catch((error) => {
+        reportDependencyError(error, "historical BanAll recording")
+      })
     }
 
-    const shouldDecline = joinReputation.deniedUser || joinReputation.confirmedProfile
+    const joinClassification = classifyCampaignJoin(joinReputation)
+    const shouldDecline = joinClassification.decision === "decline"
     ctx.point
+      .tag("campaign_spam_model", CAMPAIGN_SPAM_MODEL_VERSION)
       .tag("campaign_spam_join_recommendation", shouldDecline ? "decline" : "restrict")
       .intField("campaign_spam_profile_authors", joinReputation.profileAuthors)
 
@@ -321,21 +376,31 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
         shouldDecline,
         deniedUser: joinReputation.deniedUser,
         confirmedProfile: joinReputation.confirmedProfile,
+        historicalBanAll,
         profileAuthors: joinReputation.profileAuthors,
       },
       "[CampaignSpam] Inspected join request"
     )
 
-    if (!campaignSpamConfig.joinGate || campaignSpamConfig.mode === "observe") return
+    if (!campaignSpamConfig.joinGate) {
+      ctx.point.tag("campaign_spam_join_outcome", "gate_disabled")
+      return
+    }
+    if (campaignSpamConfig.mode === "observe") {
+      ctx.point.tag("campaign_spam_join_outcome", "observed")
+      return
+    }
 
     const exempt = await this.isJoinExempt(user.id)
     if (exempt === null || exempt) {
       await ctx.api.approveChatJoinRequest(ctx.chat.id, user.id)
+      ctx.point.tag("campaign_spam_join_outcome", exempt ? "approved_exempt" : "approved_dependency_fallback")
       return
     }
 
     if (shouldDecline && campaignSpamConfig.mode === "enforce") {
       await ctx.api.declineChatJoinRequest(ctx.chat.id, user.id)
+      ctx.point.tag("campaign_spam_join_outcome", "declined")
       return
     }
 
@@ -347,8 +412,18 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
         until_date: Math.floor(Date.now() / 1000) + campaignSpamConfig.pendingMemberSeconds,
         use_independent_chat_permissions: true,
       })
+      ctx.point.tag("campaign_spam_join_outcome", "approved_restricted")
+      if (joinClassification.reviewReason) {
+        await this.queueReview({
+          source: "join_request",
+          target: user,
+          chat: ctx.chat,
+          reasons: [joinClassification.reviewReason],
+        })
+      }
     } catch (error) {
       await this.reputation.clearPending(ctx.chat.id, user.id).catch(() => {})
+      ctx.point.tag("campaign_spam_join_outcome", "approved_unrestricted")
       reportDependencyError(error, "first-post restriction")
     }
   }
