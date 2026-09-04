@@ -1,6 +1,11 @@
 import { createEnv } from "@t3-oss/env-core"
 import { z } from "zod/v4"
 
+const booleanString = z
+  .enum(["true", "false"])
+  .default("false")
+  .transform((value) => value === "true")
+
 // coerce is needed for non-string values, because k8s supports only string env
 export const env = createEnv({
   server: {
@@ -14,6 +19,23 @@ export const env = createEnv({
     OPENAI_API_KEY: z.string().optional(),
     INFLUXDB_TOKEN: z.string().optional(),
     INFLUXDB_URL: z.string().default("http://localhost:8086"),
+    CAMPAIGN_SPAM_MODE: z.enum(["off", "observe", "quarantine", "enforce"]).default("off"),
+    CAMPAIGN_SPAM_JOIN_GATE: booleanString,
+    CAMPAIGN_SPAM_QUARANTINE_DURATION: z
+      .string()
+      .regex(/^\d+[mhdw]$/)
+      .default("10m"),
+    CAMPAIGN_SPAM_BURST_WINDOW_SECONDS: z.coerce.number().int().min(60).default(600),
+    CAMPAIGN_SPAM_BURST_AUTHOR_THRESHOLD: z.coerce.number().int().min(2).default(3),
+    CAMPAIGN_SPAM_BURST_CHAT_THRESHOLD: z.coerce.number().int().min(2).default(2),
+    CAMPAIGN_SPAM_FRESH_WINDOW_SECONDS: z.coerce.number().int().min(60).default(600),
+    CAMPAIGN_SPAM_EVIDENCE_RETENTION_SECONDS: z.coerce.number().int().min(3600).default(2_592_000),
+    CAMPAIGN_SPAM_PENDING_MEMBER_SECONDS: z.coerce.number().int().min(300).default(86_400),
+    CAMPAIGN_SPAM_PROFILE_AUTHOR_THRESHOLD: z.coerce.number().int().min(2).default(3),
+    CAMPAIGN_SPAM_CONFIRMED_SIGNATURES_JSON: z.string().default("[]"),
+    CAMPAIGN_SPAM_DENIED_HANDLES_JSON: z.string().default("[]"),
+    CAMPAIGN_SPAM_DENIED_BUTTON_DOMAINS_JSON: z.string().default("[]"),
+    CAMPAIGN_SPAM_DENIED_VIA_BOT_IDS_JSON: z.string().default("[]"),
   },
 
   runtimeEnv: process.env,

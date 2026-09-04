@@ -13,6 +13,7 @@ import { fmt, fmtUser } from "@/utils/format"
 import { createFakeMessage, ephemeral, getText } from "@/utils/messages"
 import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
+import { campaignSpamConfig } from "../campaign-spam/runtime-config"
 import { MessageUserStorage } from "../message-user-storage"
 // import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
@@ -74,11 +75,13 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
       .fork()
       .use(measureForkDuration("auto_moderation_link_duration"))
       .use((ctx) => this.linkHandler(ctx))
-    filtered
-      .on([":text", ":caption"])
-      .fork()
-      .use(measureForkDuration("auto_moderation_nonlatin_duration"))
-      .use((ctx) => this.nonLatinHandler(ctx))
+    if (campaignSpamConfig.mode === "off" || campaignSpamConfig.mode === "observe") {
+      filtered
+        .on([":text", ":caption"])
+        .fork()
+        .use(measureForkDuration("auto_moderation_nonlatin_duration"))
+        .use((ctx) => this.nonLatinHandler(ctx))
+    }
     filtered
       .on(["message:text", "message:media"])
       .fork()
