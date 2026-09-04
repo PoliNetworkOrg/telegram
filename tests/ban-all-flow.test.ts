@@ -3,6 +3,7 @@ import {
   assertBanAllQueueCapacity,
   BAN_ALL_QUEUE_CONFIG,
   BanAllQueueCapacityError,
+  banAllFlowId,
   createBanAllFlow,
 } from "@/modules/moderation/ban-all-flow"
 import type { BanAll } from "@/modules/tg-logger/ban-all"
@@ -36,6 +37,16 @@ describe("BanAll flow", () => {
       })
       expect(child.opts).not.toHaveProperty("continueParentOnFailure")
     }
+  })
+
+  it("uses stable queue IDs when a caller supplies an idempotency key", () => {
+    const first = createBanAllFlow(banAll, 99, [-1001, -1002], "campaign-operation")
+    const retry = createBanAllFlow(banAll, 101, [-1001, -1002], "campaign-operation")
+
+    expect(first.opts?.jobId).toBe(banAllFlowId("BAN", "campaign-operation"))
+    expect(first.opts?.removeOnComplete).toEqual({ age: 2_592_000 })
+    expect(retry.opts?.jobId).toBe(first.opts?.jobId)
+    expect(retry.children.map((child) => child.opts?.jobId)).toEqual(first.children.map((child) => child.opts?.jobId))
   })
 
   it("bounds the executor rate while leaving headroom for explicit message deletion", () => {

@@ -11,9 +11,12 @@ const baseInput: CampaignSpamConfigInput = {
   burstWindowSeconds: 600,
   burstAuthorThreshold: 3,
   burstChatThreshold: 2,
-  freshWindowSeconds: 600,
+  slowFloodWindowSeconds: 14_400,
+  slowFloodAuthorThreshold: 4,
+  slowFloodChatThreshold: 2,
+  freshWindowSeconds: 86_400,
   evidenceRetentionSeconds: 2_592_000,
-  pendingMemberSeconds: 86_400,
+  pendingMemberSeconds: 604_800,
   profileAuthorThreshold: 3,
   confirmedSignaturesJson: "[]",
   deniedUserIdsJson: "[]",
@@ -52,5 +55,33 @@ describe("campaign spam config", () => {
     expect(() => createCampaignSpamConfig({ ...baseInput, fingerprintSecret: "too-short" })).toThrow(
       "at least 32 characters"
     )
+  })
+
+  it("requires the slow-flood window to exceed the fast burst window", () => {
+    expect(() => createCampaignSpamConfig({ ...baseInput, slowFloodWindowSeconds: 600 })).toThrow(
+      "must exceed the fast burst window"
+    )
+  })
+
+  it("keeps first-post state beyond the freshness window", () => {
+    expect(() => createCampaignSpamConfig({ ...baseInput, pendingMemberSeconds: 86_400 })).toThrow(
+      "must exceed the freshness window"
+    )
+  })
+
+  it("rejects restriction durations Telegram would interpret as permanent", () => {
+    expect(() => createCampaignSpamConfig({ ...baseInput, quarantineDuration: "0m" })).toThrow(
+      "at least 30 seconds and less than 366 days"
+    )
+    expect(() => createCampaignSpamConfig({ ...baseInput, quarantineDuration: "367d" })).toThrow(
+      "at least 30 seconds and less than 366 days"
+    )
+    expect(() => createCampaignSpamConfig({ ...baseInput, pendingMemberSeconds: 366 * 86_400 + 1 })).toThrow(
+      "must be less than 366 days"
+    )
+    expect(() => createCampaignSpamConfig({ ...baseInput, quarantineDuration: "366d" })).toThrow(
+      "at least 30 seconds and less than 366 days"
+    )
+    expect(() => createCampaignSpamConfig({ ...baseInput, quarantineDuration: "365d" })).not.toThrow()
   })
 })

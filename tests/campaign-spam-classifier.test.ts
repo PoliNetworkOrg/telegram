@@ -4,6 +4,8 @@ import {
   classifyCampaignMessage,
   createCampaignFingerprintSecret,
   EMPTY_CAMPAIGN_REPUTATION,
+  hasCampaignLure,
+  isRiskyCampaignProfile,
   normalizeCampaignText,
   campaignIndicatorHash as protectedCampaignIndicatorHash,
 } from "@/middlewares/campaign-spam/classifier"
@@ -22,6 +24,34 @@ describe("campaign spam classifier", () => {
   it("normalizes compatibility characters, rotating numbers, handles, and invisible controls", () => {
     expect(normalizeCampaignText("聘群演每日６００+\u200B @Cash_Helper_47")).toBe("聘群演每日#+ <mention>")
     expect(normalizeCampaignText("小额  收点赚\n@work_channel_2")).toBe("小额 收点赚 <mention>")
+  })
+
+  it("normalizes financial numerals and numeric homoglyphs before hashing", () => {
+    expect(normalizeCampaignText("最低8Oo+")).toBe("最低#+")
+    expect(normalizeCampaignText("陆栢壹天🧧")).toBe("#天🧧")
+    expect(normalizeCampaignText("600一天🧧")).toBe("#天🧧")
+    expect(normalizeCampaignText("六百一天🧧")).toBe("#天🧧")
+    expect(extractCampaignSignals({ text: "最低8Oo+" }).signatureHash).toBe(
+      extractCampaignSignals({ text: "最低800+" }).signatureHash
+    )
+    expect(extractCampaignSignals({ text: "陆栢壹天🧧" }).signatureHash).toBe(
+      extractCampaignSignals({ text: "600一天🧧" }).signatureHash
+    )
+    expect(normalizeCampaignText("room 100only")).toBe("room #only")
+    expect(normalizeCampaignText("hello")).toBe("hello")
+  })
+
+  it("uses narrow campaign lure phrases without treating ordinary Han discussion as spam", () => {
+    expect(hasCampaignLure("来收米 日入9K")).toBe(true)
+    expect(hasCampaignLure("PG电子来注册送28U")).toBe(true)
+    expect(hasCampaignLure("两分钟一单")).toBe(true)
+    expect(hasCampaignLure("上车吃肉🧧")).toBe(true)
+    expect(hasCampaignLure("我在学习演员和学籍制度")).toBe(false)
+    expect(hasCampaignLure("怎么查询学籍？")).toBe(false)
+    expect(hasCampaignLure("今天谁来接单？")).toBe(false)
+    expect(hasCampaignLure("今晚一起吃肉吧")).toBe(false)
+    expect(hasCampaignLure("我每天吃肉")).toBe(false)
+    expect(hasCampaignLure("今天吃肉还是吃鱼？")).toBe(false)
   })
 
   it("uses a keyed, versioned digest for persisted indicators", () => {
@@ -87,7 +117,7 @@ describe("campaign spam classifier", () => {
     ).toEqual({ decision: "ban_all", reasons: ["global_burst"] })
   })
 
-  it("BanAlls an administrator-denied handle even when the visible text changes", () => {
+  it("allows an established member to warn others about a denied handle", () => {
     const signals = extractCampaignSignals({ text: "Do not contact @cash_helper_47; this account is spam." })
 
     expect(
@@ -95,10 +125,10 @@ describe("campaign spam classifier", () => {
         ...EMPTY_CAMPAIGN_REPUTATION,
         knownHandle: true,
       })
-    ).toEqual({ decision: "ban_all", reasons: ["known_handle"] })
+    ).toEqual({ decision: "allow", reasons: [] })
   })
 
-  it("BanAlls a campaign-shaped message that mentions a denied handle", () => {
+  it("allows a Han-script warning that mentions a denied handle", () => {
     const signals = extractCampaignSignals({ text: "请勿联系 @cash_helper_47，这是垃圾账号。" })
 
     expect(
@@ -106,7 +136,36 @@ describe("campaign spam classifier", () => {
         ...EMPTY_CAMPAIGN_REPUTATION,
         knownHandle: true,
       })
-    ).toEqual({ decision: "ban_all", reasons: ["known_handle"] })
+    ).toEqual({ decision: "allow", reasons: [] })
+  })
+
+  it("allows an established member to report a denied domain", () => {
+    const signals = extractCampaignSignals({
+      text: "Do not visit https://bad.example; this is a scam.",
+      entityTypes: ["url"],
+      linkUrls: ["https://bad.example"],
+    })
+
+    expect(
+      classifyCampaignMessage(signals, {
+        ...EMPTY_CAMPAIGN_REPUTATION,
+        knownButtonDomain: true,
+      })
+    ).toEqual({ decision: "allow", reasons: [] })
+  })
+
+  it("quarantines a campaign lure that points at denied infrastructure", () => {
+    const signals = extractCampaignSignals({ text: "小额收点赚 @cash_helper_47" })
+
+    expect(
+      classifyCampaignMessage(signals, {
+        ...EMPTY_CAMPAIGN_REPUTATION,
+        knownHandle: true,
+      })
+    ).toEqual({
+      decision: "quarantine",
+      reasons: ["han_with_mention", "campaign_lure", "known_handle"],
+    })
   })
 
   it("quarantines a fresh Han-script solicitation with a mention", () => {
@@ -116,7 +175,36 @@ describe("campaign spam classifier", () => {
       freshUser: true,
     })
 
-    expect(result).toEqual({ decision: "quarantine", reasons: ["han_with_mention", "fresh_user"] })
+    expect(result).toEqual({
+      decision: "quarantine",
+      reasons: ["han_with_mention", "campaign_lure", "fresh_user"],
+    })
+  })
+
+  it("quarantines the observed zero-mention campaign phrases", () => {
+    for (const text of ["来收米 日入9K", "上车吃肉🧧"]) {
+      expect(classifyCampaignMessage(extractCampaignSignals({ text }), EMPTY_CAMPAIGN_REPUTATION)).toEqual({
+        decision: "quarantine",
+        reasons: ["campaign_lure"],
+      })
+    }
+  })
+
+  it("uses pending first-post state after event freshness expires", () => {
+    const signals = extractCampaignSignals({ text: "请联系 @work_channel_2" })
+
+    expect(classifyCampaignMessage(signals, EMPTY_CAMPAIGN_REPUTATION).decision).toBe("allow")
+    expect(classifyCampaignMessage(signals, EMPTY_CAMPAIGN_REPUTATION, { firstPost: true })).toEqual({
+      decision: "quarantine",
+      reasons: ["han_with_mention", "first_post"],
+    })
+  })
+
+  it("reviews only multi-factor risky profiles", () => {
+    expect(isRiskyCampaignProfile("上车吃肉🧧")).toBe(true)
+    expect(isRiskyCampaignProfile("最低8Oo+")).toBe(true)
+    expect(isRiskyCampaignProfile("上车吃肉🧧", undefined, "known_student")).toBe(false)
+    expect(isRiskyCampaignProfile("王小明")).toBe(false)
   })
 
   it("quarantines Han-script mentions sent through inline bots or with buttons", () => {
@@ -163,6 +251,9 @@ describe("campaign spam classifier", () => {
     expect(classifyCampaignJoin({ deniedUser: false, confirmedProfile: false, profileAuthors: 0 })).toEqual({
       decision: "restrict",
     })
+    expect(
+      classifyCampaignJoin({ deniedUser: false, confirmedProfile: false, profileAuthors: 0, riskyProfile: true })
+    ).toEqual({ decision: "restrict", reviewReason: "risky_profile" })
   })
 
   it("declines exact denied users and threshold-confirmed profiles", () => {

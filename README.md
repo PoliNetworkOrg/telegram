@@ -26,9 +26,10 @@ Our new telegram bot.
 
 ## Campaign spam protection
 
-The campaign guard detects the short Han-script recruitment messages currently sent across the network. It uses
-normalized message signatures, Telegram mentions, inline-bot metadata, button domains, recent joins, and repetition
-across distinct authors and chats. It never bans on language or profile metadata alone.
+The campaign guard detects the short recruitment and fraud campaigns currently sent across the network. It uses
+normalized message signatures, a narrow lure lexicon, Telegram mentions and links, contact-card names, inline-bot
+metadata, URL domains, recent joins, and repetition across distinct authors and chats. It never bans on language,
+an undocumented Telegram user-ID cutoff, a phone prefix, or profile metadata alone.
 
 Set `CAMPAIGN_SPAM_MODE` to control the rollout:
 
@@ -37,9 +38,24 @@ Set `CAMPAIGN_SPAM_MODE` to control the rollout:
 - `quarantine` replaces the broad non-Latin rule and mutes high-signal matches for review.
 - `enforce` also starts BanAll for confirmed indicators and cross-account bursts.
 
-In `enforce` mode, the guard learns a signature after three distinct authors send it in two chats within ten minutes.
-The thresholds and window have environment overrides. Redis retains hashed signatures, handles, button domains,
-display-name fingerprints, and campaign user IDs for 30 days. Raw message retention does not change.
+In `enforce` mode, the guard learns a signature after either three distinct authors send it in two chats within ten
+minutes, or four distinct authors send it in two chats within four hours. Both tiers have environment overrides. The
+slow tier keeps one-chat repetition below BanAll to avoid treating a copied local notice as a network campaign. Redis
+retains hashed signatures, handles, URL domains, contact phone numbers, display-name fingerprints, and campaign user
+IDs for 30 days. Raw message retention does not change.
+
+High-precision lures such as `收米`, `日入`, `上车吃肉`, `洗资`, `聘群演`, `注册送`, and `两分钟一单` can quarantine a
+Han-script message without requiring an `@mention`. Broad terms such as `米`, `学籍`, or `群演` do not match alone.
+Contact cards are inspected through their display name and phone number, but the phone is HMAC-protected before any
+evidence is stored.
+
+Examples:
+
+- Match and quarantine: `来收米 日入9K`, `上车吃肉🧧`, or a contact named `PG电子来注册送28U`.
+- Match on a restricted first post: Han text containing an `@mention`, `t.me` link, or inline button.
+- Match and BanAll: the same normalized campaign signature from 4 authors in 2 chats over 4 hours.
+- Do not match: `大家好，我是交换生，请问今天的课程在哪个教室？`.
+- Do not match: an established member sharing a contact named `王小明`.
 
 Known indicators use JSON arrays:
 
@@ -54,7 +70,8 @@ CAMPAIGN_SPAM_DENIED_VIA_BOT_IDS_JSON=[123456789]
 Only add administrator-reviewed indicators. Seed `CAMPAIGN_SPAM_DENIED_USER_IDS_JSON` with active BanAll targets
 before enabling the join gate. The gate also checks each applicant's existing BanAll and UnbanAll audit history, so
 previously banned targets work without waiting for the new Redis reputation to learn them. Treat denied handles as
-exact, high-confidence infrastructure because any message that references one will trigger BanAll.
+exact infrastructure evidence. A reference can strengthen a quarantine decision, but it never proves that the sender
+owns that handle and cannot trigger BanAll by itself.
 
 Quarantined messages create an action-required review with `Confirm BanAll` and `Release` buttons. Confirming trains
 the signature, account, and display-name reputation. Releasing removes learned reputation and restores permissions.
@@ -69,8 +86,12 @@ namespace ignores older unkeyed v1 evidence and lets it expire normally. Changin
 fresh learned-reputation fingerprint space, while configured indicators and BanAll audit history continue to seed
 decisions. Review callback state is authenticated and encrypted before the menu adapter stores it.
 
-Set `CAMPAIGN_SPAM_JOIN_GATE=true` only after every managed group uses join requests and the bot has
-`can_invite_users` and `can_restrict_members`. In `quarantine` or `enforce` mode, the bot approves unknown requests
-with text-only permissions. It restores normal permissions after the first allowed message. In `enforce` mode, it
-declines exact campaign user IDs and display-name fingerprints repeated by three confirmed campaign accounts. A
-partial profile match stays restricted and enters the moderator review queue; profile metadata alone never bans it.
+Set `CAMPAIGN_SPAM_JOIN_GATE=true` only when the bot has `can_invite_users` and `can_restrict_members` in every managed
+group. In `quarantine` or `enforce` mode, the bot gives ordinary requested and direct joins text-only permissions. An
+ordinary first-post restriction lasts for up to seven days and is removed after the first allowed message, so waiting
+beyond the freshness window does not bypass first-post review. In `enforce` mode, the gate declines exact campaign user IDs and exact
+display-name fingerprints repeated by three confirmed campaign accounts. A partial exact match or a no-username
+profile containing several campaign markers stays read-only for moderator review; one benign post and the ordinary
+timeout cannot clear that review hold. Review permissions, callback data, pending state, and replay protection share a
+bounded 365-day lifecycle. If the review item cannot be delivered, the account falls back to the ordinary first-post
+path. Profile metadata alone never triggers an automatic decline.

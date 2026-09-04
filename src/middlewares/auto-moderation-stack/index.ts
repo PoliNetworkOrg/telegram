@@ -1,7 +1,6 @@
 import type { Filter } from "grammy"
 import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
-import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { Moderation } from "@/modules/moderation"
@@ -14,6 +13,7 @@ import { createFakeMessage, ephemeral, getText } from "@/utils/messages"
 import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
 import { campaignSpamConfig } from "../campaign-spam/runtime-config"
+import { inspectMessageTrust } from "../message-trust"
 import { MessageUserStorage } from "../message-user-storage"
 // import { AIModeration } from "./ai-moderation"
 import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
@@ -101,21 +101,12 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
    * @returns WT {@link WhitelistType} if there is a whitelisted user, `null` otherwise
    */
   private async isWhitelisted(ctx: ModerationContext<C>): Promise<WhitelistType | null> {
-    try {
-      const { status } = await ctx.getAuthor()
-      if (status === "creator") return { role: "creator" }
-      if (status === "administrator") return { role: "admin" }
-
-      const isAdmin = await api.tg.permissions.checkGroup.query({ userId: ctx.from.id, groupId: ctx.chatId })
-      if (isAdmin) return { role: "admin" }
-
-      const grant = await api.tg.grants.checkUser.query({ userId: ctx.from.id })
-      if (grant.isGranted) return { role: "user" }
-    } catch (e) {
-      debouncedError(e, "Error checking whitelist status in auto-moderation")
+    const trust = await inspectMessageTrust(ctx)
+    if (trust.status === "unavailable") {
+      debouncedError(trust.error, "Error checking whitelist status in auto-moderation")
+      return null
     }
-
-    return null
+    return trust.status === "trusted" ? { role: trust.role } : null
   }
 
   /**

@@ -2,8 +2,8 @@ import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:
 import { z } from "zod/v4"
 import { CAMPAIGN_SPAM_REASONS, type CampaignFingerprintSecret } from "./classifier"
 
-const REVIEW_PAYLOAD_VERSION = "v1"
-const REVIEW_KEY_CONTEXT = "campaign-spam-review:v1"
+const REVIEW_PAYLOAD_VERSION = "v2"
+const REVIEW_KEY_CONTEXT = "campaign-spam-review:v2"
 
 const reviewUserSchema = z.object({
   id: z.number().int().positive(),
@@ -24,7 +24,9 @@ const reviewChatSchema = z.discriminatedUnion("type", [
 ])
 
 const campaignSpamReviewSchema = z.object({
-  source: z.enum(["join_request", "message"]),
+  reviewId: z.string().min(16).max(128),
+  createdAt: z.number().int().nonnegative(),
+  source: z.enum(["join_request", "member_join", "message"]),
   target: reviewUserSchema,
   chat: reviewChatSchema,
   reasons: z.array(z.enum(CAMPAIGN_SPAM_REASONS)).min(1),
@@ -32,6 +34,16 @@ const campaignSpamReviewSchema = z.object({
 })
 
 export type CampaignSpamReview = z.infer<typeof campaignSpamReviewSchema>
+export type CampaignSpamReviewDraft = Omit<CampaignSpamReview, "createdAt" | "reviewId">
+
+/** Adds unique, time-ordered state used to make moderator decisions single-use and stale-safe. */
+export function createCampaignSpamReview(review: CampaignSpamReviewDraft): CampaignSpamReview {
+  return {
+    ...review,
+    reviewId: randomBytes(16).toString("base64url"),
+    createdAt: Date.now(),
+  }
+}
 
 /** Derives a purpose-specific encryption key without reusing the HMAC output space. */
 function reviewEncryptionKey(fingerprintSecret: CampaignFingerprintSecret): Buffer {

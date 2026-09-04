@@ -1,5 +1,9 @@
 import { createEnv } from "@t3-oss/env-core"
 import { z } from "zod/v4"
+import {
+  isTemporaryTelegramRestrictionDuration,
+  TELEGRAM_MAX_TEMPORARY_RESTRICTION_SECONDS,
+} from "@/utils/telegram-restriction"
 
 const booleanString = z
   .enum(["true", "false"])
@@ -23,14 +27,22 @@ export const env = createEnv({
     CAMPAIGN_SPAM_JOIN_GATE: booleanString,
     CAMPAIGN_SPAM_QUARANTINE_DURATION: z
       .string()
-      .regex(/^\d+[mhdw]$/)
+      .refine(isTemporaryTelegramRestrictionDuration, "must be a temporary Telegram restriction duration")
       .default("10m"),
     CAMPAIGN_SPAM_BURST_WINDOW_SECONDS: z.coerce.number().int().min(60).default(600),
     CAMPAIGN_SPAM_BURST_AUTHOR_THRESHOLD: z.coerce.number().int().min(2).default(3),
     CAMPAIGN_SPAM_BURST_CHAT_THRESHOLD: z.coerce.number().int().min(2).default(2),
-    CAMPAIGN_SPAM_FRESH_WINDOW_SECONDS: z.coerce.number().int().min(60).default(600),
+    CAMPAIGN_SPAM_SLOW_FLOOD_WINDOW_SECONDS: z.coerce.number().int().min(600).default(14_400),
+    CAMPAIGN_SPAM_SLOW_FLOOD_AUTHOR_THRESHOLD: z.coerce.number().int().min(3).default(4),
+    CAMPAIGN_SPAM_SLOW_FLOOD_CHAT_THRESHOLD: z.coerce.number().int().min(2).default(2),
+    CAMPAIGN_SPAM_FRESH_WINDOW_SECONDS: z.coerce.number().int().min(60).default(86_400),
     CAMPAIGN_SPAM_EVIDENCE_RETENTION_SECONDS: z.coerce.number().int().min(3600).default(2_592_000),
-    CAMPAIGN_SPAM_PENDING_MEMBER_SECONDS: z.coerce.number().int().min(300).default(86_400),
+    CAMPAIGN_SPAM_PENDING_MEMBER_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(300)
+      .max(TELEGRAM_MAX_TEMPORARY_RESTRICTION_SECONDS)
+      .default(604_800),
     CAMPAIGN_SPAM_PROFILE_AUTHOR_THRESHOLD: z.coerce.number().int().min(2).default(3),
     CAMPAIGN_SPAM_CONFIRMED_SIGNATURES_JSON: z.string().default("[]"),
     CAMPAIGN_SPAM_DENIED_USER_IDS_JSON: z.string().default("[]"),

@@ -14,6 +14,7 @@ import {
   assertBanAllQueueCapacity,
   type BanAllFlow,
   type BanFlow,
+  banAllFlowId,
   BAN_ALL_QUEUE_CONFIG as CONFIG,
   createBanAllFlow,
 } from "./ban-all-flow"
@@ -108,7 +109,12 @@ export class BanAllQueue extends Module<ModuleShared> {
     this.flowProducer.on("error", (error) => logger.error({ error }, "[BanAllQueue] Flow producer error"))
   }
 
-  private enqueueBanAll = serialize(async (banAll: BanAll, messageId: number) => {
+  private enqueueBanAll = serialize(async (banAll: BanAll, messageId: number, idempotencyKey?: string) => {
+    if (idempotencyKey) {
+      const existing = await this.orchestrateQueue.getJob(banAllFlowId(banAll.type, idempotencyKey))
+      if (existing) return { alreadyExisted: true, messageId: existing.data.messageId }
+    }
+
     const allGroups = await api.tg.groups.getAll.query()
     const chats = allGroups.filter((g) => !g.hide).map((g) => g.telegramId)
     const outstandingJobs = await this.execQueue.getJobCountByTypes(
@@ -133,12 +139,12 @@ export class BanAllQueue extends Module<ModuleShared> {
         logger.warn("[BanAllQueue] Failed to create audit log for ban all command")
       })
 
-    const job = await this.flowProducer.add(createBanAllFlow(banAll, messageId, chats))
-    return job
+    await this.flowProducer.add(createBanAllFlow(banAll, messageId, chats, idempotencyKey))
+    return { alreadyExisted: false, messageId }
   })
 
-  public async initiateBanAll(banAll: BanAll, messageId: number) {
-    return await this.enqueueBanAll(banAll, messageId)
+  public async initiateBanAll(banAll: BanAll, messageId: number, idempotencyKey?: string) {
+    return await this.enqueueBanAll(banAll, messageId, idempotencyKey)
   }
 
   private async getProgress(job: BanAllJob): Promise<BanAllState> {

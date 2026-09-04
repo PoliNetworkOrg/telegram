@@ -201,7 +201,8 @@ export class TgLogger extends Module<ModuleShared> {
     target: User | number,
     reporter: User,
     type: "BAN" | "UNBAN",
-    reason?: string
+    reason?: string,
+    idempotencyKey?: string
   ): Promise<BanAllStartResult> {
     const banAll: BanAll = {
       type,
@@ -228,7 +229,23 @@ export class TgLogger extends Module<ModuleShared> {
     }
 
     try {
-      await modules.get("banAll").initiateBanAll(banAll, msg.message_id)
+      const start = await modules.get("banAll").initiateBanAll(banAll, msg.message_id, idempotencyKey)
+      if (start.alreadyExisted) {
+        await this.shared.api
+          .editMessageText(
+            this.groupId,
+            msg.message_id,
+            fmt(({ n, b }) => [b`${type} All already started`, n`The existing network operation was reused.`], {
+              sep: "\n",
+            }),
+            { reply_markup: undefined, link_preview_options: { is_disabled: true } }
+          )
+          .catch((error) => logger.warn({ error }, "[banall] Failed to mark duplicate BanAll request"))
+        return {
+          started: true,
+          message: fmt(({ b }) => b`${type} All was already started.`),
+        }
+      }
     } catch (error) {
       const reason =
         error instanceof BanAllQueueCapacityError

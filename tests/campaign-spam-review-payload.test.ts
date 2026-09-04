@@ -4,6 +4,8 @@ import { openCampaignSpamReview, sealCampaignSpamReview } from "@/middlewares/ca
 import { CAMPAIGN_TEST_SECRET } from "./fixtures/campaign-spam"
 
 const review = {
+  reviewId: "unique-review-id-123456789",
+  createdAt: 1_788_340_000_000,
   source: "message" as const,
   target: { id: 987_654_321, is_bot: false, first_name: "Sensitive Target" },
   chat: { id: -100_987_654_321, type: "supergroup" as const, title: "Sensitive Group" },
@@ -24,7 +26,10 @@ describe("campaign spam review payload", () => {
 
   it("rejects payload tampering and the wrong deployment secret", () => {
     const payload = sealCampaignSpamReview(review, CAMPAIGN_TEST_SECRET)
-    const tampered = `${payload.slice(0, -1)}${payload.endsWith("A") ? "B" : "A"}`
+    const [version, nonce, tag, ciphertext] = payload.split(".")
+    if (!version || !nonce || !tag || !ciphertext) throw new Error("expected sealed review payload")
+    const tamperedTag = `${tag.startsWith("A") ? "B" : "A"}${tag.slice(1)}`
+    const tampered = [version, nonce, tamperedTag, ciphertext].join(".")
 
     expect(() => openCampaignSpamReview(tampered, CAMPAIGN_TEST_SECRET)).toThrow()
     expect(() =>

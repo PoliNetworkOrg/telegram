@@ -1,4 +1,8 @@
 import {
+  isTemporaryTelegramRestrictionDuration,
+  TELEGRAM_MAX_TEMPORARY_RESTRICTION_SECONDS,
+} from "@/utils/telegram-restriction"
+import {
   buttonDomainFingerprint,
   type CampaignFingerprintSecret,
   campaignIndicatorHash,
@@ -17,6 +21,9 @@ export type CampaignSpamConfig = {
   burstWindowSeconds: number
   burstAuthorThreshold: number
   burstChatThreshold: number
+  slowFloodWindowSeconds: number
+  slowFloodAuthorThreshold: number
+  slowFloodChatThreshold: number
   freshWindowSeconds: number
   evidenceRetentionSeconds: number
   pendingMemberSeconds: number
@@ -74,6 +81,18 @@ function parseNumberArray(value: string, name: string): number[] {
 
 /** Parses operator-managed indicators and hashes values that should not be retained in Redis. */
 export function createCampaignSpamConfig(input: CampaignSpamConfigInput): CampaignSpamConfig {
+  if (!isTemporaryTelegramRestrictionDuration(input.quarantineDuration)) {
+    throw new TypeError("CAMPAIGN_SPAM_QUARANTINE_DURATION must be at least 30 seconds and less than 366 days")
+  }
+  if (input.pendingMemberSeconds > TELEGRAM_MAX_TEMPORARY_RESTRICTION_SECONDS) {
+    throw new TypeError("CAMPAIGN_SPAM_PENDING_MEMBER_SECONDS must be less than 366 days")
+  }
+  if (input.slowFloodWindowSeconds <= input.burstWindowSeconds) {
+    throw new TypeError("CAMPAIGN_SPAM_SLOW_FLOOD_WINDOW_SECONDS must exceed the fast burst window")
+  }
+  if (input.pendingMemberSeconds <= input.freshWindowSeconds) {
+    throw new TypeError("CAMPAIGN_SPAM_PENDING_MEMBER_SECONDS must exceed the freshness window")
+  }
   const fingerprintSecret = createCampaignFingerprintSecret(input.fingerprintSecret)
   const confirmedSignatures = parseStringArray(input.confirmedSignaturesJson, "CAMPAIGN_SPAM_CONFIRMED_SIGNATURES_JSON")
   const deniedUserIds = parseNumberArray(input.deniedUserIdsJson, "CAMPAIGN_SPAM_DENIED_USER_IDS_JSON")
@@ -92,6 +111,9 @@ export function createCampaignSpamConfig(input: CampaignSpamConfigInput): Campai
     burstWindowSeconds: input.burstWindowSeconds,
     burstAuthorThreshold: input.burstAuthorThreshold,
     burstChatThreshold: input.burstChatThreshold,
+    slowFloodWindowSeconds: input.slowFloodWindowSeconds,
+    slowFloodAuthorThreshold: input.slowFloodAuthorThreshold,
+    slowFloodChatThreshold: input.slowFloodChatThreshold,
     freshWindowSeconds: input.freshWindowSeconds,
     evidenceRetentionSeconds: input.evidenceRetentionSeconds,
     pendingMemberSeconds: input.pendingMemberSeconds,
