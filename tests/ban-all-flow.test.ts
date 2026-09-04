@@ -38,8 +38,9 @@ describe("BanAll flow", () => {
     }
   })
 
-  it("leaves Telegram API headroom for explicit message deletion", () => {
-    expect(BAN_ALL_QUEUE_CONFIG.EXECUTOR_RATE_LIMIT).toEqual({ max: 8, duration: 1_000 })
+  it("bounds the executor rate while leaving headroom for explicit message deletion", () => {
+    expect(BAN_ALL_QUEUE_CONFIG.EXECUTOR_RATE_LIMIT).toEqual({ max: 12, duration: 1_000 })
+    expect(BAN_ALL_QUEUE_CONFIG.MAX_OUTSTANDING_EXECUTOR_JOBS).toBe(60_000)
   })
 
   it("rejects a flow that would exceed the outstanding-job cap", () => {
