@@ -23,6 +23,7 @@ import { telemetry } from "./modules/telemetry/middleware"
 import { tgApiTelemetry } from "./modules/telemetry/transformer"
 import type { ExceptionLog } from "./modules/tg-logger/types"
 import { redis } from "./redis"
+import { getUpdateConcurrencyKeys, TELEGRAM_API_RETRY_OPTIONS } from "./utils/bot-resilience"
 import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
 import type { Context, ModuleShared } from "./utils/types"
@@ -60,14 +61,10 @@ const bot = new Bot<Context>(env.BOT_TOKEN)
 bot.use(hydrate())
 bot.use(hydrateReply)
 
-bot.api.config.use(autoRetry())
+bot.api.config.use(autoRetry(TELEGRAM_API_RETRY_OPTIONS))
 bot.api.config.use(parseMode("MarkdownV2"))
 bot.api.config.use(tgApiTelemetry())
-bot.use(
-  sequentialize((ctx) => {
-    return [ctx.chat?.id, ctx.from?.id].filter((e) => e !== undefined).map((e) => e.toString())
-  })
-)
+bot.use(sequentialize(getUpdateConcurrencyKeys))
 bot.use(telemetry())
 
 bot.init().then(() => {

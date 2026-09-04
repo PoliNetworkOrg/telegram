@@ -273,7 +273,8 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
         { initialMessages: messages, executor, forwardedCount: preRes.count, deletedCount: 0 },
         "[Moderation:deleteMessages] no message(s) could be deleted"
       )
-      void modules.shared.api.deleteMessages(tgLogger.groupId, preRes.logMessageIds)
+      if (preRes.logMessageIds.length > 0)
+        void modules.shared.api.deleteMessages(tgLogger.groupId, preRes.logMessageIds)
       return err("DELETE_ERROR")
     }
 
