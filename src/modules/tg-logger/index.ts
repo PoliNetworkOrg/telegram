@@ -255,16 +255,22 @@ export class TgLogger extends Module<ModuleShared> {
 
   public async moderationAction(props: ModerationAction): Promise<string> {
     const isAutoModeration = props.from.id === this.shared.botInfo.id
+    const shouldLog = !isAutoModeration || this.automaticLogGate.tryEnter()
 
     const others: string[] = []
-    const { invite_link } = await this.shared.api.getChat(props.chat.id)
+    const inviteLink = shouldLog ? (await this.shared.api.getChat(props.chat.id)).invite_link : undefined
 
     if (props.action === "MULTI_CHAT_SPAM") {
       const groupByChat = groupMessagesByChat(props.messages)
       others.push(fmt(({ b }) => b`\nChats involved:`))
       for (const [chatId, mIds] of groupByChat) {
-        const chat = await this.shared.api.getChat(chatId)
-        others.push(fmt(({ n, i }) => n`${fmtChat(chat, chat.invite_link)} \n${i`Messages: ${mIds.length}`}`))
+        const messageChat = props.messages.find((message) => message.chat.id === chatId)?.chat
+        const chat = shouldLog ? await this.shared.api.getChat(chatId) : messageChat
+        if (chat) {
+          const chatInviteLink =
+            shouldLog && "invite_link" in chat && typeof chat.invite_link === "string" ? chat.invite_link : undefined
+          others.push(fmt(({ n, i }) => n`${fmtChat(chat, chatInviteLink)} \n${i`Messages: ${mIds.length}`}`))
+        }
       }
     }
 
@@ -276,7 +282,7 @@ export class TgLogger extends Module<ModuleShared> {
         !isAutoModeration ? n`${b`Moderator:`} ${fmtUser(props.from)}` : undefined,
 
         // for MULTI_CHAT we have specific per-chat info
-        props.action !== "MULTI_CHAT_SPAM" ? `${b`Group:`} ${fmtChat(props.chat, invite_link)}` : undefined,
+        props.action !== "MULTI_CHAT_SPAM" ? `${b`Group:`} ${fmtChat(props.chat, inviteLink)}` : undefined,
 
         "duration" in props && props.duration
           ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`
@@ -293,7 +299,7 @@ export class TgLogger extends Module<ModuleShared> {
     const reply_markup = props.preDeleteRes?.link
       ? new InlineKeyboard().url("See Deleted Message", props.preDeleteRes.link)
       : undefined
-    if (isAutoModeration && !this.automaticLogGate.tryEnter()) return mainMsg
+    if (!shouldLog) return mainMsg
     await this.log(isAutoModeration ? this.topics.autoModeration : this.topics.adminActions, mainMsg, { reply_markup })
     if (!isAutoModeration) void this.logModActionInChat(props)
     return mainMsg

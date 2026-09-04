@@ -13,6 +13,7 @@ export const TELEGRAM_API_RETRY_OPTIONS = {
   rethrowInternalServerErrors: true,
 } satisfies AutoRetryOptions
 
+/** A non-blocking fixed-interval gate for best-effort operations. */
 export class IntervalGate {
   private nextAllowedAt = 0
 
