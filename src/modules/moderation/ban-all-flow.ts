@@ -7,12 +7,12 @@ export const BAN_ALL_QUEUE_CONFIG = {
   PROGRESS_REFRESH_THROTTLE_MS: 1000,
   UPDATE_MESSAGE_THROTTLE_MS: 5000,
   EXECUTOR_RATE_LIMIT: {
-    max: 8,
+    max: 12,
     duration: 1000,
   },
-  // Covers the largest observed 28,000-job burst while limiting first-attempt
-  // starts to about one hour of work at the configured rate.
-  MAX_OUTSTANDING_EXECUTOR_JOBS: 30_000,
+  // Supports about 92 full 648-chat flows while limiting first-attempt starts
+  // to about 83 minutes of work at the configured rate.
+  MAX_OUTSTANDING_EXECUTOR_JOBS: 60_000,
 } as const
 
 export type BanJobCommand = "ban" | "unban"
@@ -65,7 +65,7 @@ const CHILD_OPTIONS = {
   ignoreDependencyOnFailure: true,
   removeOnComplete: {
     age: 60 * 60,
-    // The worker can finish at most 28,800 jobs per hour at its configured
+    // The worker can finish at most 43,200 jobs per hour at its configured
     // rate. This cap bounds Redis without removing dependencies mid-flow.
     count: 50_000,
   },
