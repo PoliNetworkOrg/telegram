@@ -271,8 +271,6 @@ class MemoryRedis implements CampaignRedis {
 
 const config: CampaignSpamConfig = {
   fingerprintSecret: CAMPAIGN_TEST_SECRET,
-  mode: "enforce",
-  joinGate: true,
   quarantineDuration: "10m",
   burstWindowSeconds: 600,
   burstAuthorThreshold: 3,

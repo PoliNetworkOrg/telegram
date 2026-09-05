@@ -187,6 +187,10 @@ const campaignSpamReviewMenu = MenuGenerator.getInstance<Context>().create<strin
             return { feedback: "BanAll started; retry to finalize this review" }
           }
           ctx.point.tag("campaign_spam_moderator_feedback", "confirm")
+          logger.info(
+            { actorId: data.target.id, chatId: data.chat.id, moderatorId: ctx.from.id, reviewId: data.reviewId },
+            "[CampaignSpam] Moderator confirm review completed"
+          )
           await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {})
           return { deleteData: true, feedback: outcome.feedback }
         },
@@ -259,6 +263,16 @@ const campaignSpamReviewMenu = MenuGenerator.getInstance<Context>().create<strin
             return { feedback: "Permissions restored; retry to finalize this review" }
           }
           ctx.point.tag("campaign_spam_moderator_feedback", "release")
+          logger.info(
+            {
+              actorId: data.target.id,
+              chatId: data.chat.id,
+              moderatorId: ctx.from.id,
+              reviewId: data.reviewId,
+              outcome: releaseResult,
+            },
+            "[CampaignSpam] Moderator release review completed"
+          )
           await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {})
           return {
             deleteData: true,

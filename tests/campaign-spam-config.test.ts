@@ -5,8 +5,6 @@ import { CAMPAIGN_TEST_SECRET, campaignTestFingerprint } from "./fixtures/campai
 
 const baseInput: CampaignSpamConfigInput = {
   fingerprintSecret: CAMPAIGN_TEST_SECRET,
-  mode: "observe",
-  joinGate: false,
   quarantineDuration: "10m",
   burstWindowSeconds: 600,
   burstAuthorThreshold: 3,
@@ -18,22 +16,35 @@ const baseInput: CampaignSpamConfigInput = {
   evidenceRetentionSeconds: 2_592_000,
   pendingMemberSeconds: 604_800,
   profileAuthorThreshold: 3,
-  confirmedSignaturesJson: "[]",
-  deniedUserIdsJson: "[]",
-  deniedHandlesJson: "[]",
-  deniedButtonDomainsJson: "[]",
-  deniedViaBotIdsJson: "[]",
+  confirmedSignatures: [],
+  deniedUserIds: [],
+  deniedHandles: [],
+  deniedButtonDomains: [],
+  deniedViaBotIds: [],
 }
 
 describe("campaign spam config", () => {
+  it("rejects invalid thresholds and retention settings", () => {
+    for (const overrides of [
+      { burstChatThreshold: 1 },
+      { burstAuthorThreshold: 1 },
+      { slowFloodAuthorThreshold: 2 },
+      { pendingMemberSeconds: Number.NaN },
+      { evidenceRetentionSeconds: -1 },
+      { profileAuthorThreshold: 1.5 },
+    ]) {
+      expect(() => createCampaignSpamConfig({ ...baseInput, ...overrides })).toThrow("must be a safe integer")
+    }
+  })
+
   it("normalizes configured signatures, handles, and domains", () => {
     const config = createCampaignSpamConfig({
       ...baseInput,
-      confirmedSignaturesJson: JSON.stringify(["聘群演每日６００+ @Cash_Helper_47"]),
-      deniedUserIdsJson: "[123456789]",
-      deniedHandlesJson: JSON.stringify(["@Cash_Helper_47"]),
-      deniedButtonDomainsJson: JSON.stringify(["WWW.Bad.Example"]),
-      deniedViaBotIdsJson: "[42]",
+      confirmedSignatures: ["聘群演每日６００+ @Cash_Helper_47"],
+      deniedUserIds: [123456789],
+      deniedHandles: ["@Cash_Helper_47"],
+      deniedButtonDomains: ["WWW.Bad.Example"],
+      deniedViaBotIds: [42],
     })
 
     expect(config.confirmedSignatureHashes.size).toBe(1)
@@ -45,8 +56,8 @@ describe("campaign spam config", () => {
   })
 
   it("rejects malformed indicator lists", () => {
-    expect(() => createCampaignSpamConfig({ ...baseInput, deniedHandlesJson: "not-json" })).toThrow()
-    expect(() => createCampaignSpamConfig({ ...baseInput, deniedViaBotIdsJson: '["42"]' })).toThrow(
+    expect(() => createCampaignSpamConfig({ ...baseInput, deniedHandles: [" "] })).toThrow()
+    expect(() => createCampaignSpamConfig({ ...baseInput, deniedViaBotIds: [1.5] })).toThrow(
       "must contain only positive safe integers"
     )
   })

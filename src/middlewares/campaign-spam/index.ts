@@ -93,7 +93,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
 
   constructor() {
     super("campaign_spam")
-    if (campaignSpamConfig.mode === "off") return
+    logger.info("[CampaignSpam] Protection enabled: automatic enforcement and first-post join gate")
 
     this.composer
       .on(["message:text", "message:caption", "message:contact", "edited_message:text", "edited_message:caption"])
@@ -157,7 +157,6 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     isFirstPost: boolean
   ) {
     ctx.point
-      .tag("campaign_spam_mode", campaignSpamConfig.mode)
       .tag("campaign_spam_model", CAMPAIGN_SPAM_MODEL_VERSION)
       .tag("campaign_spam_decision", decision)
       .tag("campaign_spam_phase", isFirstPost ? "first_post" : "message")
@@ -198,6 +197,11 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
         .get("tgLogger")
         .actionRequired(campaignSpamReviewText(review), keyboard, sourceMessage)
       if (!queued) logger.error({ actorId: review.target.id }, "[CampaignSpam] Review could not be queued")
+      if (queued)
+        logger.info(
+          { actorId: review.target.id, chatId: review.chat.id, reviewId: review.reviewId },
+          "[CampaignSpam] Moderator review queued"
+        )
       return queued
     } catch (error) {
       reportDependencyError(error, "campaign review queue")
@@ -250,7 +254,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     }
   }
 
-  /** Classifies a message and applies the configured rollout behavior. */
+  /** Classifies a message and enforces its decision. */
   private async handleMessage(ctx: MessageContext<C>) {
     if (
       ctx.chat.type === "private" ||
@@ -270,7 +274,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     const classification = classifyCampaignMessage(signals, reputation, { firstPost: isFirstPost })
     this.recordMessageTelemetry(ctx, signals, classification.decision, classification.reasons, reputation, isFirstPost)
 
-    if (classification.decision !== "allow") {
+    if (classification.decision !== "allow" || isFirstPost || isCampaignCandidate(signals)) {
       logger.info(
         {
           actorId: ctx.from.id,
@@ -290,15 +294,13 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
       )
     }
 
-    if (campaignSpamConfig.mode === "observe") return
-
     if (classification.decision === "allow") {
       if (shouldAutoReleasePendingMember(pendingState, isNewMessage)) await this.releasePendingMember(ctx)
       return
     }
 
     const reason = `Campaign spam: ${classification.reasons.join(", ")}`
-    if (classification.decision === "quarantine" || campaignSpamConfig.mode === "quarantine") {
+    if (classification.decision === "quarantine") {
       const review = createCampaignSpamReview({
         source: "message",
         target: ctx.from,
@@ -325,6 +327,10 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
             return
           }
 
+          logger.info(
+            { actorId: ctx.from.id, chatId: ctx.chatId, duration: campaignSpamConfig.quarantineDuration },
+            "[CampaignSpam] Message muted for review"
+          )
           await mutations.markCurrentReview(ctx.chatId, review.reviewId)
           if (!(await this.queueReview(review, ctx.msg))) {
             await mutations.clearCurrentReview(ctx.chatId, review.reviewId)
@@ -370,19 +376,27 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
           )
           return
         }
+        logger.info({ actorId: ctx.from.id, chatId: ctx.chatId }, "[CampaignSpam] Local ban applied")
         await mutations.recordConfirmed(signals)
         await this.reputation.clearPending(ctx.chatId, ctx.from.id).catch((error) => {
           reportDependencyError(error, "confirmed member pending-state cleanup")
         })
 
         const claim = await this.reputation.claimBanAllOperation(ctx.from.id)
-        if (claim.status !== "claimed") return
+        if (claim.status !== "claimed") {
+          logger.info(
+            { actorId: ctx.from.id, status: claim.status },
+            "[CampaignSpam] BanAll already claimed or completed"
+          )
+          return
+        }
 
         try {
           await Promise.all([mutations.assertOwned(), this.reputation.assertBanAllOperation(ctx.from.id, claim.token)])
           const result = await modules.get("tgLogger").banAll(ctx.from, ctx.me, "BAN", reason, claim.idempotencyKey)
           await Promise.all([mutations.assertOwned(), this.reputation.assertBanAllOperation(ctx.from.id, claim.token)])
           if (result.started) {
+            logger.info({ actorId: ctx.from.id }, "[CampaignSpam] Network BanAll started")
             const completed = await this.reputation.completeBanAllOperation(ctx.from.id, claim.token)
             if (!completed) logger.warn({ actorId: ctx.from.id }, "[CampaignSpam] BanAll lease expired")
             return
@@ -410,7 +424,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
       reportDependencyError(error, "member join recording")
     }
 
-    if (!campaignSpamConfig.joinGate || campaignSpamConfig.mode === "observe" || newMember.user.is_bot) return
+    if (newMember.user.is_bot) return
 
     if (ctx.chatMember.via_join_request) {
       try {
@@ -473,6 +487,10 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
           )
           await mutations.assertOwned()
           ctx.point.tag("campaign_spam_member_join_outcome", "restricted")
+          logger.info(
+            { actorId: newMember.user.id, chatId: ctx.chat.id, pendingState },
+            "[CampaignSpam] Direct join restricted"
+          )
 
           if (review) {
             await mutations.markCurrentReview(ctx.chat.id, review.reviewId)
@@ -557,25 +575,18 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
       "[CampaignSpam] Inspected join request"
     )
 
-    if (!campaignSpamConfig.joinGate) {
-      ctx.point.tag("campaign_spam_join_outcome", "gate_disabled")
-      return
-    }
-    if (campaignSpamConfig.mode === "observe") {
-      ctx.point.tag("campaign_spam_join_outcome", "observed")
-      return
-    }
-
     const exempt = await this.isJoinExempt(user.id)
     if (exempt === null || exempt) {
       await ctx.api.approveChatJoinRequest(ctx.chat.id, user.id)
+      logger.info({ actorId: user.id, chatId: ctx.chat.id, exempt }, "[CampaignSpam] Join approved without restriction")
       ctx.point.tag("campaign_spam_join_outcome", exempt ? "approved_exempt" : "approved_dependency_fallback")
       return
     }
 
-    if (shouldDecline && campaignSpamConfig.mode === "enforce") {
+    if (shouldDecline) {
       await ctx.api.declineChatJoinRequest(ctx.chat.id, user.id)
       ctx.point.tag("campaign_spam_join_outcome", "declined")
+      logger.info({ actorId: user.id, chatId: ctx.chat.id }, "[CampaignSpam] Join request declined")
       return
     }
 
@@ -608,6 +619,10 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
           )
           await mutations.assertOwned()
           ctx.point.tag("campaign_spam_join_outcome", "approved_restricted")
+          logger.info(
+            { actorId: user.id, chatId: ctx.chat.id, pendingState },
+            "[CampaignSpam] Join approved and restricted"
+          )
 
           if (review) {
             await mutations.markCurrentReview(ctx.chat.id, review.reviewId)
@@ -635,10 +650,6 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
         }
       })
     } catch (error) {
-      if (error instanceof CampaignActorOperationBusyError) {
-        ctx.point.tag("campaign_spam_join_outcome", "concurrent_operation")
-        return
-      }
       if (!approved) {
         try {
           await ctx.api.approveChatJoinRequest(ctx.chat.id, user.id)
@@ -647,7 +658,13 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
           reportDependencyError(approvalError, "join-request fallback approval")
         }
       }
-      ctx.point.tag("campaign_spam_join_outcome", "approved_dependency_fallback")
+      const outcome = approved
+        ? error instanceof CampaignActorOperationBusyError
+          ? "approved_concurrent_operation"
+          : "approved_dependency_fallback"
+        : "approval_failed"
+      ctx.point.tag("campaign_spam_join_outcome", outcome)
+      logger.warn({ actorId: user.id, chatId: ctx.chat.id, outcome }, "[CampaignSpam] Join admission fallback")
       reportDependencyError(error, "join admission state")
       return
     }
