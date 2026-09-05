@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, createHmac } from "node:crypto"
 import { urlAlphabet } from "nanoid"
 
 /**
@@ -35,4 +35,10 @@ export function nanohash(seed: string, size: number = 16): string {
   }
 
   return id.join("")
+}
+
+/** Returns a deterministic, URL-safe HMAC truncated to the requested length. */
+export function keyedHash(seed: string, secret: string, size: number = 24): string {
+  if (secret.length === 0) throw new TypeError("keyedHash requires a non-empty secret")
+  return createHmac("sha256", secret).update(seed).digest("base64url").slice(0, size)
 }

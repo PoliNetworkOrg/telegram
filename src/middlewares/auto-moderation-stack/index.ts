@@ -1,7 +1,6 @@
 import type { Filter } from "grammy"
 import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
-import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { Moderation } from "@/modules/moderation"
@@ -13,9 +12,10 @@ import { fmt, fmtUser } from "@/utils/format"
 import { createFakeMessage, ephemeral, getText } from "@/utils/messages"
 import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
+import { inspectMessageTrust } from "../message-trust"
 import { MessageUserStorage } from "../message-user-storage"
 // import { AIModeration } from "./ai-moderation"
-import { MULTI_CHAT_SPAM, NON_LATIN } from "./constants"
+import { MULTI_CHAT_SPAM } from "./constants"
 import { checkForAllowedLinks } from "./functions"
 
 export type WhitelistType = {
@@ -43,7 +43,6 @@ const debouncedError = throttle((error: unknown, msg: string) => {
  * - [x] Harmful content handler
  * - [x] Multichat spam handler for similar messages
  * - [x] Avoid deletion for messages explicitly allowed by Direttivo or from privileged users
- * - [x] handle non-latin characters
  */
 export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> extends TrackedMiddleware<
   ModerationFlavor<C>
@@ -75,11 +74,6 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
       .use(measureForkDuration("auto_moderation_link_duration"))
       .use((ctx) => this.linkHandler(ctx))
     filtered
-      .on([":text", ":caption"])
-      .fork()
-      .use(measureForkDuration("auto_moderation_nonlatin_duration"))
-      .use((ctx) => this.nonLatinHandler(ctx))
-    filtered
       .on(["message:text", "message:media"])
       .fork()
       .use(measureForkDuration("auto_moderation_multichat_duration"))
@@ -98,21 +92,12 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
    * @returns WT {@link WhitelistType} if there is a whitelisted user, `null` otherwise
    */
   private async isWhitelisted(ctx: ModerationContext<C>): Promise<WhitelistType | null> {
-    try {
-      const { status } = await ctx.getAuthor()
-      if (status === "creator") return { role: "creator" }
-      if (status === "administrator") return { role: "admin" }
-
-      const isAdmin = await api.tg.permissions.checkGroup.query({ userId: ctx.from.id, groupId: ctx.chatId })
-      if (isAdmin) return { role: "admin" }
-
-      const grant = await api.tg.grants.checkUser.query({ userId: ctx.from.id })
-      if (grant.isGranted) return { role: "user" }
-    } catch (e) {
-      debouncedError(e, "Error checking whitelist status in auto-moderation")
+    const trust = await inspectMessageTrust(ctx)
+    if (trust.status === "unavailable") {
+      debouncedError(trust.error, "Error checking whitelist status in auto-moderation")
+      return null
     }
-
-    return null
+    return trust.status === "trusted" ? { role: trust.role } : null
   }
 
   /**
@@ -164,39 +149,6 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
           : res.error.fmtError
       )
     )
-  }
-
-  /**
-   * Handles messages containing a high percentage of non-latin characters to avoid most spam bots.
-   * If the percentage of non-latin characters is too high, mutes the user for 10 minutes and deletes the message.
-   */
-  private async nonLatinHandler(ctx: Filter<ModerationContext<C>, ":text" | ":caption">) {
-    const text = ctx.msg.caption ?? ctx.msg.text
-    const match = text.match(NON_LATIN.REGEX)
-
-    // 1. there are non latin characters
-    // 2. there are more than LENGTH_THR non-latin characters
-    // 3. the percentage of non-latin characters after the LENGTH_THR is more than PERCENTAGE_THR
-    // that should catch messages respecting this inequality: 0.2y + 8 < x ≤ y
-    // with x = number of non-latin characters, y = total length of the message
-    // longer messages can have more non-latin characters, but less in percentage
-    if (match && (match.length - NON_LATIN.LENGTH_THR) / text.length > NON_LATIN.PERCENTAGE_THR) {
-      // just delete the message and mute the user for 10 minutes
-      const res = await Moderation.mute(
-        ctx.from,
-        ctx.chat,
-        ctx.me,
-        duration.zod.parse(NON_LATIN.MUTE_DURATION),
-        [ctx.msg],
-        "Message contains non-latin characters"
-      )
-      if (res.isErr()) {
-        logger.error(
-          { from: ctx.from, chat: ctx.chat, messageId: ctx.msg.message_id },
-          "AUTOMOD: nonLatinHandler - Cannot mute"
-        )
-      }
-    }
   }
 
   /**

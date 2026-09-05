@@ -7,6 +7,7 @@ import { redis } from "@/redis"
 import { nanohash } from "@/utils/crypto"
 import type { MaybePromise } from "@/utils/types"
 
+const MENU_DATA_TTL_SECONDS = 60 * 60 * 24 * 30
 const CONSTANTS = {
   prefix: "menugen",
   maxRows: 100,
@@ -19,7 +20,11 @@ export type CallbackCtx<C extends Context> = Filter<C, "callback_query:data">
 type Callback<T, C extends Context> = (params: {
   data: T
   ctx: CallbackCtx<C>
-}) => MaybePromise<{ feedback?: string; newData?: T } | null>
+}) => MaybePromise<{ deleteData?: boolean; feedback?: string; newData?: T } | null>
+
+type MenuOptions = {
+  ttlSeconds?: number
+}
 
 class Menu<T, C extends Context = Context> {
   private dataStorage: RedisFallbackAdapter<T>
@@ -28,12 +33,13 @@ class Menu<T, C extends Context = Context> {
   constructor(
     private hashedId: string,
     private items: Array<Array<{ text: string; cb: Callback<T, C> }>>,
-    public onExpiredButtonPress?: Callback<null, C>
+    public onExpiredButtonPress?: Callback<null, C>,
+    options: MenuOptions = {}
   ) {
     this.dataStorage = new RedisFallbackAdapter({
       redis,
       prefix: `menu-data:${this.hashedId}`,
-      ttl: 60 * 60 * 24 * 30, // 30 days
+      ttl: options.ttlSeconds ?? MENU_DATA_TTL_SECONDS,
     })
 
     // Initialize menu with type T
@@ -67,6 +73,10 @@ class Menu<T, C extends Context = Context> {
 
   async updateData(keyboardId: string, data: T): Promise<void> {
     await this.dataStorage.write(keyboardId, data)
+  }
+
+  async deleteData(keyboardId: string): Promise<void> {
+    await this.dataStorage.delete(keyboardId)
   }
 
   async call(ctx: CallbackCtx<C>, row: number, col: number, keyboardId: string) {
@@ -153,6 +163,7 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
         .call(ctx, row, col, keyboardId)
         .then(async (result) => {
           if (result?.newData) await menu.updateData(keyboardId, result.newData)
+          if (result?.deleteData) await menu.deleteData(keyboardId)
           return ctx.answerCallbackQuery({ text: result?.feedback })
         })
         .catch(async (e: unknown) => {
@@ -182,6 +193,7 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
    * @param onExpiredButtonPress - Optional callback executed when a button is pressed but the
    *   associated data is no longer available (e.g., expired or deleted). Returns an optional
    *   string if you want to display a specific alert to the user.
+   * @param options - Optional callback-data retention in seconds.
    * @returns A function that, given data of type T, returns a Promise resolving to an InlineKeyboard.
    */
   create<T>(
@@ -192,7 +204,8 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
         cb: Callback<T, C>
       }>
     >,
-    onExpiredButtonPress?: Callback<null, C>
+    onExpiredButtonPress?: Callback<null, C>,
+    options?: MenuOptions
   ): (data: T) => Promise<InlineKeyboard> {
     const hash = nanohash(id, CONSTANTS.hashLen)
     if (this.menus.has(hash)) {
@@ -200,7 +213,7 @@ export class MenuGenerator<C extends Context> implements MiddlewareObj<C> {
       throw new Error(`[MenuGen] Menu with id ${id} already exists`)
     }
 
-    const menu = new Menu<T, C>(hash, items, onExpiredButtonPress)
+    const menu = new Menu<T, C>(hash, items, onExpiredButtonPress, options)
     this.menus.set(hash, menu as Menu<unknown>)
     return (data: T) => menu.generateKeyboard(data)
   }

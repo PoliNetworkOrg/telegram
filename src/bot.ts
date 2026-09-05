@@ -12,6 +12,7 @@ import { MenuGenerator } from "./lib/menu"
 import { logger } from "./logger"
 import { AutoModerationStack } from "./middlewares/auto-moderation-stack"
 import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
+import { CampaignSpamGuard } from "./middlewares/campaign-spam"
 import { checkUsername } from "./middlewares/check-username"
 import { GroupSpecificActions } from "./middlewares/group-specific-actions"
 import { MentionListener } from "./middlewares/mention-listener"
@@ -41,6 +42,7 @@ const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
   "poll_answer",
   "my_chat_member",
   "chat_member",
+  "chat_join_request",
   // "channel_post",
   // "edited_channel_post",
   // "business_connection",
@@ -50,7 +52,6 @@ const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
   // "shipping_query",
   // "pre_checkout_query",
   // "purchased_paid_media",
-  // "chat_join_request",
   // "chat_boost",
   // "removed_chat_boost",
 ]
@@ -78,6 +79,7 @@ bot.init().then(() => {
 bot.use(MenuGenerator.getInstance())
 bot.use(commands)
 bot.use(new BotMembershipHandler())
+bot.use(new CampaignSpamGuard())
 bot.use(new AutoModerationStack())
 bot.use(new GroupSpecificActions())
 bot.use(Moderation)

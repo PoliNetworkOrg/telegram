@@ -135,6 +135,19 @@ export class TgLogger extends Module<ModuleShared> {
     return "SENT"
   }
 
+  /** Sends an actionable moderation item and forwards its source message when available. */
+  public async actionRequired(text: string, replyMarkup: InlineKeyboard, sourceMessage?: Message): Promise<boolean> {
+    const sent = await this.log(this.topics.actionRequired, text, {
+      reply_markup: replyMarkup,
+      disable_notification: false,
+    })
+    if (!sent) return false
+    if (sourceMessage) {
+      await this.forward(this.topics.actionRequired, sourceMessage.chat.id, [sourceMessage.message_id])
+    }
+    return true
+  }
+
   // NOTE: this does not delete the messages
   // TODO: better return type
   async preDelete(
@@ -188,7 +201,8 @@ export class TgLogger extends Module<ModuleShared> {
     target: User | number,
     reporter: User,
     type: "BAN" | "UNBAN",
-    reason?: string
+    reason?: string,
+    idempotencyKey?: string
   ): Promise<BanAllStartResult> {
     const banAll: BanAll = {
       type,
@@ -215,7 +229,23 @@ export class TgLogger extends Module<ModuleShared> {
     }
 
     try {
-      await modules.get("banAll").initiateBanAll(banAll, msg.message_id)
+      const start = await modules.get("banAll").initiateBanAll(banAll, msg.message_id, idempotencyKey)
+      if (start.alreadyExisted) {
+        await this.shared.api
+          .editMessageText(
+            this.groupId,
+            msg.message_id,
+            fmt(({ n, b }) => [b`${type} All already started`, n`The existing network operation was reused.`], {
+              sep: "\n",
+            }),
+            { reply_markup: undefined, link_preview_options: { is_disabled: true } }
+          )
+          .catch((error) => logger.warn({ error }, "[banall] Failed to mark duplicate BanAll request"))
+        return {
+          started: true,
+          message: fmt(({ b }) => b`${type} All was already started.`),
+        }
+      }
     } catch (error) {
       const reason =
         error instanceof BanAllQueueCapacityError

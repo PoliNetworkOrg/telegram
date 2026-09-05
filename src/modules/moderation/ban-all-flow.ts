@@ -94,19 +94,40 @@ export function assertBanAllQueueCapacity(outstandingJobs: number, requestedJobs
   throw new BanAllQueueCapacityError(outstandingJobs, requestedJobs, maximumJobs)
 }
 
-export function createBanAllFlow(banAll: BanAll, messageId: number, chats: number[]): BanAllFlow {
+/** Creates a stable parent job ID for retry-safe network moderation. */
+export function banAllFlowId(type: BanAll["type"], idempotencyKey: string): string {
+  return `ban-all-${type.toLowerCase()}-${idempotencyKey}`
+}
+
+/** Builds a BanAll flow and deterministic child IDs when retry deduplication is requested. */
+export function createBanAllFlow(
+  banAll: BanAll,
+  messageId: number,
+  chats: number[],
+  idempotencyKey?: string
+): BanAllFlow {
   const banType = banAll.type === "BAN" ? "ban" : "unban"
   const targetId = typeof banAll.target === "number" ? banAll.target : banAll.target.id
+  const parentJobId = idempotencyKey ? banAllFlowId(banAll.type, idempotencyKey) : undefined
+  const parentOptions = parentJobId
+    ? {
+        ...PARENT_OPTIONS,
+        jobId: parentJobId,
+        removeOnComplete: { age: 60 * 60 * 24 * 30 },
+      }
+    : PARENT_OPTIONS
 
   return {
     name: `${banType}_all`,
     queueName: BAN_ALL_QUEUE_CONFIG.ORCHESTRATOR_QUEUE,
     data: { banAll, messageId },
-    opts: PARENT_OPTIONS,
+    opts: parentOptions,
     children: chats.map((chatId) => ({
       name: banType,
       queueName: BAN_ALL_QUEUE_CONFIG.EXECUTOR_QUEUE,
-      opts: CHILD_OPTIONS,
+      opts: parentJobId
+        ? { ...CHILD_OPTIONS, jobId: `${parentJobId}-${String(chatId).replace("-", "n")}` }
+        : CHILD_OPTIONS,
       data: { chatId, targetId },
     })),
   }
