@@ -33,27 +33,52 @@ export type ExceptionLog =
       error: unknown
     }
 
-export type GroupManagement = {
-  chat: Chat
-} & (
+export type GroupLinkRegenerationFailure = {
+  telegramId: number
+  title: string
+  stage: "TELEGRAM" | "BACKEND"
+  reason: string
+}
+
+export type GroupManagement =
+  | ({
+      chat: Chat
+    } & (
+      | {
+          type: "LEAVE" | "LEAVE_FAIL"
+          addedBy: User
+        }
+      | {
+          type: "DELETE"
+        }
+      | {
+          type: "CREATE" | "UPDATE"
+          addedBy: User
+          inviteLink: string
+        }
+      | {
+          type: "UPDATE_FAIL" | "CREATE_FAIL"
+          reason: string
+          inviteLink?: string
+        }
+    ))
   | {
-      type: "LEAVE" | "LEAVE_FAIL"
-      addedBy: User
+      type: "REGENERATE_LINKS_START"
+      requestedBy: User
     }
   | {
-      type: "DELETE"
+      type: "REGENERATE_LINKS_COMPLETE"
+      requestedBy: User
+      total: number
+      regenerated: number
+      synchronized: number
+      failures: GroupLinkRegenerationFailure[]
     }
   | {
-      type: "CREATE" | "UPDATE"
-      addedBy: User
-      inviteLink: string
-    }
-  | {
-      type: "UPDATE_FAIL" | "CREATE_FAIL"
+      type: "REGENERATE_LINKS_ABORTED"
+      requestedBy: User
       reason: string
-      inviteLink?: string
     }
-)
 
 export type GrantLog = {} & (
   | {
