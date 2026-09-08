@@ -9,7 +9,7 @@ import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
 import { after } from "@/utils/wait"
 import { modules } from ".."
-import { backendModerationLog } from "../moderation/backend-log"
+import { auditBanAll, updateAudit } from "../moderation/backend-audit"
 import { BanAllQueueCapacityError } from "../moderation/ban-all-flow"
 import type { ModerationAction, PreDeleteResult } from "../moderation/types"
 import { type BanAll, getBanAllText } from "./ban-all"
@@ -184,16 +184,19 @@ export class TgLogger extends Module<ModuleShared> {
     type: "BAN" | "UNBAN",
     reason?: string
   ): Promise<BanAllStartResult> {
-    const auditLogId = await backendModerationLog
-      .create({
-        adminId: reporter.id,
-        targetId: typeof target === "number" ? target : target.id,
-        groupId: null,
-        type: type === "BAN" ? "ban_all" : "unban_all",
-        until: null,
-        reason,
-        status: "pending",
-      })
+    const auditType = type === "BAN" ? "ban_all" : "unban_all"
+    const auditLogId = await auditBanAll({
+      category: "ban_all",
+      adminId: reporter.id,
+      targetId: typeof target === "number" ? target : target.id,
+      target: typeof target === "number" ? { id: target, is_bot: false, first_name: "", username: "" } as User : target,
+      from: reporter,
+      type: auditType,
+      groupId: null,
+      until: null,
+      reason,
+      source: "manual",
+    })
       .catch((error: unknown) => {
         logger.error({ error, target, type }, "[banall] Failed to create backend audit record")
         return null
@@ -210,13 +213,13 @@ export class TgLogger extends Module<ModuleShared> {
         jobCount: 0,
         deletedMessageCount: 0,
       },
-      auditLogId,
+      auditLogId: auditLogId ?? null,
     }
 
     const msg = await this.log(this.topics.banAll, getBanAllText(banAll))
 
     if (!msg?.message_id) {
-      if (auditLogId !== null) await backendModerationLog.update(auditLogId, { status: "failed" }).catch(() => {})
+      if (auditLogId !== null) await updateAudit(auditLogId, { status: "failed" }).catch(() => {})
       logger.error("[banall] There was an error when initiating banall, no msg.msgId")
       return {
         started: false,
@@ -229,7 +232,7 @@ export class TgLogger extends Module<ModuleShared> {
     try {
       await modules.get("banAll").initiateBanAll(banAll, msg.message_id)
     } catch (error) {
-      if (auditLogId !== null) await backendModerationLog.update(auditLogId, { status: "failed" }).catch(() => {})
+      if (auditLogId !== null) await updateAudit(auditLogId, { status: "failed" }).catch(() => {})
       const reason =
         error instanceof BanAllQueueCapacityError
           ? `The BanAll queue already has ${error.outstandingJobs} jobs. Try again after the current operations finish.`

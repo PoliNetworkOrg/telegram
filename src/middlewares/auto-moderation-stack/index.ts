@@ -4,6 +4,7 @@ import ssdeep from "ssdeep.js"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
+import { auditGrant } from "@/modules/moderation/backend-audit"
 import { Moderation } from "@/modules/moderation"
 import { measureForkDuration, type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { redis } from "@/redis"
@@ -134,11 +135,14 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
       // no mod action
       if (ctx.whitelisted.role === "user") {
         // log the grant usage
-        await modules.get("tgLogger").grants({
-          action: "USAGE",
+        await auditGrant({
+          category: "grant",
+          action: "usage",
           from: ctx.from,
           chat: ctx.chat,
           message,
+          source: "bot",
+          telegramLog: { logToTelegram: true },
         })
       }
       return

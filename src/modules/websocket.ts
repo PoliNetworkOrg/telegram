@@ -5,6 +5,7 @@ import { env } from "@/env"
 import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
 import { MessageUserStorage } from "@/middlewares/message-user-storage"
+import { auditGrant } from "@/modules/moderation/backend-audit"
 import { duration } from "@/utils/duration"
 import type { ModuleShared } from "@/utils/types"
 import type { TgLogger } from "./tg-logger"
@@ -96,14 +97,16 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
         return
       }
 
-      const res = await this.getModule("tgLogger")
-        .grants({
-          action: "CREATE",
+      const res = await auditGrant({
+          category: "grant",
+          action: "create",
           target: target,
           by: admin,
           since: validSince,
           until: validUntil,
           reason,
+          source: "bot",
+          telegramLog: { logToTelegram: true },
         })
         .catch(() => null)
 
@@ -126,11 +129,13 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
         return
       }
 
-      const res = await this.getModule("tgLogger")
-        .grants({
-          action: "INTERRUPT",
+      const res = await auditGrant({
+          category: "grant",
+          action: "interrupt",
           target: target,
           by: admin,
+          source: "bot",
+          telegramLog: { logToTelegram: true },
         })
         .catch(() => null)
 

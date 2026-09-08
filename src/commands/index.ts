@@ -5,6 +5,7 @@ import { type CommandScopedContext, ManagedCommands } from "@/lib/managed-comman
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
+import { auditException } from "@/modules/moderation/backend-audit"
 import type { TelemetryContextFlavor } from "@/modules/telemetry"
 import { redis } from "@/redis"
 import { fmt } from "@/utils/format"
@@ -74,9 +75,14 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
     handlerError: async ({ context, command, error }) => {
       context.point.tag("error", "UNKNOWN").stringField("error", String(error))
       logger.error({ error }, `[ManagedCommands] Error in handler for command '/${command.trigger}'`)
-      await modules
-        .get("tgLogger")
-        .exception({ type: "UNKNOWN", error }, "managedCommands.handlerError() -- command handler")
+      await auditException({
+        category: "exception",
+        type: "UNKNOWN",
+        error,
+        context: "managedCommands.handlerError() -- command handler",
+        source: "bot",
+        telegramLog: { logToTelegram: true },
+      })
         .catch(() => {})
       // TODO: we should figure out what to tell the user, maybe if we have some telemetry we can produce an error report id here?
       await context.reply(`An error occurred: ${String(error)}`).catch(() => {})

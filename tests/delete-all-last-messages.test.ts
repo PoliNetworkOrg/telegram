@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const dependencies = vi.hoisted(() => ({
   deleteMessages: vi.fn(),
   createAudit: vi.fn(),
+  auditDeleted: vi.fn(),
   banChatMember: vi.fn(),
   getChatMember: vi.fn(),
   getLastByUser: vi.fn(),
@@ -25,11 +26,11 @@ vi.mock("@/backend", () => ({
 vi.mock("@/middlewares/message-user-storage", () => ({
   MessageUserStorage: { getInstance: () => ({ syncMessages: dependencies.sync }) },
 }))
-vi.mock("@/modules/moderation/backend-log", () => ({
-  backendModerationLog: {
-    create: dependencies.createAudit,
-    markMessagesDeleted: dependencies.markMessagesDeleted,
-  },
+vi.mock("@/modules/moderation/backend-audit", () => ({
+  auditModeration: dependencies.createAudit,
+  auditDeleted: dependencies.auditDeleted,
+  markMessagesDeleted: dependencies.markMessagesDeleted,
+  updateAudit: vi.fn(),
 }))
 vi.mock("@/modules", () => ({
   modules: {
@@ -59,6 +60,7 @@ describe("deleteAllLastMessages", () => {
     dependencies.sync.mockResolvedValue(undefined)
     dependencies.markMessagesDeleted.mockResolvedValue(0)
     dependencies.createAudit.mockResolvedValue(1)
+    dependencies.auditDeleted.mockResolvedValue(undefined)
     dependencies.banChatMember.mockResolvedValue(true)
     dependencies.getChatMember.mockResolvedValue({ status: "member" })
     dependencies.moderationAction.mockResolvedValue(undefined)
@@ -140,14 +142,14 @@ describe("deleteAllLastMessages", () => {
     const result = await Moderation.deleteMessages([message], executor, "Command /del")
 
     expect(result.isOk()).toBe(true)
-    expect(dependencies.createAudit).toHaveBeenCalledWith(
+    expect(dependencies.auditDeleted).toHaveBeenCalledWith(
       expect.objectContaining({
-        adminId: 7,
-        targetId: 42,
-        groupId: -1001,
-        type: "delete",
-        status: "completed",
-        deletedMessageCount: 1,
+        category: "deleted",
+        messageId: 11,
+        chatId: -1001,
+        authorId: 42,
+        deletedById: 7,
+        reason: "Command /del",
       })
     )
   })
@@ -159,9 +161,7 @@ describe("deleteAllLastMessages", () => {
 
     await Moderation.deleteMessages([message], { id: 7 } as User, "Command /del")
 
-    expect(dependencies.createAudit).toHaveBeenCalledWith(
-      expect.objectContaining({ deletedMessageCount: null, status: "completed" })
-    )
+    expect(dependencies.auditDeleted).toHaveBeenCalledWith(expect.objectContaining({ category: "deleted", messageId: 11 }))
   })
 
   it("keeps the Telegram deletion log and avoids a second audit inside a ban", async () => {
@@ -184,7 +184,8 @@ describe("deleteAllLastMessages", () => {
     )
     expect(dependencies.createAudit).toHaveBeenCalledTimes(1)
     expect(dependencies.createAudit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "ban", status: "completed", deletedMessageCount: 1 })
+      expect.objectContaining({ category: "moderation", action: "BAN", type: "ban", status: "completed", deletedMessageCount: 0 }),
+      expect.anything()
     )
   })
 
@@ -201,7 +202,7 @@ describe("deleteAllLastMessages", () => {
 
     expect(result.isOk()).toBe(true)
     expect(dependencies.createAudit).toHaveBeenCalledTimes(1)
-    expect(dependencies.createAudit).toHaveBeenCalledWith(expect.objectContaining({ type, status: "completed" }))
+    expect(dependencies.createAudit).toHaveBeenCalledWith(expect.objectContaining({ category: "moderation", type, status: "completed" }), expect.anything())
   })
 
   it("writes a failed audit when a moderation action fails", async () => {
@@ -212,7 +213,7 @@ describe("deleteAllLastMessages", () => {
     expect(result.isErr()).toBe(true)
     expect(dependencies.moderationAction).not.toHaveBeenCalled()
     expect(dependencies.createAudit).toHaveBeenCalledTimes(1)
-    expect(dependencies.createAudit).toHaveBeenCalledWith(expect.objectContaining({ type: "mute", status: "failed" }))
+    expect(dependencies.createAudit).toHaveBeenCalledWith(expect.objectContaining({ category: "moderation", type: "mute", status: "failed" }), expect.anything())
   })
 
   it("writes a partial ban audit when cleanup succeeds but the ban fails", async () => {
@@ -226,7 +227,8 @@ describe("deleteAllLastMessages", () => {
     expect(result.isErr()).toBe(true)
     expect(dependencies.createAudit).toHaveBeenCalledTimes(1)
     expect(dependencies.createAudit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "ban", status: "partial", deletedMessageCount: 1 })
+      expect.objectContaining({ category: "moderation", type: "ban", status: "partial" }),
+      expect.anything()
     )
   })
 
@@ -239,7 +241,8 @@ describe("deleteAllLastMessages", () => {
     expect(result.isErr()).toBe(true)
     expect(dependencies.createAudit).toHaveBeenCalledTimes(1)
     expect(dependencies.createAudit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "ban", status: "failed", deletedMessageCount: null })
+      expect.objectContaining({ category: "moderation", type: "ban", status: "failed" }),
+      expect.anything()
     )
   })
 
@@ -254,7 +257,8 @@ describe("deleteAllLastMessages", () => {
     expect(result.isErr()).toBe(true)
     expect(dependencies.createAudit).toHaveBeenCalledTimes(1)
     expect(dependencies.createAudit).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "ban", status: "partial", deletedMessageCount: null })
+      expect.objectContaining({ category: "moderation", type: "ban", status: "partial" }),
+      expect.anything()
     )
   })
 
@@ -281,13 +285,16 @@ describe("deleteAllLastMessages", () => {
     expect(dependencies.createAudit).toHaveBeenCalledTimes(1)
     expect(dependencies.createAudit).toHaveBeenCalledWith(
       expect.objectContaining({
+        category: "moderation",
+        action: "MULTI_CHAT_SPAM",
         type: "multi_chat_spam",
         status: "partial",
         totalGroupCount: 2,
         successGroupCount: 1,
         failedGroupCount: 1,
-        deletedMessageCount: 2,
-      })
+        deletedMessageCount: 0,
+      }),
+      expect.anything()
     )
   })
 
@@ -314,12 +321,15 @@ describe("deleteAllLastMessages", () => {
     expect(dependencies.createAudit).toHaveBeenCalledTimes(1)
     expect(dependencies.createAudit).toHaveBeenCalledWith(
       expect.objectContaining({
+        category: "moderation",
+        action: "MULTI_CHAT_SPAM",
         type: "multi_chat_spam",
         status: "partial",
         totalGroupCount: 2,
         successGroupCount: 1,
         failedGroupCount: 1,
-      })
+      }),
+      expect.anything()
     )
   })
 })

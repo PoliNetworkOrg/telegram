@@ -9,7 +9,7 @@ import type { ModuleShared } from "@/utils/types"
 import { modules } from ".."
 import { type BanAll, type BanAllState, isBanAllState } from "../tg-logger/ban-all"
 import { Moderation } from "."
-import { backendModerationLog } from "./backend-log"
+import { updateAudit } from "./backend-audit"
 import { executeBanAllJob } from "./ban-all-executor"
 import {
   assertBanAllQueueCapacity,
@@ -87,17 +87,15 @@ export class BanAllQueue extends Module<ModuleShared> {
       const state = await this.getProgress(job)
       const status = state.failedCount === 0 ? "completed" : state.successCount === 0 ? "failed" : "partial"
       if (job.data.banAll.auditLogId !== null) {
-        await backendModerationLog
-          .update(job.data.banAll.auditLogId, {
-            status,
-            deletedMessageCount: state.deletedMessageCount,
-            totalGroupCount: state.jobCount,
-            successGroupCount: state.successCount,
-            failedGroupCount: state.failedCount,
-          })
-          .catch((error: unknown) => {
-            logger.warn({ error, auditLogId: job.data.banAll.auditLogId }, "[BanAllQueue] Failed final audit update")
-          })
+        await updateAudit(job.data.banAll.auditLogId, {
+          status,
+          deletedMessageCount: state.deletedMessageCount,
+          totalGroupCount: state.jobCount,
+          successGroupCount: state.successCount,
+          failedGroupCount: state.failedCount,
+        }).catch((error: unknown) => {
+          logger.warn({ error, auditLogId: job.data.banAll.auditLogId }, "[BanAllQueue] Failed final audit update")
+        })
       }
       await job.updateProgress(state)
       logger.info(
@@ -138,17 +136,15 @@ export class BanAllQueue extends Module<ModuleShared> {
     assertBanAllQueueCapacity(outstandingJobs, chats.length)
 
     if (banAll.auditLogId !== null) {
-      await backendModerationLog
-        .update(banAll.auditLogId, {
-          status: "running",
-          totalGroupCount: chats.length,
-          successGroupCount: 0,
-          failedGroupCount: 0,
-          deletedMessageCount: 0,
-        })
-        .catch((error: unknown) => {
-          logger.warn({ error, auditLogId: banAll.auditLogId }, "[BanAllQueue] Failed initial audit update")
-        })
+      await updateAudit(banAll.auditLogId, {
+        status: "running",
+        totalGroupCount: chats.length,
+        successGroupCount: 0,
+        failedGroupCount: 0,
+        deletedMessageCount: 0,
+      }).catch((error: unknown) => {
+        logger.warn({ error, auditLogId: banAll.auditLogId }, "[BanAllQueue] Failed initial audit update")
+      })
     }
 
     const job = await this.flowProducer.add(createBanAllFlow(banAll, messageId, chats))
@@ -215,7 +211,7 @@ export class BanAllQueue extends Module<ModuleShared> {
         ]
         if (banAll.auditLogId !== null && progress.successCount + progress.failedCount < progress.jobCount) {
           updates.push(
-            backendModerationLog.update(banAll.auditLogId, {
+            updateAudit(banAll.auditLogId, {
               status: "running",
               deletedMessageCount: progress.deletedMessageCount,
               totalGroupCount: progress.jobCount,

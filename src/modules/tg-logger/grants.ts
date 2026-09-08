@@ -3,6 +3,7 @@ import type { Message, User } from "grammy/types"
 import { type ApiOutput, api } from "@/backend"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
+import { auditGrant } from "@/modules/moderation/backend-audit"
 import { modules } from ".."
 import { Moderation } from "../moderation"
 
@@ -21,7 +22,7 @@ async function handleInterrupt(ctx: CallbackCtx<Context>, target: User) {
     return { error: res.error }
   }
 
-  await modules.get("tgLogger").grants({ action: "INTERRUPT", by: ctx.from, target: target })
+  await auditGrant({ category: "grant", action: "interrupt", by: ctx.from, target, source: "bot", telegramLog: { logToTelegram: true } })
   return { error: null }
 }
 

@@ -8,7 +8,7 @@ import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { type Duration, duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { modules } from ".."
-import { backendModerationLog, type ModerationAuditStatus, type ModerationAuditType } from "./backend-log"
+import { auditDeleted, auditModeration, markMessagesDeleted, type ModerationAuditStatus, type ModerationAuditType } from "./backend-audit"
 import type { ModerationAction, ModerationError, ModerationErrorCode, PreDeleteResult } from "./types"
 
 function deduceModerationAction(oldMember: ChatMember, newMember: ChatMember): ModerationAction["action"] | null {
@@ -34,12 +34,13 @@ function deduceModerationAction(oldMember: ChatMember, newMember: ChatMember): M
   return null
 }
 
-const MAP_ACTIONS: Record<Exclude<ModerationAction["action"], "SILENT">, ModerationAuditType> = {
+const MAP_ACTIONS: Record<Exclude<ModerationAction["action"], "SILENT">, Exclude<ModerationAuditType, "ban_all" | "unban_all">> = {
   MUTE: "mute",
   BAN: "ban",
   KICK: "kick",
   UNBAN: "unban",
   UNMUTE: "unmute",
+  // The backend validates `type` separately from the real `action`.
   MULTI_CHAT_SPAM: "multi_chat_spam",
 }
 
@@ -67,10 +68,6 @@ function outcome(successful: boolean, deletedMessageCount: number | null = 0): M
     successGroupCount: 0,
     failedGroupCount: 0,
   }
-}
-
-function addDeletionCounts(...counts: (number | null | undefined)[]): number | null {
-  return counts.includes(null) ? null : counts.reduce<number>((sum, count) => sum + (count ?? 0), 0)
 }
 
 class ModerationClass<C extends Context> implements MiddlewareObj<C> {
@@ -160,19 +157,27 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
   private async audit(p: ModerationAction, deleteResult: PreDeleteResult | null, result: ModerationOutcome) {
     if (p.action === "SILENT") return
 
-    await backendModerationLog.create({
+    await auditModeration({
+      category: "moderation",
       adminId: p.from.id,
-      groupId: p.action === "MULTI_CHAT_SPAM" ? null : p.chat.id,
       targetId: p.target.id,
+      target: p.target,
+      chat: p.chat,
+      from: p.from,
       type: MAP_ACTIONS[p.action],
-      until: "duration" in p && p.duration ? p.duration.date : null,
+      action: p.action,
+      groupId: p.action === "MULTI_CHAT_SPAM" ? null : p.chat.id,
+      until: "duration" in p && p.duration ? new Date(p.duration.date) : null,
+      duration: "duration" in p ? p.duration : undefined,
       reason: "reason" in p ? p.reason : undefined,
-      deletedMessageCount: addDeletionCounts(deleteResult?.recentMessageCount, result.deletedMessageCount),
+      preDeleteRes: deleteResult ?? null,
+      source: "manual",
       status: result.status,
+      deletedMessageCount: result.deletedMessageCount,
       totalGroupCount: result.totalGroupCount,
       successGroupCount: result.successGroupCount,
       failedGroupCount: result.failedGroupCount,
-    })
+    }, { logToTelegram: true })
   }
 
   /**
@@ -231,6 +236,23 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
     try {
       const deleted = await modules.shared.api.deleteMessages(chatId, messageIds)
       if (!deleted) throw new Error("Telegram did not delete the stored messages")
+      await Promise.all(
+        messageIds.map((messageId) =>
+          auditDeleted({
+            category: "deleted",
+            messageId,
+            chatId,
+            authorId: userId,
+            deletedById: modules.shared.botInfo.id,
+            deletedBy: modules.shared.botInfo,
+            deletedAt: new Date(),
+            reason: "Automatic moderation cleanup",
+            source: "auto",
+          }).catch((error: unknown) => {
+            logger.warn({ error, chatId, messageId }, "[Moderation:deleteAllLastMessages] failed to write deleted-message audit")
+          })
+        )
+      )
     } catch (error) {
       fail(error, "[Moderation:deleteAllLastMessages] failed to delete stored messages", messageIds.length)
       return { deletedMessageCount: null, telegramDeletionSucceeded: false }
@@ -238,7 +260,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
 
     try {
       return {
-        deletedMessageCount: await backendModerationLog.markMessagesDeleted(chatId, messageIds),
+        deletedMessageCount: await markMessagesDeleted(chatId, messageIds),
         telegramDeletionSucceeded: true,
       }
     } catch (error) {
@@ -345,7 +367,12 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
 
     const tgLogger = modules.get("tgLogger")
     const preDeleteResult = await tgLogger.preDelete(messages, reason, executor)
-    if (!preDeleteResult || preDeleteResult.count === 0) return err("NOT_FOUND")
+    if (!preDeleteResult || preDeleteResult.count === 0) {
+      logger.warn(
+        { messageCount: messages.length, messageIds: messages.map(({ message_id }) => message_id), reason },
+        "[Moderation:deleteMessages] pre-delete Telegram log was not created; continuing without it"
+      )
+    }
 
     let telegramDeletedCount = 0
     let recentMessageCount: number | null = 0
@@ -359,8 +386,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
       telegramDeletedCount += mIds.length
       successGroupCount += 1
       successfulChatIds.push(chatId)
-      await backendModerationLog
-        .markMessagesDeleted(chatId, mIds)
+      await markMessagesDeleted(chatId, mIds)
         .then((markedCount) => {
           if (recentMessageCount !== null) recentMessageCount += markedCount
         })
@@ -368,40 +394,38 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
           recentMessageCount = null
           logger.warn({ error, chatId, messageIds: mIds }, "[Moderation:deleteMessages] failed to mark messages")
         })
+      await Promise.all(
+        mIds.map((messageId) => {
+          const message = messages.find((candidate) => candidate.chat.id === chatId && candidate.message_id === messageId)
+          return auditDeleted({
+            category: "deleted",
+            messageId,
+            chatId,
+            authorId: message?.from?.id ?? executor.id,
+            author: message?.from,
+            deletedById: executor.id,
+            deletedBy: executor,
+            deletedAt: new Date(),
+            reason,
+            source: "manual",
+          }).catch((error: unknown) => {
+            logger.warn({ error, chatId, messageId }, "[Moderation:deleteMessages] failed to write deleted-message audit")
+          })
+        })
+      )
     }
 
     const failedGroupCount = messagesByChat.size - successGroupCount
-    const status = telegramDeletedCount === 0 ? "failed" : failedGroupCount === 0 ? "completed" : "partial"
-    if (options.createAudit !== false) {
-      await backendModerationLog
-        .create({
-          adminId: executor.id,
-          targetId: messages[0].from?.id ?? executor.id,
-          groupId: messagesByChat.size === 1 ? (messagesByChat.keys().next().value ?? null) : null,
-          type: "delete",
-          until: null,
-          reason,
-          status,
-          deletedMessageCount: recentMessageCount,
-          totalGroupCount: messagesByChat.size,
-          successGroupCount,
-          failedGroupCount,
-        })
-        .catch((error: unknown) => {
-          logger.error({ error, executor, reason }, "[Moderation:deleteMessages] failed to write audit log")
-        })
-    }
-
     if (telegramDeletedCount === 0) {
       logger.error(
-        { initialMessages: messages, executor, forwardedCount: preDeleteResult.count, deletedCount: 0 },
+        { initialMessages: messages, executor, forwardedCount: preDeleteResult?.count ?? 0, deletedCount: 0 },
         "[Moderation:deleteMessages] no message(s) could be deleted"
       )
-      void modules.shared.api.deleteMessages(tgLogger.groupId, preDeleteResult.logMessageIds)
+      if (preDeleteResult) void modules.shared.api.deleteMessages(tgLogger.groupId, preDeleteResult.logMessageIds)
       return err("DELETE_ERROR")
     }
 
-    if (telegramDeletedCount / preDeleteResult.count < 0.2) {
+    if (preDeleteResult && telegramDeletedCount / preDeleteResult.count < 0.2) {
       logger.warn(
         {
           initialMessages: messages,
@@ -414,12 +438,16 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
       )
     }
 
-    return ok({
-      ...preDeleteResult,
-      recentMessageCount,
-      successfulChatIds,
-      failedChatIds: [...messagesByChat.keys()].filter((chatId) => !successfulChatIds.includes(chatId)),
-    })
+    return ok(
+      preDeleteResult
+        ? {
+            ...preDeleteResult,
+            recentMessageCount,
+            successfulChatIds,
+            failedChatIds: [...messagesByChat.keys()].filter((chatId) => !successfulChatIds.includes(chatId)),
+          }
+        : null
+    )
   }
 
   private async moderate(p: ModerationAction, messagesToDelete?: Message[]): Promise<Result<void, ModerationError>> {

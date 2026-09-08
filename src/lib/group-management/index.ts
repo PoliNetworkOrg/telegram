@@ -8,7 +8,17 @@ import { err, ok } from "neverthrow"
 import { api } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
+import { auditException, auditGroupManagement } from "@/modules/moderation/backend-audit"
+import type { ExceptionLog, GroupManagement as GroupManagementLog } from "@/modules/tg-logger/types"
 import { printUsername } from "@/utils/users"
+
+async function logGroupManagement(props: GroupManagementLog) {
+  await auditGroupManagement({ category: "group_management", ...props, source: "bot", telegramLog: { logToTelegram: true } })
+}
+
+async function logException(props: ExceptionLog, context?: string) {
+  await auditException({ category: "exception", ...props, context, source: "bot", telegramLog: { logToTelegram: true } })
+}
 
 function stripChatInfo(chat: ChatFullInfo) {
   return {
@@ -25,7 +35,7 @@ function stripChatInfo(chat: ChatFullInfo) {
 async function errorNoInviteLink(chat: ChatFullInfo, type: "CREATE" | "UPDATE") {
   const reason = "Missing invite_link, probably the bot is not admin or does not have permission to invite via link"
   logger.error({ chat: stripChatInfo(chat), reason }, `[GroupManagement] Cannot ${type} group`)
-  await modules.get("tgLogger").groupManagement({
+  await logGroupManagement({
     type: type === "CREATE" ? "CREATE_FAIL" : "UPDATE_FAIL",
     chat,
     reason,
@@ -37,7 +47,7 @@ async function errorBackend(chat: ChatFullInfo, type: "CREATE" | "UPDATE", fatal
   if (fatal) logger.fatal("[GroupManagement] HELP! Sent and recieved chatId do not match")
   const reason = `${fatal ? "FATAL " : ""}There was an error in the backend`
   logger.error({ chat: stripChatInfo(chat), reason }, `[GroupManagement] Cannot ${type} group`)
-  await modules.get("tgLogger").groupManagement({
+  await logGroupManagement({
     type: type === "CREATE" ? "CREATE_FAIL" : "UPDATE_FAIL",
     chat,
     inviteLink: chat.invite_link,
@@ -63,7 +73,7 @@ export const GroupManagement = {
     if (!chat) {
       const reason = "The bot cannot retrieve chat info, probably it is not an administrator"
       logger.error({ chatId, reason }, "[GroupManagement] Cannot CREATE group")
-      await modules.get("tgLogger").exception({
+      await logException({
         type: "GENERIC",
         error: new Error("Cannot execute GroupManagement.create because the bot cannot fetch the chat from API."),
       })
@@ -81,7 +91,7 @@ export const GroupManagement = {
       return errorBackend(chat, "CREATE", res.length >= 1 && res[0] !== chat.id)
     }
 
-    await modules.get("tgLogger").groupManagement({ type: "CREATE", chat, addedBy, inviteLink: chat.invite_link })
+    await logGroupManagement({ type: "CREATE", chat, addedBy, inviteLink: chat.invite_link })
     logger.info(
       { chat: stripChatInfo(chat), addedBy: printUsername(addedBy) },
       "[GroupManagement] CREATE group success"
@@ -124,9 +134,7 @@ export const GroupManagement = {
       return errorBackend(chat, "UPDATE", res.length >= 1 && res[0] !== chat.id)
     }
 
-    await modules
-      .get("tgLogger")
-      .groupManagement({ type: "UPDATE", chat, addedBy: requestedBy, inviteLink: chat.invite_link })
+    await logGroupManagement({ type: "UPDATE", chat, addedBy: requestedBy, inviteLink: chat.invite_link })
     logger.info(
       { chat: stripChatInfo(chat), requestedBy: printUsername(requestedBy) },
       "[GroupManagement] UPDATE group success"
@@ -142,7 +150,7 @@ export const GroupManagement = {
       return err(reason)
     }
 
-    await modules.get("tgLogger").groupManagement({ type: "DELETE", chat })
+    await logGroupManagement({ type: "DELETE", chat })
     logger.info({ chat }, "[GroupManagement] DELETE group success")
     return ok()
   },
@@ -159,7 +167,7 @@ export const GroupManagement = {
 
     const left = await modules.shared.api.leaveChat(chat.id).catch(() => false)
     if (!left) {
-      await modules.get("tgLogger").groupManagement({
+      await logGroupManagement({
         type: "LEAVE_FAIL",
         chat,
         addedBy,
@@ -171,7 +179,7 @@ export const GroupManagement = {
       return false
     }
 
-    await modules.get("tgLogger").groupManagement({ type: "LEAVE", chat, addedBy: addedBy })
+    await logGroupManagement({ type: "LEAVE", chat, addedBy: addedBy })
     logger.warn(
       { chat, addedBy: printUsername(addedBy), allowed, left },
       `[GroupManagement] checkAdderPermission result: DENIED. LEFT unauthorized group`

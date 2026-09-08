@@ -19,6 +19,7 @@ import { MessageLink } from "./middlewares/message-link"
 import { MessageUserStorage } from "./middlewares/message-user-storage"
 import { modules, sharedDataInit } from "./modules"
 import { Moderation } from "./modules/moderation"
+import { audit, type ExceptionAuditInput } from "./modules/moderation/backend-audit"
 import { telemetry } from "./modules/telemetry/middleware"
 import { tgApiTelemetry } from "./modules/telemetry/transformer"
 import type { ExceptionLog } from "./modules/tg-logger/types"
@@ -109,6 +110,18 @@ async function logException(props: ExceptionLog, context: string) {
       .timestamp(new Date())
   )
   await tgLogger.exception(props, context).catch(() => {})
+
+  // Also send to backend audit log
+  const auditInput: ExceptionAuditInput = {
+    category: "exception",
+    type: props.type,
+    error: props.error,
+    context,
+    telegramLog: { logToTelegram: false }, // Already logged to Telegram above
+  }
+  await audit(auditInput).catch((error) => {
+    logger.warn({ error }, "Failed to send exception to backend audit log")
+  })
 }
 
 bot.catch(async (err) => {
