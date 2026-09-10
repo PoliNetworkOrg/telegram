@@ -5,7 +5,7 @@ import { CommandsCollection } from "@/lib/managed-commands"
 import type { CommandConversation } from "@/lib/managed-commands/command"
 import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
-import { ephemeral } from "@/utils/messages"
+import { scheduleDelete } from "@/utils/messages"
 import type { Role } from "@/utils/types"
 
 const mainMsg = fmt(({ b }) => [b`🔗 Admin dashboard link`, b`\nStatus: ⏳ WAITING FOR CODE`], { sep: "\n" })
@@ -109,6 +109,6 @@ export const linkAdminDashboard = new CommandsCollection<Role>().createCommand({
       )
     }
 
-    void ephemeral(msg)
+    void scheduleDelete(msg)
   },
 })

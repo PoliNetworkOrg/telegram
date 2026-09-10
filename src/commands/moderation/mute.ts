@@ -42,7 +42,7 @@ export const mute = new CommandsCollection<Role>("Muting")
         [repliedTo],
         args.reason
       )
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })
   .createCommand({
@@ -69,11 +69,10 @@ export const mute = new CommandsCollection<Role>("Muting")
       const userOverload = await getOverloadUser(context, repliedTo, args.reasonOrUser, args.reason)
       if (userOverload.isErr()) {
         void ephemeral(
-          context.reply(
+          context,
             repliedTo
               ? fmt(({ n }) => n`There was an error`)
               : fmt(({ n }) => n`Target user not found, please try replying to their message`)
-          )
         )
         logger.error({ args, repliedTo }, `MUTE: ${userOverload.error}`)
         return
@@ -89,7 +88,7 @@ export const mute = new CommandsCollection<Role>("Muting")
         repliedTo ? [repliedTo] : undefined,
         reason
       )
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })
   .createCommand({
@@ -107,18 +106,18 @@ export const mute = new CommandsCollection<Role>("Muting")
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
       if (!userId) {
         logger.debug(`unmute: no userId for username ${args.username}`)
-        const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
-        return void ephemeral(msg)
+        ephemeral(context, fmt(({ b }) => b`@${context.from.username} user not found`))
+        return
       }
 
       const user = await getUser(userId, context)
       if (!user) {
-        const msg = await context.reply(fmt(({ n }) => n`Error: cannot find this user`))
+        void ephemeral(context, fmt(({ n }) => n`Error: cannot find this user`))
         logger.error({ userId }, "UNMUTE: cannot retrieve the user")
-        return void ephemeral(msg)
+        return
       }
 
       const res = await Moderation.unmute(user, context.chat, context.from)
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })

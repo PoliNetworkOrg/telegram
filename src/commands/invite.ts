@@ -1,7 +1,7 @@
 import { api } from "@/backend"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
-import { ephemeral } from "@/utils/messages"
+import { ephemeral, scheduleDelete } from "@/utils/messages"
 import type { Role } from "@/utils/types"
 
 export const invite = new CommandsCollection<Role>().createCommand({
@@ -13,8 +13,11 @@ export const invite = new CommandsCollection<Role>().createCommand({
     const inviteLink =
       chat.invite_link ?? (await api.tg.groups.getById.query({ telegramId: context.chatId }).catch(() => null))?.link
 
-    if (!inviteLink) return void ephemeral(context.reply(fmt(({ n }) => n`❌ Cannot retrieve the invite link`)), 10_000)
+    if (!inviteLink) return void ephemeral(context, fmt(({ n }) => n`❌ Cannot retrieve the invite link`))
 
-    void ephemeral(context.reply(fmt(({ n }) => n`🔗 ${inviteLink}`)))
+    void ephemeral(
+      context,
+      fmt(({ n }) => n`🔗 ${inviteLink}`),
+    )
   },
 })

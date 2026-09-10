@@ -9,7 +9,7 @@ import { redis } from "@/redis"
 // import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
-import { createFakeMessage, ephemeral, getText } from "@/utils/messages"
+import { createFakeMessage, getText, ephemeral } from "@/utils/messages"
 import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
 import { inspectMessageTrust } from "../message-trust"
@@ -139,7 +139,7 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
     )
 
     void ephemeral(
-      ctx.reply(
+      ctx, 
         res.isOk()
           ? fmt(({ b }) => [
               b`${fmtUser(ctx.from)}`,
@@ -148,7 +148,6 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
             ])
           : res.error.fmtError
       )
-    )
   }
 
   /**
@@ -195,7 +194,7 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
       }
 
       void ephemeral(
-        ctx.reply(
+        ctx,
           fmt(
             ({ i, b, n }) => [
               i`Message for ${fmtUser(ctx.from)}.`,
@@ -204,7 +203,6 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
             ],
             { sep: "\n" }
           )
-        )
       )
     }
   }

@@ -367,8 +367,8 @@ export class ManagedCommands<
     this.composer.command("help", async (ctx) => {
       if (ctx.chat.type !== "private")
         return void ephemeral(
-          ctx.reply(fmt(({ n, code }) => n`You can only send ${code`/help`} in private chat with the bot.`)),
-          10_000
+          ctx, 
+          fmt(({ n, code }) => n`You can only send ${code`/help`} in private chat with the bot.`)
         )
 
       const text = ctx.message?.text ?? ""
@@ -530,7 +530,20 @@ export class ManagedCommands<
         // In private chats we keep them, we don't care
         if (!isPrivate) await ctx.deleteMessage().catch(() => {})
 
-        const msg = await ctx.reply(
+        if (!isPrivate) {
+          ephemeral(
+            ctx,
+            fmt(({ b, code }) => [
+              `Error:`,
+              b`${requirements.error.join("\n")}`,
+              `\nSee usage with:`,
+              code`/help ${Array.isArray(cmd.trigger) ? cmd.trigger[0] : cmd.trigger}`,
+            ])
+          )
+          return
+        }
+
+        await ctx.reply(
           fmt(({ b, code }) => [
             `Error:`,
             b`${requirements.error.join("\n")}`,
@@ -538,7 +551,6 @@ export class ManagedCommands<
             code`/help ${Array.isArray(cmd.trigger) ? cmd.trigger[0] : cmd.trigger}`,
           ])
         )
-        if (!isPrivate) void ephemeral(msg, 10_000) // delete the error message after some time in groups, no need to keep it
         return
       }
 

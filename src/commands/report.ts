@@ -5,8 +5,8 @@ import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { fmt } from "@/utils/format"
-import { ephemeral } from "@/utils/messages"
 import type { Role } from "@/utils/types"
+import { ephemeral } from "@/utils/messages"
 
 export const logReport = async (context: Filter<Context, "message"> | CommandScopedContext, repliedTo: Message) => {
   const reportSent = await modules.get("tgLogger").report(repliedTo, context.from)
@@ -19,12 +19,16 @@ export const logReport = async (context: Filter<Context, "message"> | CommandSco
   else if (reportSent === "ERROR")
     msg = fmt(({ b, n }) => [b`⚠️ Report not sent`, n`Please try again in a moment.`], { sep: "\n" })
 
-  const feedback = await context.reply(msg, {
-    disable_notification: false,
-    reply_parameters: { message_id: repliedTo.message_id },
-  })
-
-  void ephemeral(feedback)
+  await ephemeral(
+    context, 
+    msg, 
+    {
+      disable_notification: false,
+      reply_parameters: { 
+        message_id: repliedTo.message_id 
+      },
+    }
+  )
 }
 
 export const report = new CommandsCollection<Role>().createCommand({
