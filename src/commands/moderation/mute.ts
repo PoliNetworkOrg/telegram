@@ -70,9 +70,9 @@ export const mute = new CommandsCollection<Role>("Muting")
       if (userOverload.isErr()) {
         void ephemeral(
           context,
-            repliedTo
-              ? fmt(({ n }) => n`There was an error`)
-              : fmt(({ n }) => n`Target user not found, please try replying to their message`)
+          repliedTo
+            ? fmt(({ n }) => n`There was an error`)
+            : fmt(({ n }) => n`Target user not found, please try replying to their message`)
         )
         logger.error({ args, repliedTo }, `MUTE: ${userOverload.error}`)
         return
@@ -106,13 +106,19 @@ export const mute = new CommandsCollection<Role>("Muting")
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
       if (!userId) {
         logger.debug(`unmute: no userId for username ${args.username}`)
-        ephemeral(context, fmt(({ b }) => b`@${context.from.username} user not found`))
+        await ephemeral(
+          context,
+          fmt(({ b }) => b`@${context.from.username} user not found`)
+        )
         return
       }
 
       const user = await getUser(userId, context)
       if (!user) {
-        void ephemeral(context, fmt(({ n }) => n`Error: cannot find this user`))
+        void ephemeral(
+          context,
+          fmt(({ n }) => n`Error: cannot find this user`)
+        )
         logger.error({ userId }, "UNMUTE: cannot retrieve the user")
         return
       }

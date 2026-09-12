@@ -367,7 +367,7 @@ export class ManagedCommands<
     this.composer.command("help", async (ctx) => {
       if (ctx.chat.type !== "private")
         return void ephemeral(
-          ctx, 
+          ctx,
           fmt(({ n, code }) => n`You can only send ${code`/help`} in private chat with the bot.`)
         )
 
@@ -531,7 +531,7 @@ export class ManagedCommands<
         if (!isPrivate) await ctx.deleteMessage().catch(() => {})
 
         if (!isPrivate) {
-          ephemeral(
+          await ephemeral(
             ctx,
             fmt(({ b, code }) => [
               `Error:`,

@@ -1,9 +1,8 @@
+import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
 import { modules } from "@/modules"
 import type { MaybePromise, PartialMessage } from "./types"
 import { wait } from "./wait"
-import type { Context } from "grammy"
-
 
 type TextReturn<M extends Message> = M extends { text: string }
   ? { text: string; type: "TEXT" }
@@ -59,17 +58,19 @@ export async function scheduleDelete(message: MaybePromise<PartialMessage>, time
     .catch(() => {})
 }
 
-
 export async function ephemeral(ctx: Context, ...args: ReplyParams): Promise<Message | null> {
-  
-  const [ msg, other, signal ] = args
+  const [msg, other, signal] = args
 
   if (!ctx.from) return null
-  
-  return await ctx.reply(msg, {
-    ...other,
-    ephemeral_message_parameters: {
-      receiver_user_id: ctx.from.id,
+
+  return await ctx.reply(
+    msg,
+    {
+      ...other,
+      ephemeral_message_parameters: {
+        receiver_user_id: ctx.from.id,
+      },
     },
-  }, signal)
+    signal
+  )
 }

@@ -3,7 +3,7 @@ import { logger } from "@/logger"
 import { RestrictPermissions } from "@/utils/chat"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
-import { ephemeral, scheduleDelete } from "@/utils/messages"
+import { ephemeral } from "@/utils/messages"
 import type { Context } from "@/utils/types"
 
 export const checkUsername: MiddlewareFn<Filter<Context, "message">> = async (ctx, next) => {

@@ -16,16 +16,28 @@ export const pin = new CommandsCollection<Role>()
     handler: async ({ context, repliedTo }) => {
       const member = await context.getChatMember(context.me.id)
       if (member.status !== "administrator")
-        return void ephemeral(context, fmt(({ n }) => n`❌ The bot is not an admin`))
+        return void ephemeral(
+          context,
+          fmt(({ n }) => n`❌ The bot is not an admin`)
+        )
 
       if (!member.can_pin_messages)
         return void ephemeral(
-          context, fmt(({ n, code }) => n`❌ The bot is missing the ${code`Pin messages`} permission.`))
+          context,
+          fmt(({ n, code }) => n`❌ The bot is missing the ${code`Pin messages`} permission.`)
+        )
 
       const res = await context.pinChatMessage(repliedTo.message_id).catch(() => false)
-      if (!res) return void ephemeral(context, fmt(({ n }) => n`❌ Cannot pin the message`))
+      if (!res)
+        return void ephemeral(
+          context,
+          fmt(({ n }) => n`❌ Cannot pin the message`)
+        )
 
-      void ephemeral(context, fmt(({ n }) => n`✅ Message pinned`))
+      void ephemeral(
+        context,
+        fmt(({ n }) => n`✅ Message pinned`)
+      )
     },
   })
   .createCommand({
@@ -40,17 +52,27 @@ export const pin = new CommandsCollection<Role>()
     handler: async ({ context, repliedTo }) => {
       const member = await context.getChatMember(context.me.id)
       if (member.status !== "administrator")
-        return void ephemeral(context, fmt(({ n }) => n`❌ The bot is not an admin`))
+        return void ephemeral(
+          context,
+          fmt(({ n }) => n`❌ The bot is not an admin`)
+        )
 
       if (!member.can_pin_messages)
-        return void ephemeral( 
+        return void ephemeral(
           context,
           fmt(({ n, code }) => n`❌ The bot is missing the ${code`Pin messages`} permission.`)
         )
 
       const res = await context.unpinChatMessage(repliedTo.message_id).catch(() => false)
-      if (!res) return void ephemeral(context, fmt(({ n }) => n`❌ Cannot unpin the message`))
+      if (!res)
+        return void ephemeral(
+          context,
+          fmt(({ n }) => n`❌ Cannot unpin the message`)
+        )
 
-      void ephemeral(context, fmt(({ n }) => n`✅ Message unpinned`))
+      void ephemeral(
+        context,
+        fmt(({ n }) => n`✅ Message unpinned`)
+      )
     },
   })

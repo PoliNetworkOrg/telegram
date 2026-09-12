@@ -9,7 +9,7 @@ import { redis } from "@/redis"
 // import { defer } from "@/utils/deferred-middleware"
 import { duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
-import { createFakeMessage, getText, ephemeral } from "@/utils/messages"
+import { createFakeMessage, ephemeral, getText } from "@/utils/messages"
 import { throttle } from "@/utils/throttle"
 import type { Context } from "@/utils/types"
 import { inspectMessageTrust } from "../message-trust"
@@ -139,15 +139,15 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
     )
 
     void ephemeral(
-      ctx, 
-        res.isOk()
-          ? fmt(({ b }) => [
-              b`${fmtUser(ctx.from)}`,
-              "The link you shared is not allowed.",
-              "Please refrain from sharing links that could be considered spam",
-            ])
-          : res.error.fmtError
-      )
+      ctx,
+      res.isOk()
+        ? fmt(({ b }) => [
+            b`${fmtUser(ctx.from)}`,
+            "The link you shared is not allowed.",
+            "Please refrain from sharing links that could be considered spam",
+          ])
+        : res.error.fmtError
+    )
   }
 
   /**
@@ -195,14 +195,14 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
 
       void ephemeral(
         ctx,
-          fmt(
-            ({ i, b, n }) => [
-              i`Message for ${fmtUser(ctx.from)}.`,
-              b`⚠️ Your message was detected as potential spam and has been deleted.`,
-              n`Please avoid sending similar messages to multiple groups/topics in a short period of time. Try again in 5 minutes.`,
-            ],
-            { sep: "\n" }
-          )
+        fmt(
+          ({ i, b, n }) => [
+            i`Message for ${fmtUser(ctx.from)}.`,
+            b`⚠️ Your message was detected as potential spam and has been deleted.`,
+            n`Please avoid sending similar messages to multiple groups/topics in a short period of time. Try again in 5 minutes.`,
+          ],
+          { sep: "\n" }
+        )
       )
     }
   }

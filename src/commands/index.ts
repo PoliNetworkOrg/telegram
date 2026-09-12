@@ -8,7 +8,7 @@ import { modules } from "@/modules"
 import type { TelemetryContextFlavor } from "@/modules/telemetry"
 import { redis } from "@/redis"
 import { fmt } from "@/utils/format"
-import { ephemeral, scheduleDelete } from "@/utils/messages"
+import { ephemeral } from "@/utils/messages"
 import type { Context, Role } from "@/utils/types"
 import { printCtxFrom } from "@/utils/users"
 import { invite } from "./invite"
@@ -42,9 +42,9 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       void ephemeral(
         context,
         fmt(
-            ({ n }) =>
-              n`This command must be run in ${command.scope === "private" ? "private chat with the bot" : "groups"}.`
-          ),
+          ({ n }) =>
+            n`This command must be run in ${command.scope === "private" ? "private chat with the bot" : "groups"}.`
+        )
       )
     },
     missingPermissions: async ({ context, command }) => {
@@ -55,11 +55,9 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       )
       // Inform the user of restricted access
 
-
-      
       void ephemeral(
         context,
-        fmt(({ n }) => n`You are not allowed to execute this command`),
+        fmt(({ n }) => n`You are not allowed to execute this command`)
       )
     },
     conversationBegin: async ({ context, command, conversation }) => {

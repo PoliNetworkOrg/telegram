@@ -32,7 +32,6 @@ export const ban = new CommandsCollection<Role>("Banning")
     handler: async ({ args, context, repliedTo }) => {
       const userOverload = await getOverloadUser(context, repliedTo, args.reasonOrUser, args.reason)
       if (userOverload.isErr()) {
-        
         const text = repliedTo ? "There was an error" : "Target user not found, please try replying to their message"
         void ephemeral(context, text)
 
@@ -51,7 +50,6 @@ export const ban = new CommandsCollection<Role>("Banning")
         reason
       )
 
-      
       if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })
@@ -107,13 +105,19 @@ export const ban = new CommandsCollection<Role>("Banning")
 
       if (!userId) {
         logger.debug(`unban: no userId for username ${args.username}`)
-        return void ephemeral(context, fmt(({ b }) => b`@${context.from.username} user not found`))
+        return void ephemeral(
+          context,
+          fmt(({ b }) => b`@${context.from.username} user not found`)
+        )
       }
 
       const user = await getUser(userId, context)
       if (!user) {
         logger.error({ userId }, "UNBAN: cannot retrieve the user")
-        return void ephemeral(context, fmt(({ n }) => [n`Error: cannot find this user`]))
+        return void ephemeral(
+          context,
+          fmt(({ n }) => [n`Error: cannot find this user`])
+        )
       }
 
       const res = await Moderation.unban(user, context.chat, context.from)
