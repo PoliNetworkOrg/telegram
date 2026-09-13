@@ -63,14 +63,15 @@ export async function ephemeral(ctx: Context, ...args: ReplyParams): Promise<Mes
 
   if (!ctx.from) return null
 
-  return await ctx.reply(
-    msg,
-    {
-      ...other,
-      ephemeral_message_parameters: {
-        receiver_user_id: ctx.from.id,
-      },
-    },
-    signal
-  )
+  const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup"
+  const options = isGroup
+    ? {
+        ...other,
+        ephemeral_message_parameters: {
+          receiver_user_id: ctx.from.id,
+        },
+      }
+    : other
+
+  return await ctx.reply(msg, options, signal).catch(() => null)
 }
