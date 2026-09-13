@@ -7,6 +7,7 @@ import { logger } from "@/logger"
 import { modules } from "@/modules"
 import type { TelemetryContextFlavor } from "@/modules/telemetry"
 import { redis } from "@/redis"
+import { RedisSet } from "@/redis/set"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { Context, Role } from "@/utils/types"
@@ -18,6 +19,19 @@ import { moderation } from "./moderation"
 import { pin } from "./pin"
 import { report } from "./report"
 import { search } from "./search"
+
+const userSet = new RedisSet({
+  redis,
+  prefix: "managed-commands:cached-users",
+  ttl: 60 * 60 * 24, // 24h, we can afford some staleness here and it helps reduce the number of Redis calls significantly
+})
+
+const userRolesCache = new RedisFallbackAdapter<Role[]>({
+  redis,
+  prefix: "managed-commands:user-roles",
+  ttl: 60 * 5,
+  logger,
+})
 
 const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
   redis,
@@ -34,6 +48,14 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
     },
   ],
   hooks: {
+    cachedUserSetCommands: async (userId, chatId) => {
+      const key = `${userId}:${chatId}`
+      if (await userSet.has(key)) {
+        return true
+      }
+      await userSet.add(key)
+      return false
+    },
     wrongScope: async ({ context, command }) => {
       await context.deleteMessage().catch(() => {})
       logger.info(
@@ -104,19 +126,15 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
     },
   },
   getUserRoles: async (userId) => {
-    // TODO: cache this to avoid hitting the db on every command
-    const { roles } = await api.tg.permissions.getRoles.query({ userId })
-    return roles || []
+    const cached = await userRolesCache.read(String(userId))
+    if (cached) return cached
+
+    const res = await api.tg.permissions.getRoles.query({ userId })
+    const roles = res.roles ?? []
+    await userRolesCache.write(String(userId), roles)
+    return roles
   },
 })
-  .createCommand({
-    trigger: "ping",
-    scope: "private",
-    description: "Replies with pong",
-    handler: async ({ context }) => {
-      await context.reply("pong")
-    },
-  })
   .createCommand({
     trigger: "start",
     scope: "private",
@@ -136,6 +154,14 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
           { sep: "\n" }
         )
       )
+    },
+  })
+  .createCommand({
+    trigger: "ping",
+    scope: "private",
+    description: "Replies with pong",
+    handler: async ({ context }) => {
+      await context.reply("pong")
     },
   })
   .withCollection(linkAdminDashboard, report, search, management, moderation, pin, invite)

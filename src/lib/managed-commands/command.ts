@@ -1,6 +1,6 @@
 import type { Conversation } from "@grammyjs/conversations"
 import type { Context } from "grammy"
-import type { Message } from "grammy/types"
+import type { BotCommand, Message } from "grammy/types"
 import type { z } from "zod"
 import type { MaybeArray } from "@/utils/types"
 import type { ConversationContext } from "./context"
@@ -168,6 +168,14 @@ export type AnyCommand<TRole extends string = string, C extends Context = Contex
   C
 >
 
+export type AnyGroupCommand<TRole extends string = string, C extends Context = Context> = Command<
+  CommandArgs,
+  CommandReplyTo,
+  "group" | "both",
+  TRole,
+  C
+>
+
 /**
  * Type guard to check if a command is allowed in groups.
  * @param cmd The command to check
@@ -220,4 +228,46 @@ export function isAllowedInPrivateOnly<
   C extends Context = Context,
 >(cmd: Command<A, R, CommandScope, TRole, C>): cmd is Command<A, R, "private", TRole, C> {
   return cmd.scope === "private"
+}
+
+export function isAllowedInPrivate<
+  A extends CommandArgs,
+  R extends CommandReplyTo,
+  TRole extends string = string,
+  C extends Context = Context,
+>(cmd: Command<A, R, CommandScope, TRole, C>): cmd is Command<A, R, "private" | "both", TRole, C> {
+  return cmd.scope !== "group"
+}
+
+export function isAllowedEverywhere<
+  A extends CommandArgs,
+  R extends CommandReplyTo,
+  TRole extends string = string,
+  C extends Context = Context,
+>(cmd: Command<A, R, CommandScope, TRole, C>): cmd is Command<A, R, "both", TRole, C> {
+  return cmd.scope === "both" || cmd.scope === undefined
+}
+
+export function toBotCommands(command: AnyCommand): BotCommand[] {
+  const triggers = Array.isArray(command.trigger) ? command.trigger : [command.trigger]
+  return triggers.map((trigger) => ({
+    command: trigger,
+    description: command.description ?? "No description",
+  }))
+}
+
+export function isForThisScope(cmd: AnyCommand, chatType: "private" | "group" | "supergroup" | "channel"): boolean {
+  if (chatType === "channel") return false
+  if (cmd.scope === "private") return chatType === "private"
+  if (cmd.scope === "group") return chatType === "group" || chatType === "supergroup"
+  return true
+}
+
+export function switchOnScope<S extends CommandScope, T>(
+  cmd: Command<CommandArgs, CommandReplyTo, S>,
+  handlers: { private: T; group: T; both: T }
+) {
+  if (cmd.scope === "private") return handlers.private
+  if (cmd.scope === "group") return handlers.group
+  return handlers.both
 }

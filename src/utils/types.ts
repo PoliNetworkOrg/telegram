@@ -5,14 +5,8 @@ import type { ApiInput, ApiOutput } from "@/backend"
 import type { ManagedCommandsFlavor } from "@/lib/managed-commands"
 import type { TelemetryContextFlavor } from "@/modules/telemetry"
 
-export type OptionalPropertyOf<T extends object> = Exclude<
-  {
-    [K in keyof T]: T[K] extends undefined ? never : K
-  }[keyof T],
-  undefined
->
-export type ContextWith<P extends OptionalPropertyOf<TContext>> = Exclude<TContext, P> & {
-  [K in P]: NonNullable<TContext[P]>
+export type ContextWith<C extends TContext, P extends keyof C> = C & {
+  [K in P]: NonNullable<C[K]>
 }
 
 export type MaybePromise<T> = T | Promise<T>
