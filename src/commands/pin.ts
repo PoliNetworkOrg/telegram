@@ -16,28 +16,18 @@ export const pin = new CommandsCollection<Role>()
     handler: async ({ context, repliedTo }) => {
       const member = await context.getChatMember(context.me.id)
       if (member.status !== "administrator")
-        return void ephemeral(
-          context,
-          fmt(({ n }) => n`❌ The bot is not an admin`)
-        )
+        return void ephemeral(context.reply(fmt(({ n }) => n`❌ The bot is not an admin`)), 10_000)
 
       if (!member.can_pin_messages)
         return void ephemeral(
-          context,
-          fmt(({ n, code }) => n`❌ The bot is missing the ${code`Pin messages`} permission.`)
+          context.reply(fmt(({ n, code }) => n`❌ The bot is missing the ${code`Pin messages`} permission.`)),
+          10_000
         )
 
       const res = await context.pinChatMessage(repliedTo.message_id).catch(() => false)
-      if (!res)
-        return void ephemeral(
-          context,
-          fmt(({ n }) => n`❌ Cannot pin the message`)
-        )
+      if (!res) return void ephemeral(context.reply(fmt(({ n }) => n`❌ Cannot pin the message`)), 10_000)
 
-      void ephemeral(
-        context,
-        fmt(({ n }) => n`✅ Message pinned`)
-      )
+      void ephemeral(context.reply(fmt(({ n }) => n`✅ Message pinned`)), 10_000)
     },
   })
   .createCommand({
@@ -52,27 +42,17 @@ export const pin = new CommandsCollection<Role>()
     handler: async ({ context, repliedTo }) => {
       const member = await context.getChatMember(context.me.id)
       if (member.status !== "administrator")
-        return void ephemeral(
-          context,
-          fmt(({ n }) => n`❌ The bot is not an admin`)
-        )
+        return void ephemeral(context.reply(fmt(({ n }) => n`❌ The bot is not an admin`)), 10_000)
 
       if (!member.can_pin_messages)
         return void ephemeral(
-          context,
-          fmt(({ n, code }) => n`❌ The bot is missing the ${code`Pin messages`} permission.`)
+          context.reply(fmt(({ n, code }) => n`❌ The bot is missing the ${code`Pin messages`} permission.`)),
+          10_000
         )
 
       const res = await context.unpinChatMessage(repliedTo.message_id).catch(() => false)
-      if (!res)
-        return void ephemeral(
-          context,
-          fmt(({ n }) => n`❌ Cannot unpin the message`)
-        )
+      if (!res) return void ephemeral(context.reply(fmt(({ n }) => n`❌ Cannot unpin the message`)), 10_000)
 
-      void ephemeral(
-        context,
-        fmt(({ n }) => n`✅ Message unpinned`)
-      )
+      void ephemeral(context.reply(fmt(({ n }) => n`✅ Message unpinned`)), 10_000)
     },
   })

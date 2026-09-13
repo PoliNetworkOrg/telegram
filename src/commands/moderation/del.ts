@@ -24,10 +24,6 @@ export const del = new CommandsCollection<Role>("Deletion").createCommand({
     })
 
     const res = await Moderation.deleteMessages([repliedTo], context.from, "Command /del")
-    if (res.isErr())
-      void ephemeral(
-        context,
-        fmt(({ n }) => n`Cannot delete the message`)
-      )
+    if (res.isErr()) void ephemeral(context.reply(fmt(({ n }) => n`Cannot delete the message`)))
   },
 })

@@ -139,14 +139,15 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
     )
 
     void ephemeral(
-      ctx,
-      res.isOk()
-        ? fmt(({ b }) => [
-            b`${fmtUser(ctx.from)}`,
-            "The link you shared is not allowed.",
-            "Please refrain from sharing links that could be considered spam",
-          ])
-        : res.error.fmtError
+      ctx.reply(
+        res.isOk()
+          ? fmt(({ b }) => [
+              b`${fmtUser(ctx.from)}`,
+              "The link you shared is not allowed.",
+              "Please refrain from sharing links that could be considered spam",
+            ])
+          : res.error.fmtError
+      )
     )
   }
 
@@ -194,14 +195,15 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
       }
 
       void ephemeral(
-        ctx,
-        fmt(
-          ({ i, b, n }) => [
-            i`Message for ${fmtUser(ctx.from)}.`,
-            b`⚠️ Your message was detected as potential spam and has been deleted.`,
-            n`Please avoid sending similar messages to multiple groups/topics in a short period of time. Try again in 5 minutes.`,
-          ],
-          { sep: "\n" }
+        ctx.reply(
+          fmt(
+            ({ i, b, n }) => [
+              i`Message for ${fmtUser(ctx.from)}.`,
+              b`⚠️ Your message was detected as potential spam and has been deleted.`,
+              n`Please avoid sending similar messages to multiple groups/topics in a short period of time. Try again in 5 minutes.`,
+            ],
+            { sep: "\n" }
+          )
         )
       )
     }

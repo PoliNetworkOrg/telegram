@@ -40,10 +40,11 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
         `[ManagedCommands] Command '/${command.trigger}' with scope '${command.scope}' invoked by ${printCtxFrom(context)} in a '${context.chat.type}' chat`
       )
       void ephemeral(
-        context,
-        fmt(
-          ({ n }) =>
-            n`This command must be run in ${command.scope === "private" ? "private chat with the bot" : "groups"}.`
+        context.reply(
+          fmt(
+            ({ n }) =>
+              n`This command must be run in ${command.scope === "private" ? "private chat with the bot" : "groups"}.`
+          )
         )
       )
     },
@@ -54,11 +55,7 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
         `[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
       )
       // Inform the user of restricted access
-
-      void ephemeral(
-        context,
-        fmt(({ n }) => n`You are not allowed to execute this command`)
-      )
+      void ephemeral(context.reply(fmt(({ n }) => n`You are not allowed to execute this command`)))
     },
     conversationBegin: async ({ context, command, conversation }) => {
       const now = await conversation.now()
