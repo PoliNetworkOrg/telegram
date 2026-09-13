@@ -1,3 +1,4 @@
+import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
 import { modules } from "@/modules"
 import type { MaybePromise, PartialMessage } from "./types"
@@ -8,6 +9,8 @@ type TextReturn<M extends Message> = M extends { text: string }
   : M extends { caption: string }
     ? { text: string; type: "CAPTION" }
     : { text: string; type: "TEXT" | "CAPTION" } | { text: null; type: "OTHER" } // cannot infer
+
+type ReplyParams = Parameters<Context["reply"]>
 
 export function getText<M extends Message>(message: M): TextReturn<M> {
   if ("text" in message && message.text) return { text: message.text, type: "TEXT" } as TextReturn<M>
@@ -47,10 +50,27 @@ export function createFakeMessage(chatId: number, messageId: number, from: User,
  * @param timeout Timeout in ms, defaults to 20 seconds
  * @returns a void promise that resolves after the message is deleted (or if the deletion fails)
  */
-export async function ephemeral(message: MaybePromise<PartialMessage>, timeout = 20000): Promise<void> {
+export async function scheduleDelete(message: MaybePromise<PartialMessage>, timeout = 20000): Promise<void> {
   const msg = await Promise.resolve(message).catch(() => null)
   if (!msg) return
   await wait(timeout)
     .then(() => modules.shared.api.deleteMessage(msg.chat.id, msg.message_id))
     .catch(() => {})
+}
+
+export async function ephemeral(ctx: Context, ...args: ReplyParams): Promise<Message | null> {
+  const [msg, other, signal] = args
+
+  if (!ctx.from) return null
+
+  return await ctx.reply(
+    msg,
+    {
+      ...other,
+      ephemeral_message_parameters: {
+        receiver_user_id: ctx.from.id,
+      },
+    },
+    signal
+  )
 }

@@ -19,12 +19,12 @@ export const logReport = async (context: Filter<Context, "message"> | CommandSco
   else if (reportSent === "ERROR")
     msg = fmt(({ b, n }) => [b`⚠️ Report not sent`, n`Please try again in a moment.`], { sep: "\n" })
 
-  const feedback = await context.reply(msg, {
+  await ephemeral(context, msg, {
     disable_notification: false,
-    reply_parameters: { message_id: repliedTo.message_id },
+    reply_parameters: {
+      message_id: repliedTo.message_id,
+    },
   })
-
-  void ephemeral(feedback)
 }
 
 export const report = new CommandsCollection<Role>().createCommand({

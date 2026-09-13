@@ -21,7 +21,7 @@ export const checkUsername: MiddlewareFn<Filter<Context, "message">> = async (ct
       `\n\nYou must set an username in Telegram settings to write in PoliNetwork's groups`,
       `Please set an username and try again in 60 seconds!`,
     ])
-    void ephemeral(ctx.reply(msg), 30_000)
+    void ephemeral(ctx, msg)
   }
   await next()
 }
