@@ -6,6 +6,7 @@ import { logger } from "@/logger"
 import { serialize } from "@/utils/serialize"
 import { throttleAsyncByKey } from "@/utils/throttle"
 import type { ModuleShared } from "@/utils/types"
+import { runWorkerWithRecovery } from "@/utils/worker-recovery"
 import { modules } from ".."
 import { type BanAll, type BanAllState, isBanAllState } from "../tg-logger/ban-all"
 import { Moderation } from "."
@@ -59,6 +60,7 @@ const connection: ConnectionOptions = {
  * when all bans are executed
  */
 export class BanAllQueue extends Module<ModuleShared> {
+  private workerRecovery = new AbortController()
   /**
    * Worker that executes the actual ban/unban commands
    *
@@ -211,14 +213,19 @@ export class BanAllQueue extends Module<ModuleShared> {
 
     this.orchestrateQueue.on("progress", handleProgress)
     this.orchestrator.on("progress", handleProgress)
-    void this.executor.run().catch((error) => logger.error({ error }, "[BanAllQueue] Executor stopped"))
-    void this.orchestrator.run().catch((error) => logger.error({ error }, "[BanAllQueue] Orchestrator stopped"))
+    void runWorkerWithRecovery(this.executor, this.workerRecovery.signal, (error) =>
+      logger.error({ error }, "[BanAllQueue] Executor stopped; restarting after delay")
+    )
+    void runWorkerWithRecovery(this.orchestrator, this.workerRecovery.signal, (error) =>
+      logger.error({ error }, "[BanAllQueue] Orchestrator stopped; restarting after delay")
+    )
   }
 
   /**
    * Gracefully close all the queues and workers
    */
   override async stop() {
+    this.workerRecovery.abort()
     await Promise.all([
       this.executor.close(),
       this.orchestrator.close(),
