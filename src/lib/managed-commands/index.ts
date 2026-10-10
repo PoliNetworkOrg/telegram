@@ -13,6 +13,7 @@ import type { Message } from "grammy/types"
 import type { Result } from "neverthrow"
 import { err, ok } from "neverthrow"
 import z from "zod"
+import type { Decision } from "@/access/decision"
 import { isFromGroupChat, isFromPrivateChat } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
@@ -84,6 +85,13 @@ export type ManagedCommandsHooks<OC extends Context, C extends Context, TRole ex
   commandMiddlewareEnd?: Hook<OC, TRole>
 }
 
+export type Authorize<OC extends Context, TRole extends string = string> = (params: {
+  context: CommandContext<OC>
+  command: AnyCommand<TRole>
+  /** The built-in role and group-admin check, see {@link IManagedCommandsOptions.getUserRoles} */
+  legacy: () => Promise<Decision>
+}) => Promise<Decision>
+
 export interface IManagedCommandsOptions<TRole extends string, OC extends Context, C extends Context> {
   /**
    * The storage adapter to use for persisting conversations.
@@ -115,6 +123,12 @@ export interface IManagedCommandsOptions<TRole extends string, OC extends Contex
    * ```
    */
   getUserRoles: (userId: number, context: CommandContext<OC>) => Promise<TRole[]>
+
+  /**
+   * Decides whether the user may run a command that declares `permissions`. Defaults to the built-in
+   * role and group-admin check, which it receives as `legacy`.
+   */
+  authorize?: Authorize<OC, TRole>
 
   /**
    * Additional plugins to apply to the conversation inner composer.
@@ -163,6 +177,7 @@ export class ManagedCommands<
   private composer = new Composer<OC>()
   private commands: Record<string, AnyCommand<TRole>[]> = {}
   private getUserRoles: (userId: number, context: CommandContext<OC>) => Promise<TRole[]>
+  private authorize: Authorize<OC, TRole>
   private hooks: ManagedCommandsHooks<OC, C, TRole>
   private adapter: ConversationStorage<OC, ConversationData>
   private registeredTriggers = new Set<string>()
@@ -346,6 +361,7 @@ export class ManagedCommands<
    */
   constructor(options?: ManagedCommandsOptions<TRole, OC, C>) {
     this.getUserRoles = options?.getUserRoles ?? (async () => [])
+    this.authorize = options?.authorize ?? (({ legacy }) => legacy())
     this.hooks = options?.hooks ?? {}
     this.adapter = options?.adapter ?? new MemorySessionStorage()
 
@@ -407,36 +423,47 @@ export class ManagedCommands<
     return cmds
   }
 
-  private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<OC>): Promise<boolean> {
-    if (!command.permissions) return true
-    if (!ctx.from) return false
+  /** Group allow/deny lists: where a command may run, whoever runs it. */
+  private static isAllowedInChat(command: AnyCommand, ctx: CommandContext<Context>): boolean {
+    if (!command.permissions || !isAllowedInGroups(command)) return true
+    if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") return true
+    const { allowedGroupsId, excludedGroupsId } = command.permissions
+    if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
+    if (excludedGroupsId?.includes(ctx.chatId)) return false
+    return true
+  }
+
+  /**
+   * The legacy role check. A pass through the group-admin shortcut is reported as
+   * `telegram_chat_admin`, a pass through a listed role as `idp_permission` (the permission path).
+   */
+  private async checkRoles(command: AnyCommand<TRole>, ctx: CommandContext<OC>): Promise<Decision> {
+    if (!command.permissions) return { allowed: true, basis: null }
+    if (!ctx.from) return { allowed: false, basis: null }
 
     const { allowedRoles, excludedRoles } = command.permissions
 
     if (isAllowedInGroups(command) && (ctx.chat.type === "group" || ctx.chat.type === "supergroup")) {
-      const { allowGroupAdmins, allowedGroupsId, excludedGroupsId } = command.permissions
-
-      if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
-      if (excludedGroupsId?.includes(ctx.chatId)) return false
-
-      if (allowGroupAdmins) {
+      if (command.permissions.allowGroupAdmins) {
         if (this.hooks.overrideGroupAdminCheck) {
           const isAdmin = await this.hooks.overrideGroupAdminCheck(ctx.from.id, ctx.chatId, ctx)
-          if (isAdmin) return true
+          if (isAdmin) return { allowed: true, basis: "telegram_chat_admin" }
         } else {
           const { status: groupRole } = await ctx.getChatMember(ctx.from.id)
-          if (groupRole === "administrator" || groupRole === "creator") return true
+          if (groupRole === "administrator" || groupRole === "creator")
+            return { allowed: true, basis: "telegram_chat_admin" }
         }
       }
     }
 
+    if (!allowedRoles && !excludedRoles) return { allowed: true, basis: null }
     const roles = await this.getUserRoles(ctx.from.id, ctx)
 
     // blacklist is stronger than whitelist
-    if (allowedRoles?.every((r) => !roles.includes(r))) return false
-    if (excludedRoles?.some((r) => roles.includes(r))) return false
+    if (allowedRoles?.every((r) => !roles.includes(r))) return { allowed: false, basis: null }
+    if (excludedRoles?.some((r) => roles.includes(r))) return { allowed: false, basis: null }
 
-    return true
+    return { allowed: true, basis: allowedRoles ? "idp_permission" : null }
   }
 
   /**
@@ -472,7 +499,8 @@ export class ManagedCommands<
           conv: CommandConversation<S>,
           ctx: CommandScopedContext<S>,
           args: ArgumentMap<A>,
-          repliedTo: RepliedTo<R>
+          repliedTo: RepliedTo<R>,
+          authorization: Decision
         ) => {
           const hookParams: Parameters<InternalHook<C, TRole>>[0] = {
             context: ctx as CommandContext<C>,
@@ -490,6 +518,7 @@ export class ManagedCommands<
               conversation: conv,
               args: args as ArgumentMap<A>,
               repliedTo,
+              authorization,
             })
             .catch(async (error) => {
               // errors should be handled by the hook, if not rethrow them to avoid silent failures
@@ -513,9 +542,12 @@ export class ManagedCommands<
       }
 
       // delete the command call if the user is not allowed to use it
+      let authorization: Decision = { allowed: true, basis: null }
       if (cmd.permissions) {
-        const allowed = await this.checkPermissions(cmd, ctx)
-        if (!allowed) {
+        authorization = ManagedCommands.isAllowedInChat(cmd, ctx)
+          ? await this.authorize({ context: ctx, command: cmd, legacy: () => this.checkRoles(cmd, ctx) })
+          : { allowed: false, basis: null }
+        if (!authorization.allowed) {
           if (this.hooks.missingPermissions) await this.hooks.missingPermissions({ context: ctx, command: cmd })
           return
         }
@@ -557,7 +589,7 @@ export class ManagedCommands<
       const { args, repliedTo } = requirements.value
 
       // enter the conversation that handles the command execution
-      await ctx.conversation.enter(id, args, repliedTo)
+      await ctx.conversation.enter(id, args, repliedTo, authorization)
       if (this.hooks.commandMiddlewareEnd) await this.hooks.commandMiddlewareEnd({ context: ctx, command: cmd })
     })
     return this

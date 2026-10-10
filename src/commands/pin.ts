@@ -1,3 +1,4 @@
+import { PERMISSION } from "@/access/catalog"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
@@ -10,6 +11,8 @@ export const pin = new CommandsCollection<Role>()
     scope: "group",
     reply: "required",
     permissions: {
+      requiredPermissions: [PERMISSION.messagesPin],
+      allowTelegramChatAdmins: true,
       allowGroupAdmins: true,
       allowedRoles: ["direttivo", "owner"],
     },
@@ -46,6 +49,8 @@ export const pin = new CommandsCollection<Role>()
     scope: "group",
     reply: "required",
     permissions: {
+      requiredPermissions: [PERMISSION.messagesPin],
+      allowTelegramChatAdmins: true,
       allowGroupAdmins: true,
       allowedRoles: ["direttivo", "owner"],
     },

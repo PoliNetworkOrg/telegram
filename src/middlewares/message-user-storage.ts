@@ -1,14 +1,14 @@
 import { Cron } from "croner"
 import type { Context } from "grammy"
 import type { User } from "grammy/types"
-import { type ApiInput, api } from "@/backend"
+import { type ApiInput, serviceBackend } from "@/backend"
 import { logger } from "@/logger"
 import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { padChatId } from "@/utils/chat"
 import { serialize } from "@/utils/serialize"
 import { toGrammyUser } from "@/utils/types"
 
-export type Message = Parameters<typeof api.tg.messages.add.mutate>[0]["messages"][0]
+export type Message = Parameters<typeof serviceBackend.tg.messages.add.mutate>[0]["messages"][0]
 type DBUsers = ApiInput["tg"]["users"]["add"]["users"]
 
 type TC = TelemetryContextFlavor<Context>
@@ -75,7 +75,7 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
     const memoryMsg = this.memoryStorage.find(isRequestedMessage) ?? this.inFlightMessages.find(isRequestedMessage)
     if (memoryMsg) return memoryMsg
 
-    const { error, message: dbMsg } = await api.tg.messages.get.query({ chatId: paddedChatId, messageId })
+    const { error, message: dbMsg } = await serviceBackend.tg.messages.get.query({ chatId: paddedChatId, messageId })
     if (!error) return dbMsg
 
     if (error === "DECRYPT_ERROR") {
@@ -104,7 +104,7 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
     this.inFlightMessages = messages
 
     try {
-      const { error } = await api.tg.messages.add.mutate({ messages })
+      const { error } = await serviceBackend.tg.messages.add.mutate({ messages })
       if (error) throw new Error(`Backend returned ${error}`)
 
       logger.debug(`memoryStorage: ${messages.length} messages written to the database`)
@@ -122,7 +122,7 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
     if (fromMemory) return fromMemory
 
     try {
-      const fromBackend = await api.tg.users.get.query({ userId })
+      const fromBackend = await serviceBackend.tg.users.get.query({ userId })
       if (fromBackend.user) return toGrammyUser(fromBackend.user)
 
       if (fromBackend.error !== "NOT_FOUND")
@@ -151,7 +151,7 @@ export class MessageUserStorage<C extends TC> extends TrackedMiddleware<C> {
     this.userStorage.clear()
 
     try {
-      const { error } = await api.tg.users.add.mutate({ users })
+      const { error } = await serviceBackend.tg.users.add.mutate({ users })
       if (error) throw new Error(`Backend returned ${error}`)
 
       logger.debug(`userStorage: ${users.length} users upserted in the database`)

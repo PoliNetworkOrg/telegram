@@ -1,4 +1,4 @@
-import { api } from "@/backend"
+import { serviceBackend } from "@/backend"
 import { BANNED_DOMAINS, POLINETWORK_DISCORD_GUILD_ID } from "./constants"
 
 /**
@@ -38,7 +38,7 @@ export async function checkForAllowedLinks(links: string[]): Promise<boolean> {
       const code = match[1]
       // canonicalize the link to avoid issues with different formats (e.g t.me/joinchat/xxxx vs t.me/+xxxx)
       const inviteLink = `https://t.me/+${code}`
-      const isOurs = await api.tg.groups.getByInviteLink
+      const isOurs = await serviceBackend.tg.groups.getByInviteLink
         .query({ inviteLink })
         .then((group) => group !== null)
         .catch(() => true) // fail open: if the check fails, we assume the link is fine

@@ -1,3 +1,4 @@
+import { PERMISSION } from "@/access/catalog"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
@@ -9,6 +10,8 @@ export const del = new CommandsCollection<Role>("Deletion").createCommand({
   trigger: "del",
   scope: "group",
   permissions: {
+    requiredPermissions: [PERMISSION.messagesDelete],
+    allowTelegramChatAdmins: true,
     allowedRoles: ["admin", "owner", "direttivo"],
     allowGroupAdmins: true,
   },

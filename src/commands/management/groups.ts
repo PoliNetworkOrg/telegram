@@ -1,4 +1,5 @@
 import z from "zod"
+import { PERMISSION } from "@/access/catalog"
 import { GroupManagement } from "@/lib/group-management"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
@@ -18,6 +19,7 @@ export const groups = new CommandsCollection<Role>("Groups")
       },
     ],
     permissions: {
+      requiredPermissions: [PERMISSION.groupsManage],
       allowedRoles: ["owner", "direttivo"],
     },
     handler: async ({ context, args }) => {
@@ -69,6 +71,7 @@ export const groups = new CommandsCollection<Role>("Groups")
       },
     ],
     permissions: {
+      requiredPermissions: [PERMISSION.groupsManage],
       allowedRoles: ["owner", "direttivo"],
     },
     handler: async ({ context }) => {

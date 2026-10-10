@@ -3,7 +3,7 @@ import type { Message } from "grammy/types"
 import ssdeep from "ssdeep.js"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
-import { Moderation } from "@/modules/moderation"
+import { automaticModerator, Moderation } from "@/modules/moderation"
 import { measureForkDuration, type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { redis } from "@/redis"
 // import { defer } from "@/utils/deferred-middleware"
@@ -132,7 +132,7 @@ export class AutoModerationStack<C extends TelemetryContextFlavor<Context>> exte
     const res = await Moderation.mute(
       ctx.from,
       ctx.chat,
-      ctx.me,
+      automaticModerator(ctx.me),
       duration.zod.parse("1m"), // 1 minute
       [message],
       "Shared link not allowed"

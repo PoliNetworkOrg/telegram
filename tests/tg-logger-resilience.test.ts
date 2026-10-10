@@ -45,6 +45,7 @@ describe("TgLogger flood protection", () => {
     const action = {
       action: "BAN" as const,
       from: { id: 7, is_bot: true, first_name: "Bot" },
+      basis: "automatic" as const,
       target: { id: 42, is_bot: false, first_name: "Target" },
       chat: { id: -1001, type: "supergroup" as const, title: "Test group" },
     }

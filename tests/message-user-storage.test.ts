@@ -15,7 +15,7 @@ vi.mock("@/modules/telemetry", () => ({
   },
 }))
 vi.mock("@/backend", () => ({
-  api: {
+  serviceBackend: {
     tg: {
       messages: {
         add: { mutate: backend.addMessages },

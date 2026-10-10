@@ -1,3 +1,4 @@
+import { PERMISSION } from "@/access/catalog"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
@@ -9,6 +10,8 @@ export const userid = new CommandsCollection<Role>("User IDs").createCommand({
   scope: "private",
   description: "Gets the ID of a username",
   args: [{ key: "username", description: "The username to get the ID of" }],
+  // Open to everyone before the IdP migration; RFC v3 §10.2 restricts it.
+  permissions: { requiredPermissions: [PERMISSION.usersRead] },
   handler: async ({ context, args }) => {
     const username = args.username.replace("@", "")
     const id = await getTelegramId(username)

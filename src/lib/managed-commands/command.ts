@@ -2,6 +2,8 @@ import type { Conversation } from "@grammyjs/conversations"
 import type { Context } from "grammy"
 import type { Message } from "grammy/types"
 import type { z } from "zod"
+import type { Permission } from "@/access/catalog"
+import type { Decision } from "@/access/decision"
 import type { MaybeArray } from "@/utils/types"
 import type { ConversationContext } from "./context"
 
@@ -44,14 +46,21 @@ export type CommandReplyTo = "required" | "optional" | undefined
 export type CommandScope = "private" | "group" | "both"
 
 interface PrivatePermissions<TRole extends string> {
-  /** The roles that are allowed to use the command */
+  /** The IdP permissions the user must all hold (RFC v3 §10.2) */
+  requiredPermissions?: readonly Permission[]
+  /** Legacy role check: the roles that are allowed to use the command. Removed with the switch to IdP decisions. */
   allowedRoles?: TRole[]
-  /** The roles that are excluded from using the command */
+  /** Legacy role check: the roles that are excluded from using the command. Removed with the switch to IdP decisions. */
   excludedRoles?: TRole[]
 }
 interface GroupPermissions<TRole extends string> extends PrivatePermissions<TRole> {
   /**
-   * Whether to allow group admins to use the command, without considering their external role
+   * Whether native admins of the chat (Telegram status "administrator" or "creator") may use the
+   * command without the required permissions (RFC v3 §4 decision 2)
+   */
+  allowTelegramChatAdmins?: boolean
+  /**
+   * Legacy role check: whether to allow group admins to use the command, without considering their external role
    *
    * You can use hooks to override what is considered a group admin, by default it considers users with
    * Telegram Chat Role of "administrator" or "creator" as group admins
@@ -154,6 +163,10 @@ export interface Command<
      * This will be undefined if the command does not accept a reply.
      */
     repliedTo: RepliedTo<R>
+    /**
+     * Why the user was allowed to run the command; its `basis` is what moderation actions record in the audit log.
+     */
+    authorization: Decision
   }) => Promise<void>
 }
 

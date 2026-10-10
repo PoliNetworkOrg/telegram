@@ -1,5 +1,6 @@
+import { createHash, randomUUID } from "node:crypto"
 import { type ConnectionOptions, FlowProducer, type Job, Queue, Worker } from "bullmq"
-import { api } from "@/backend"
+import { serviceBackend, serviceTokens } from "@/backend"
 import { env } from "@/env"
 import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
@@ -7,6 +8,7 @@ import { serialize } from "@/utils/serialize"
 import { throttleAsyncByKey } from "@/utils/throttle"
 import type { ModuleShared } from "@/utils/types"
 import { modules } from ".."
+import type { AuditBasis } from "../audit"
 import { type BanAll, type BanAllState, isBanAllState } from "../tg-logger/ban-all"
 import { Moderation } from "."
 import { executeBanAllJob } from "./ban-all-executor"
@@ -82,6 +84,8 @@ export class BanAllQueue extends Module<ModuleShared> {
   private orchestrator: WorkerFor<BanAllJob> = new Worker(
     CONFIG.ORCHESTRATOR_QUEUE,
     async (job) => {
+      // Recover the enqueue audit after a crash; the key makes repeated recovery harmless.
+      await this.auditFlow(job.data)
       const state = await this.getProgress(job)
       await job.updateProgress(state)
       logger.info(
@@ -109,42 +113,61 @@ export class BanAllQueue extends Module<ModuleShared> {
     this.flowProducer.on("error", (error) => logger.error({ error }, "[BanAllQueue] Flow producer error"))
   }
 
-  private enqueueBanAll = serialize(async (banAll: BanAll, messageId: number, idempotencyKey?: string) => {
-    if (idempotencyKey) {
-      const existing = await this.orchestrateQueue.getJob(banAllFlowId(banAll.type, idempotencyKey))
-      if (existing) return { alreadyExisted: true, messageId: existing.data.messageId }
+  private enqueueBanAll = serialize(
+    async (banAll: BanAll, messageId: number, basis: AuditBasis, idempotencyKey?: string) => {
+      if (idempotencyKey) {
+        const existing = await this.orchestrateQueue.getJob(banAllFlowId(banAll.type, idempotencyKey))
+        if (existing) {
+          await this.auditFlow(existing.data)
+          return { alreadyExisted: true, messageId: existing.data.messageId }
+        }
+      }
+
+      const allGroups = await serviceBackend.tg.groups.getAll.query()
+      const chats = allGroups.filter((g) => !g.hide).map((g) => g.telegramId)
+      const outstandingJobs = await this.execQueue.getJobCountByTypes(
+        "active",
+        "waiting",
+        "paused",
+        "delayed",
+        "prioritized"
+      )
+      assertBanAllQueueCapacity(outstandingJobs, chats.length)
+
+      const audit = {
+        basis,
+        idempotencyKey: idempotencyKey
+          ? `tg-bot:ban-all:${createHash("sha256").update(banAllFlowId(banAll.type, idempotencyKey)).digest("hex")}`
+          : `tg-bot:ban-all:${randomUUID()}`,
+      }
+      // The anonymous legacy endpoint has no idempotency support, so it must never replay.
+      const flow = createBanAllFlow(banAll, messageId, chats, idempotencyKey, serviceTokens ? audit : undefined)
+      // Store the recovery data atomically with the flow. Do not audit an insertion that failed.
+      await this.flowProducer.add(flow)
+      await this.auditFlow({ ...flow.data, audit })
+      return { alreadyExisted: false, messageId }
     }
+  )
 
-    const allGroups = await api.tg.groups.getAll.query()
-    const chats = allGroups.filter((g) => !g.hide).map((g) => g.telegramId)
-    const outstandingJobs = await this.execQueue.getJobCountByTypes(
-      "active",
-      "waiting",
-      "paused",
-      "delayed",
-      "prioritized"
-    )
-    assertBanAllQueueCapacity(outstandingJobs, chats.length)
+  public async initiateBanAll(banAll: BanAll, messageId: number, basis: AuditBasis, idempotencyKey?: string) {
+    return await this.enqueueBanAll(banAll, messageId, basis, idempotencyKey)
+  }
 
-    await api.tg.auditLog.create
-      .mutate({
-        adminId: banAll.reporter.id,
-        targetId: typeof banAll.target === "number" ? banAll.target : banAll.target.id,
+  private async auditFlow(data: BanAllFlow["data"]): Promise<void> {
+    if (!data.audit) return // Jobs from the preceding bot release already wrote their audit.
+    const { banAll, audit } = data
+    await modules.get("audit").record(
+      {
         type: banAll.type === "BAN" ? "ban_all" : "unban_all",
-        reason: banAll.reason,
+        targetId: typeof banAll.target === "number" ? banAll.target : banAll.target.id,
         groupId: null,
         until: null,
-      })
-      .catch(() => {
-        logger.warn("[BanAllQueue] Failed to create audit log for ban all command")
-      })
-
-    await this.flowProducer.add(createBanAllFlow(banAll, messageId, chats, idempotencyKey))
-    return { alreadyExisted: false, messageId }
-  })
-
-  public async initiateBanAll(banAll: BanAll, messageId: number, idempotencyKey?: string) {
-    return await this.enqueueBanAll(banAll, messageId, idempotencyKey)
+        reason: banAll.reason,
+        basis: audit.basis,
+        actorId: banAll.reporter.id,
+      },
+      audit.idempotencyKey
+    )
   }
 
   private async getProgress(job: BanAllJob): Promise<BanAllState> {

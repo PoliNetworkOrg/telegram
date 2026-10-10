@@ -1,6 +1,7 @@
+import { PERMISSION } from "@/access/catalog"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
-import { Moderation } from "@/modules/moderation"
+import { Moderation, moderatorFor } from "@/modules/moderation"
 import { ephemeral } from "@/utils/messages"
 import type { Role } from "@/utils/types"
 
@@ -11,17 +12,25 @@ export const kick = new CommandsCollection<Role>("Kicking").createCommand({
   scope: "group",
   reply: "required",
   permissions: {
+    requiredPermissions: [PERMISSION.moderate],
+    allowTelegramChatAdmins: true,
     allowedRoles: ["owner", "direttivo"],
     excludedRoles: ["creator"],
     allowGroupAdmins: true,
   },
-  handler: async ({ args, context, repliedTo }) => {
+  handler: async ({ args, context, repliedTo, authorization }) => {
     if (!repliedTo.from) {
       logger.error("kick: no repliedTo.from field (the msg was sent in a channel)")
       return
     }
 
-    const res = await Moderation.kick(repliedTo.from, context.chat, context.from, [repliedTo], args.reason)
+    const res = await Moderation.kick(
+      repliedTo.from,
+      context.chat,
+      moderatorFor(context.from, authorization),
+      [repliedTo],
+      args.reason
+    )
     if (res.isErr()) void ephemeral(context, res.error.fmtError)
   },
 })

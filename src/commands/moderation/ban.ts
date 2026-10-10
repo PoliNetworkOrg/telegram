@@ -1,6 +1,7 @@
+import { PERMISSION } from "@/access/catalog"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
-import { Moderation } from "@/modules/moderation"
+import { Moderation, moderatorFor } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
@@ -25,11 +26,13 @@ export const ban = new CommandsCollection<Role>("Banning")
     scope: "group",
     reply: "optional",
     permissions: {
+      requiredPermissions: [PERMISSION.moderate],
+      allowTelegramChatAdmins: true,
       allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
-    handler: async ({ args, context, repliedTo }) => {
+    handler: async ({ args, context, repliedTo, authorization }) => {
       const userOverload = await getOverloadUser(context, repliedTo, args.reasonOrUser, args.reason)
       if (userOverload.isErr()) {
         const text = repliedTo ? "There was an error" : "Target user not found, please try replying to their message"
@@ -44,7 +47,7 @@ export const ban = new CommandsCollection<Role>("Banning")
       const res = await Moderation.ban(
         user,
         context.chat,
-        context.from,
+        moderatorFor(context.from, authorization),
         null,
         repliedTo ? [repliedTo] : undefined,
         reason
@@ -68,11 +71,13 @@ export const ban = new CommandsCollection<Role>("Banning")
     scope: "group",
     reply: "required",
     permissions: {
+      requiredPermissions: [PERMISSION.moderate],
+      allowTelegramChatAdmins: true,
       allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
-    handler: async ({ args, context, repliedTo }) => {
+    handler: async ({ args, context, repliedTo, authorization }) => {
       if (!repliedTo.from) {
         logger.error("ban: no repliedTo.from field (the msg was sent in a channel)")
         return
@@ -81,7 +86,7 @@ export const ban = new CommandsCollection<Role>("Banning")
       const res = await Moderation.ban(
         repliedTo.from,
         context.chat,
-        context.from,
+        moderatorFor(context.from, authorization),
         args.duration,
         [repliedTo],
         args.reason
@@ -95,11 +100,13 @@ export const ban = new CommandsCollection<Role>("Banning")
     description: "Unban a user from a group",
     scope: "group",
     permissions: {
+      requiredPermissions: [PERMISSION.moderate],
+      allowTelegramChatAdmins: true,
       allowedRoles: ["owner", "direttivo"],
       excludedRoles: ["creator"],
       allowGroupAdmins: true,
     },
-    handler: async ({ args, context }) => {
+    handler: async ({ args, context, authorization }) => {
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 
@@ -120,7 +127,7 @@ export const ban = new CommandsCollection<Role>("Banning")
         )
       }
 
-      const res = await Moderation.unban(user, context.chat, context.from)
+      const res = await Moderation.unban(user, context.chat, moderatorFor(context.from, authorization))
       if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })

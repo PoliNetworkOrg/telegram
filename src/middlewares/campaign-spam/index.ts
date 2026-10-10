@@ -1,9 +1,10 @@
 import type { Filter } from "grammy"
 import type { ChatPermissions, Message } from "grammy/types"
-import { api } from "@/backend"
+import { decideAccess, hasPermission, legacyRoles, PERMISSION, resolveOne } from "@/access"
+import { serviceBackend } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
-import { Moderation } from "@/modules/moderation"
+import { automaticModerator, Moderation } from "@/modules/moderation"
 import { measureForkDuration, type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
 import { RestrictPermissions } from "@/utils/chat"
 import { duration } from "@/utils/duration"
@@ -123,14 +124,27 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     return trust.status === "trusted"
   }
 
-  /** Returns null when join exemption checks fail so the caller can approve safely. */
+  /**
+   * Exempts `tg:immune` users and active grants (RFC v3 §10.2). Returns null when the check fails so
+   * the caller can approve safely.
+   */
   private async isJoinExempt(userId: number): Promise<boolean | null> {
     try {
-      const [{ roles }, grant] = await Promise.all([
-        api.tg.permissions.getRoles.query({ userId }),
-        api.tg.grants.checkUser.query({ userId }),
-      ])
-      return Boolean(roles?.some((role) => NETWORK_PRIVILEGED_ROLES.has(role))) || grant.isGranted
+      return await decideAccess({
+        check: "campaign_join_exemption",
+        ids: { targetId: userId },
+        legacy: async () => {
+          const [roles, grant] = await Promise.all([
+            legacyRoles(userId),
+            serviceBackend.tg.grants.checkUser.query({ userId }),
+          ])
+          return roles.some((role) => NETWORK_PRIVILEGED_ROLES.has(role)) || grant.isGranted
+        },
+        idp: async () => {
+          const entry = await resolveOne(serviceBackend, userId)
+          return hasPermission(entry, PERMISSION.immune) || entry.grant !== null
+        },
+      })
     } catch (error) {
       reportDependencyError(error, "join exemption check")
       return null
@@ -140,7 +154,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
   /** Checks whether audit history currently places the exact account under BanAll. */
   private async wasBanAllTarget(userId: number): Promise<boolean> {
     try {
-      return hasActiveBanAll(await api.tg.auditLog.getById.query({ targetId: userId }))
+      return hasActiveBanAll(await serviceBackend.tg.auditLog.getById.query({ targetId: userId }))
     } catch (error) {
       reportDependencyError(error, "BanAll audit lookup")
       return false
@@ -314,7 +328,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
           const result = await Moderation.mute(
             ctx.from,
             ctx.chat,
-            ctx.me,
+            automaticModerator(ctx.me),
             duration.zod.parse(campaignSpamConfig.quarantineDuration),
             [ctx.msg],
             reason
@@ -368,7 +382,7 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
     try {
       await this.reputation.runActorOperation(actor, async (mutations) => {
         await mutations.assertOwned()
-        const localBan = await Moderation.ban(ctx.from, ctx.chat, ctx.me, null, [ctx.msg], reason)
+        const localBan = await Moderation.ban(ctx.from, ctx.chat, automaticModerator(ctx.me), null, [ctx.msg], reason)
         if (localBan.isErr()) {
           logger.error(
             { error: localBan.error, actorId: ctx.from.id, chatId: ctx.chatId },
@@ -393,7 +407,9 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
 
         try {
           await Promise.all([mutations.assertOwned(), this.reputation.assertBanAllOperation(ctx.from.id, claim.token)])
-          const result = await modules.get("tgLogger").banAll(ctx.from, ctx.me, "BAN", reason, claim.idempotencyKey)
+          const result = await modules
+            .get("tgLogger")
+            .banAll(ctx.from, automaticModerator(ctx.me), "BAN", "campaign_automatic", reason, claim.idempotencyKey)
           await Promise.all([mutations.assertOwned(), this.reputation.assertBanAllOperation(ctx.from.id, claim.token)])
           if (result.started) {
             logger.info({ actorId: ctx.from.id }, "[CampaignSpam] Network BanAll started")

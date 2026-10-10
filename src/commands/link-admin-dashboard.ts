@@ -1,5 +1,5 @@
 import type { ConversationMenuContext } from "@grammyjs/conversations"
-import { api } from "@/backend"
+import { legacyBackend } from "@/backend"
 import type { ConversationContext } from "@/lib/managed-commands"
 import { CommandsCollection } from "@/lib/managed-commands"
 import type { CommandConversation } from "@/lib/managed-commands/command"
@@ -83,7 +83,7 @@ export const linkAdminDashboard = new CommandsCollection<Role>().createCommand({
       { parse_mode: "MarkdownV2" }
     )
 
-    const res = await api.tg.link.link.query({
+    const res = await legacyBackend.tg.link.link.query({
       code,
       telegramId: context.from.id,
       telegramUsername: context.from.username,
