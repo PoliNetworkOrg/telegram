@@ -1,5 +1,6 @@
 import { InlineKeyboard } from "grammy"
 import { serviceBackend } from "@/backend"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import type { Role } from "@/utils/types"
@@ -9,7 +10,7 @@ const LIMIT = 9
 type Group = Awaited<ReturnType<typeof serviceBackend.tg.groups.search.query>>["groups"][number]
 type LinkedGroup = Group & { link: string }
 
-export const search = new CommandsCollection<Role>().createCommand({
+export const search = new CommandsCollection<Role, CommandAccess>().createCommand({
   trigger: "search",
   scope: "both",
   description: "Search groups by title",

@@ -2,6 +2,7 @@ import type { User } from "grammy/types"
 import z from "zod"
 import { PERMISSION } from "@/access/catalog"
 import { serviceBackend } from "@/backend"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
@@ -10,7 +11,7 @@ import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
 
-export const banAll = new CommandsCollection<Role>("Ban All")
+export const banAll = new CommandsCollection<Role, CommandAccess>("Ban All")
   .createCommand({
     trigger: "ban_all",
     description: "PERMA BAN a user from all the Network's groups",

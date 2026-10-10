@@ -118,9 +118,10 @@ After comparing differences for roughly a week and reconciling roles and Telegra
 `IDP_DECISIONS=enforce` to apply IdP permissions. An unavailable actor check denies actions;
 native chat administrators retain the documented chat-local shortcut. Immunity applies to every
 ban-all entry point at enqueue; jobs already accepted continue without permission rechecks.
-`/getroles` shows only IdP permissions under enforcement. `/addrole`, `/delrole`, `/link` and the
-unregistered test commands remain in this transitional source tree; remove them and the legacy
-role/group-admin checks in the coordinated cleanup before setting `LEGACY_ANONYMOUS=deny`.
+`/getroles` lists the legacy roles until enforcement, then the IdP permissions. `/addrole`,
+`/delrole`, `/link` and the unregistered test commands remain in this transitional source tree;
+remove them and the legacy role/group-admin checks in the coordinated cleanup before setting
+`LEGACY_ANONYMOUS=deny`.
 Switching the mode alone does not remove those legacy commands.
 
 Moderation audit records use `tg.auditLog.record` and a Redis outbox with stable idempotency keys,

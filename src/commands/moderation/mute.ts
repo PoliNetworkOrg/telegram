@@ -1,4 +1,5 @@
 import { PERMISSION } from "@/access/catalog"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation, moderatorFor } from "@/modules/moderation"
@@ -9,7 +10,7 @@ import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
 import { getOverloadUser, getUser } from "@/utils/users"
 
-export const mute = new CommandsCollection<Role>("Muting")
+export const mute = new CommandsCollection<Role, CommandAccess>("Muting")
   .createCommand({
     trigger: "tmute",
     args: [

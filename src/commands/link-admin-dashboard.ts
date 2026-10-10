@@ -1,5 +1,6 @@
 import type { ConversationMenuContext } from "@grammyjs/conversations"
 import { legacyBackend } from "@/backend"
+import type { CommandAccess } from "@/commands/access"
 import type { ConversationContext } from "@/lib/managed-commands"
 import { CommandsCollection } from "@/lib/managed-commands"
 import type { CommandConversation } from "@/lib/managed-commands/command"
@@ -34,7 +35,7 @@ async function cancel(
   await conv.halt()
 }
 
-export const linkAdminDashboard = new CommandsCollection<Role>().createCommand({
+export const linkAdminDashboard = new CommandsCollection<Role, CommandAccess>().createCommand({
   trigger: "link",
   scope: "private",
   description: "Verify the login code for the admin dashboard",

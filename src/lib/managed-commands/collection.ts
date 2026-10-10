@@ -1,8 +1,17 @@
-import type { AnyCommand, Command, CommandArgs, CommandReplyTo, CommandScope } from "./command"
+import type { Context } from "grammy"
+import type {
+  AccessControl,
+  AnyCommand,
+  Command,
+  CommandArgs,
+  CommandReplyTo,
+  CommandScope,
+  DefaultAccessControl,
+} from "./command"
 
-export class CommandsCollection<TRole extends string> {
+export class CommandsCollection<TRole extends string, TAccess extends AccessControl = DefaultAccessControl> {
   private flushed = false
-  private commands: AnyCommand<TRole>[] = []
+  private commands: AnyCommand<TRole, Context, TAccess>[] = []
 
   constructor(public name?: string) {}
 
@@ -12,8 +21,8 @@ export class CommandsCollection<TRole extends string> {
    * @returns `this` instance for chaining
    */
   createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
-    cmd: Command<A, R, S, TRole>
-  ): CommandsCollection<TRole> {
+    cmd: Command<A, R, S, TRole, Context, TAccess>
+  ): CommandsCollection<TRole, TAccess> {
     if (this.flushed) {
       throw new Error("Cannot add commands after the collection has been flushed")
     }
@@ -21,7 +30,7 @@ export class CommandsCollection<TRole extends string> {
     return this
   }
 
-  withCollection(...collections: CommandsCollection<TRole>[]): CommandsCollection<TRole> {
+  withCollection(...collections: CommandsCollection<TRole, TAccess>[]): CommandsCollection<TRole, TAccess> {
     if (this.flushed) {
       throw new Error("Cannot add commands after the collection has been flushed")
     }
@@ -29,7 +38,7 @@ export class CommandsCollection<TRole extends string> {
     return this
   }
 
-  flush(): AnyCommand<TRole>[] {
+  flush(): AnyCommand<TRole, Context, TAccess>[] {
     if (this.flushed) {
       throw new Error("The collection has already been flushed")
     }

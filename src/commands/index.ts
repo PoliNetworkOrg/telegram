@@ -1,18 +1,18 @@
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 import { Point } from "@influxdata/influxdb-client"
-import { authorizeAction, legacyRoles } from "@/access"
-import { backendFor, legacyBackend } from "@/backend"
-import { type CommandScopedContext, isAllowedInGroups, ManagedCommands } from "@/lib/managed-commands"
+import { legacyRoles } from "@/access"
+import { legacyBackend } from "@/backend"
+import { type CommandScopedContext, ManagedCommands } from "@/lib/managed-commands"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import type { TelemetryContextFlavor } from "@/modules/telemetry"
 import { redis } from "@/redis"
-import { isFromGroupChat } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { Context, Role } from "@/utils/types"
 import { printCtxFrom } from "@/utils/users"
+import { authorizeCommand, type CommandAccess } from "./access"
 import { invite } from "./invite"
 import { linkAdminDashboard } from "./link-admin-dashboard"
 import { management } from "./management"
@@ -27,7 +27,9 @@ const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
   logger,
 })
 
-export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavor<CommandScopedContext>>({
+type ConversationContext = TelemetryContextFlavor<CommandScopedContext>
+
+export const commands = new ManagedCommands<Role, Context, ConversationContext, CommandAccess>({
   adapter,
   plugins: [
     (ctx, next) => {
@@ -112,29 +114,7 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
     // TODO: cache this to avoid hitting the db on every command
     return await legacyRoles(userId)
   },
-  authorize: async ({ context, command, legacy }) => {
-    const { permissions } = command
-    // Commands without IdP permissions (/addrole, /delrole) keep the legacy check until they are removed (RFC v3 §10.4).
-    if (!permissions?.requiredPermissions || !context.from) return legacy()
-    const from = context.from
-    const shortcut =
-      isAllowedInGroups(command) && command.permissions?.allowTelegramChatAdmins && isFromGroupChat(context)
-
-    return authorizeAction({
-      check: `command:/${ManagedCommands.commandID(command)}`,
-      actorId: from.id,
-      chatId: context.chat.id,
-      backend: backendFor(from),
-      required: permissions.requiredPermissions,
-      isChatAdmin: shortcut
-        ? async () => {
-            const { status } = await context.getChatMember(from.id)
-            return status === "administrator" || status === "creator"
-          }
-        : undefined,
-      legacy,
-    })
-  },
+  authorize: authorizeCommand,
 })
   .createCommand({
     trigger: "ping",

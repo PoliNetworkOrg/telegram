@@ -2,13 +2,13 @@ import { z } from "zod"
 import { decisionMode, resolveOne } from "@/access"
 import { PERMISSION } from "@/access/catalog"
 import { legacyBackend, serviceBackend } from "@/backend"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
-import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
 
-export const role = new CommandsCollection<Role>("Roles")
+export const role = new CommandsCollection<Role, CommandAccess>("Roles")
   .createCommand({
     trigger: "getroles",
     scope: "private",
@@ -31,34 +31,14 @@ export const role = new CommandsCollection<Role>("Roles")
         return
       }
 
-      const roles =
-        decisionMode === "enforce" ? null : (await legacyBackend.tg.permissions.getRoles.query({ userId })).roles
-      // During the migration both sources are shown, so differences can be spotted and fixed in the IdP.
+      // The source the bot decides with: the IdP once its decisions apply, the legacy roles before that.
       const permissions =
-        decisionMode === "anonymous"
-          ? null
-          : await resolveOne(serviceBackend, userId)
-              .then((entry) => [...entry.permissions].sort())
-              .catch((error: unknown) => {
-                if (decisionMode === "enforce") throw error
-                logger.warn({ error, userId }, "[ACCESS] shadow: cannot show IdP permissions")
-                return null
-              })
+        decisionMode === "enforce"
+          ? [...(await resolveOne(serviceBackend, userId)).permissions].sort()
+          : ((await legacyBackend.tg.permissions.getRoles.query({ userId })).roles ?? [])
       await context.reply(
-        fmt(
-          ({ b, n }) => [
-            decisionMode === "enforce"
-              ? undefined
-              : roles?.length
-                ? n`Roles: ${b`${roles.join(" ")}`}`
-                : "This user has no roles",
-            permissions === null
-              ? undefined
-              : permissions.length
-                ? n`IdP permissions: ${b`${permissions.join(" ")}`}`
-                : "This user has no IdP permissions",
-          ],
-          { sep: "\n" }
+        fmt(({ b, n }) =>
+          permissions.length ? n`Permissions: ${b`${permissions.join(" ")}`}` : "This user has no permissions"
         )
       )
     },

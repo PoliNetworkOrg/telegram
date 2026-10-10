@@ -1,11 +1,12 @@
 import { PERMISSION } from "@/access/catalog"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import type { Role } from "@/utils/types"
 
-export const userid = new CommandsCollection<Role>("User IDs").createCommand({
+export const userid = new CommandsCollection<Role, CommandAccess>("User IDs").createCommand({
   trigger: "userid",
   scope: "private",
   description: "Gets the ID of a username",

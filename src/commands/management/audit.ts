@@ -1,12 +1,13 @@
 import { decisionMode } from "@/access"
 import { PERMISSION } from "@/access/catalog"
 import { backendAs, serviceBackend } from "@/backend"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt, fmtDate } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import type { Role } from "@/utils/types"
 
-export const audit = new CommandsCollection<Role>("Auditing").createCommand({
+export const audit = new CommandsCollection<Role, CommandAccess>("Auditing").createCommand({
   trigger: "audit",
   scope: "private",
   description: "Get the audit log of a user",
