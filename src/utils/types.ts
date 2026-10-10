@@ -1,7 +1,7 @@
 import type { Api, Context as TContext } from "grammy"
 import type { User, UserFromGetMe } from "grammy/types"
 import z from "zod"
-import type { ApiInput, ApiOutput } from "@/backend"
+import type { ApiInput, ApiOutput, Backend } from "@/backend"
 import type { ManagedCommandsFlavor } from "@/lib/managed-commands"
 import type { TelemetryContextFlavor } from "@/modules/telemetry"
 
@@ -18,7 +18,10 @@ export type ContextWith<P extends OptionalPropertyOf<TContext>> = Exclude<TConte
 export type MaybePromise<T> = T | Promise<T>
 export type MaybeArray<T> = T | T[]
 
-export type Context = TelemetryContextFlavor<ManagedCommandsFlavor<TContext>>
+/** `ctx.backend`: the backend client for the update, acting for its sender when there is one (RFC v3 §10.1). */
+export type BackendFlavor = { backend: Backend }
+
+export type Context = TelemetryContextFlavor<ManagedCommandsFlavor<TContext>> & BackendFlavor
 export type Role = ApiInput["tg"]["permissions"]["addRole"]["role"]
 
 export type ModuleShared = {

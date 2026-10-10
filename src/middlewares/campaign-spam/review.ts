@@ -1,8 +1,9 @@
-import { api } from "@/backend"
-import { MenuGenerator } from "@/lib/menu"
+import { authorizeAction, DENIED, type Decision, legacyRoles, PERMISSION } from "@/access"
+import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
-import { Moderation } from "@/modules/moderation"
+import { Moderation, moderatorFor } from "@/modules/moderation"
+import type { Moderator } from "@/modules/moderation/types"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
 import type { Context } from "@/utils/types"
 import { hasCampaignReviewRole } from "./authorization"
@@ -18,20 +19,39 @@ import { campaignSpamReputation } from "./service"
 
 export type { CampaignSpamReview, CampaignSpamReviewDraft } from "./review-payload"
 
-type ReviewAccess = { review: CampaignSpamReview } | { feedback: string }
+type ReviewAccess = { review: CampaignSpamReview; moderator: Moderator } | { feedback: string }
 
-/** Authorizes a reviewer before validating and opening sensitive callback state. */
-async function authorizeAndOpenReview(userId: number, payload: string): Promise<ReviewAccess> {
+/**
+ * Authorizes a reviewer (`tg:moderate:global`, RFC v3 §10.2) before validating and opening
+ * sensitive callback state.
+ */
+async function authorizeAndOpenReview(
+  ctx: CallbackCtx<Context>,
+  payload: string,
+  button: "confirm" | "release"
+): Promise<ReviewAccess> {
+  const userId = ctx.from.id
+  let decision: Decision
   try {
-    const { roles } = await api.tg.permissions.getRoles.query({ userId })
-    if (!hasCampaignReviewRole(roles)) return { feedback: "You are not authorized for this action" }
+    decision = await authorizeAction({
+      check: `campaign_review:${button}`,
+      actorId: userId,
+      backend: ctx.backend,
+      required: [PERMISSION.moderateGlobal],
+      legacy: async () =>
+        hasCampaignReviewRole(await legacyRoles(userId)) ? { allowed: true, basis: "idp_permission" } : DENIED,
+    })
+    if (!decision.allowed) return { feedback: "You are not authorized for this action" }
   } catch (error) {
     logger.error({ error, userId }, "[CampaignSpam] Failed to authorize campaign reviewer")
     return { feedback: "Reviewer authorization is temporarily unavailable" }
   }
 
   try {
-    return { review: openCampaignSpamReview(payload, campaignSpamConfig.fingerprintSecret) }
+    return {
+      review: openCampaignSpamReview(payload, campaignSpamConfig.fingerprintSecret),
+      moderator: moderatorFor(ctx.from, decision),
+    }
   } catch (error) {
     logger.error({ error, userId }, "[CampaignSpam] Failed to open campaign review")
     return { feedback: "This review is invalid or no longer available" }
@@ -65,7 +85,7 @@ const campaignSpamReviewMenu = MenuGenerator.getInstance<Context>().create<strin
       {
         text: "Confirm BanAll",
         cb: async ({ data: payload, ctx }) => {
-          const access = await authorizeAndOpenReview(ctx.from.id, payload)
+          const access = await authorizeAndOpenReview(ctx, payload, "confirm")
           if (!("review" in access)) return access
           const data = access.review
 
@@ -97,7 +117,7 @@ const campaignSpamReviewMenu = MenuGenerator.getInstance<Context>().create<strin
               const localBan = await Moderation.ban(
                 data.target,
                 data.chat,
-                ctx.from,
+                access.moderator,
                 null,
                 undefined,
                 "Campaign spam confirmed by moderator"
@@ -138,7 +158,14 @@ const campaignSpamReviewMenu = MenuGenerator.getInstance<Context>().create<strin
                 ])
                 const result = await modules
                   .get("tgLogger")
-                  .banAll(data.target, ctx.from, "BAN", "Campaign spam confirmed by moderator", claim.idempotencyKey)
+                  .banAll(
+                    data.target,
+                    access.moderator,
+                    "BAN",
+                    "campaign_review",
+                    "Campaign spam confirmed by moderator",
+                    claim.idempotencyKey
+                  )
                 await Promise.all([
                   mutations.assertOwned(),
                   campaignSpamReputation.assertReviewOperation(data.reviewId, reviewToken),
@@ -198,7 +225,7 @@ const campaignSpamReviewMenu = MenuGenerator.getInstance<Context>().create<strin
       {
         text: "Release",
         cb: async ({ data: payload, ctx }) => {
-          const access = await authorizeAndOpenReview(ctx.from.id, payload)
+          const access = await authorizeAndOpenReview(ctx, payload, "release")
           if (!("review" in access)) return access
           const data = access.review
 
@@ -225,7 +252,7 @@ const campaignSpamReviewMenu = MenuGenerator.getInstance<Context>().create<strin
               { chatId: data.chat.id, reviewId: data.reviewId },
               async () => {
                 await campaignSpamReputation.assertReviewOperation(data.reviewId, reviewToken)
-                const unmute = await Moderation.unmute(data.target, data.chat, ctx.from)
+                const unmute = await Moderation.unmute(data.target, data.chat, access.moderator)
                 if (unmute.isErr()) {
                   unmuteError = unmute.error.strError
                   return false

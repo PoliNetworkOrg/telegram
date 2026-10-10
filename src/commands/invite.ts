@@ -1,17 +1,19 @@
-import { api } from "@/backend"
+import { serviceBackend } from "@/backend"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { Role } from "@/utils/types"
 
-export const invite = new CommandsCollection<Role>().createCommand({
+export const invite = new CommandsCollection<Role, CommandAccess>().createCommand({
   trigger: "invite",
   description: "Display the bot's invite link of the group",
   scope: "group",
   handler: async ({ context }) => {
     const chat = await context.getChat()
     const inviteLink =
-      chat.invite_link ?? (await api.tg.groups.getById.query({ telegramId: context.chatId }).catch(() => null))?.link
+      chat.invite_link ??
+      (await serviceBackend.tg.groups.getById.query({ telegramId: context.chatId }).catch(() => null))?.link
 
     if (!inviteLink)
       return void ephemeral(

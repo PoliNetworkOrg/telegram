@@ -1,6 +1,7 @@
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 import { Point } from "@influxdata/influxdb-client"
-import { api } from "@/backend"
+import { legacyRoles } from "@/access"
+import { legacyBackend } from "@/backend"
 import { type CommandScopedContext, ManagedCommands } from "@/lib/managed-commands"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
@@ -11,6 +12,7 @@ import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { Context, Role } from "@/utils/types"
 import { printCtxFrom } from "@/utils/users"
+import { authorizeCommand, type CommandAccess } from "./access"
 import { invite } from "./invite"
 import { linkAdminDashboard } from "./link-admin-dashboard"
 import { management } from "./management"
@@ -25,7 +27,9 @@ const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
   logger,
 })
 
-export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavor<CommandScopedContext>>({
+type ConversationContext = TelemetryContextFlavor<CommandScopedContext>
+
+export const commands = new ManagedCommands<Role, Context, ConversationContext, CommandAccess>({
   adapter,
   plugins: [
     (ctx, next) => {
@@ -94,7 +98,7 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
     overrideGroupAdminCheck: async (userId, groupId, ctx) => {
       const { status: groupRole } = await ctx.getChatMember(userId)
       if (groupRole === "administrator" || groupRole === "creator") return true
-      const isDbAdmin = await api.tg.permissions.checkGroup.query({ userId, groupId })
+      const isDbAdmin = await legacyBackend.tg.permissions.checkGroup.query({ userId, groupId })
       return isDbAdmin
     },
     commandMiddlewareStart: async ({ context, command }) => {
@@ -108,9 +112,9 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
   },
   getUserRoles: async (userId) => {
     // TODO: cache this to avoid hitting the db on every command
-    const { roles } = await api.tg.permissions.getRoles.query({ userId })
-    return roles || []
+    return await legacyRoles(userId)
   },
+  authorize: authorizeCommand,
 })
   .createCommand({
     trigger: "ping",

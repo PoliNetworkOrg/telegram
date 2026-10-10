@@ -1,5 +1,6 @@
 import type { Context, Filter } from "grammy"
 import type { Message } from "grammy/types"
+import type { CommandAccess } from "@/commands/access"
 import type { CommandScopedContext } from "@/lib/managed-commands"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
@@ -27,7 +28,7 @@ export const logReport = async (context: Filter<Context, "message"> | CommandSco
   })
 }
 
-export const report = new CommandsCollection<Role>().createCommand({
+export const report = new CommandsCollection<Role, CommandAccess>().createCommand({
   trigger: ["report", "admin"],
   description: "Report a message to admins",
   scope: "group",

@@ -1,4 +1,5 @@
 import type { FlowJob, JobsOptions } from "bullmq"
+import type { AuditBasis } from "../audit"
 import type { BanAll } from "../tg-logger/ban-all"
 
 export const BAN_ALL_QUEUE_CONFIG = {
@@ -36,6 +37,8 @@ export interface BanAllFlow extends FlowJob {
   data: {
     banAll: BanAll
     messageId: number
+    /** Persisted with the flow so a restart can recover its audit record. Absent on older jobs. */
+    audit?: { basis: AuditBasis; idempotencyKey: string }
   }
   children: BanFlow[]
 }
@@ -104,7 +107,8 @@ export function createBanAllFlow(
   banAll: BanAll,
   messageId: number,
   chats: number[],
-  idempotencyKey?: string
+  idempotencyKey?: string,
+  audit?: BanAllFlow["data"]["audit"]
 ): BanAllFlow {
   const banType = banAll.type === "BAN" ? "ban" : "unban"
   const targetId = typeof banAll.target === "number" ? banAll.target : banAll.target.id
@@ -120,7 +124,7 @@ export function createBanAllFlow(
   return {
     name: `${banType}_all`,
     queueName: BAN_ALL_QUEUE_CONFIG.ORCHESTRATOR_QUEUE,
-    data: { banAll, messageId },
+    data: { banAll, messageId, ...(audit ? { audit } : {}) },
     opts: parentOptions,
     children: chats.map((chatId) => ({
       name: banType,

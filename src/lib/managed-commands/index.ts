@@ -1,5 +1,5 @@
 export { CommandsCollection } from "./collection"
-export type { CommandScopedContext } from "./command"
+export type { AccessControl, CommandScopedContext, DefaultAccessControl, PermissionCheck } from "./command"
 export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
 export * from "./context"
 
@@ -18,6 +18,7 @@ import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { CommandsCollection } from "./collection"
 import type {
+  AccessControl,
   AnyCommand,
   ArgumentMap,
   ArgumentOptions,
@@ -27,45 +28,62 @@ import type {
   CommandReplyTo,
   CommandScope,
   CommandScopedContext,
+  DefaultAccessControl,
+  PermissionCheck,
   RepliedTo,
 } from "./command"
 import { isAllowedInGroups, isTypedArgumentOptions } from "./command"
 import type { ManagedCommandsFlavor } from "./context"
 
-export type Hook<C extends Context, TRole extends string = string, Params = unknown> = (
+export type Hook<
+  C extends Context,
+  TRole extends string = string,
+  Params = unknown,
+  TAccess extends AccessControl = DefaultAccessControl,
+> = (
   params: Params & {
     context: CommandContext<C>
-    command: AnyCommand<TRole>
+    command: AnyCommand<TRole, Context, TAccess>
   }
 ) => Promise<void>
-export type InternalHook<C extends Context, TRole extends string = string, Params = unknown> = (
+export type InternalHook<
+  C extends Context,
+  TRole extends string = string,
+  Params = unknown,
+  TAccess extends AccessControl = DefaultAccessControl,
+> = (
   params: Params & {
     context: CommandContext<C>
-    command: AnyCommand<TRole>
+    command: AnyCommand<TRole, Context, TAccess>
     conversation: CommandConversation
   }
 ) => Promise<void> | void
-export type ManagedCommandsHooks<OC extends Context, C extends Context, TRole extends string = string> = {
+export type ManagedCommandsHooks<
+  OC extends Context,
+  C extends Context,
+  TRole extends string = string,
+  TAccess extends AccessControl = DefaultAccessControl,
+> = {
   /**
    * Called when a command is invoked in the wrong scope (e.g. a private-only command is invoked in a group)
    */
-  wrongScope?: Hook<OC, TRole>
+  wrongScope?: Hook<OC, TRole, unknown, TAccess>
   /**
    * Called when a user without the required permissions invokes a command
    */
-  missingPermissions?: Hook<OC, TRole>
+  missingPermissions?: Hook<OC, TRole, unknown, TAccess>
   /**
    * Called before executing the command handler, can be used to implement custom pre-handler logic, for example logging or analytics
    */
-  conversationBegin?: InternalHook<C, TRole>
+  conversationBegin?: InternalHook<C, TRole, unknown, TAccess>
   /**
    * Called when an error is thrown in the command handler
    */
-  handlerError?: InternalHook<C, TRole, { error: unknown }>
+  handlerError?: InternalHook<C, TRole, { error: unknown }, TAccess>
   /**
    * Called after executing the command handler, can be used to implement custom post-handler logic, for example logging or analytics
    */
-  conversationEnd?: InternalHook<C, TRole>
+  conversationEnd?: InternalHook<C, TRole, unknown, TAccess>
   /**
    * A function to override what counts as a "Group Admin", by default it considers users with Telegram Chat Role of
    * "administrator" or "creator" as group admins, but you can override this to implement your own logic,
@@ -76,15 +94,41 @@ export type ManagedCommandsHooks<OC extends Context, C extends Context, TRole ex
    * Called when a command is invoked, before any processing is done, can be used to implement custom logic that should
    * run before checking permissions or requirements, for example logging or analytics
    */
-  commandMiddlewareStart?: Hook<OC, TRole>
+  commandMiddlewareStart?: Hook<OC, TRole, unknown, TAccess>
   /**
    * Called when a command is invoked, after the conversation has entered and the first update is fully processed
    * (i.e after `await ctx.conversation.enter()` returns)
    */
-  commandMiddlewareEnd?: Hook<OC, TRole>
+  commandMiddlewareEnd?: Hook<OC, TRole, unknown, TAccess>
 }
 
-export interface IManagedCommandsOptions<TRole extends string, OC extends Context, C extends Context> {
+export type Authorize<
+  OC extends Context,
+  TRole extends string = string,
+  TAccess extends AccessControl = DefaultAccessControl,
+> = (params: {
+  context: CommandContext<OC>
+  command: AnyCommand<TRole, Context, TAccess>
+  /** The built-in role and group admin check, see {@link IManagedCommandsOptions.getUserRoles} */
+  check: () => Promise<PermissionCheck>
+}) => Promise<TAccess["authorization"]>
+
+type AuthorizeOptions<OC extends Context, TRole extends string, TAccess extends AccessControl> = {
+  /**
+   * Decides whether the user may run a command, its result is passed to the handler as `authorization`.
+   * Defaults to the built-in role and group admin check, which it receives as `check`.
+   *
+   * Required when {@link AccessControl} is extended, to read the additional `permissions` and build the `authorization`.
+   */
+  authorize: Authorize<OC, TRole, TAccess>
+}
+
+export interface IManagedCommandsOptions<
+  TRole extends string,
+  OC extends Context,
+  C extends Context,
+  TAccess extends AccessControl = DefaultAccessControl,
+> {
   /**
    * The storage adapter to use for persisting conversations.
    * - {@link https://grammy.dev/plugins/conversations#persisting-conversations conversations plugin documentation}
@@ -124,12 +168,20 @@ export interface IManagedCommandsOptions<TRole extends string, OC extends Contex
   /**
    * Hooks to execute on specific events
    */
-  hooks: ManagedCommandsHooks<OC, C, TRole>
+  hooks: ManagedCommandsHooks<OC, C, TRole, TAccess>
 }
 
-export type ManagedCommandsOptions<TRole extends string, OC extends Context, C extends Context> = string extends TRole
-  ? Omit<IManagedCommandsOptions<TRole, OC, C>, "getUserRoles"> & { getUserRoles?: never }
-  : IManagedCommandsOptions<TRole, OC, C>
+export type ManagedCommandsOptions<
+  TRole extends string,
+  OC extends Context,
+  C extends Context,
+  TAccess extends AccessControl = DefaultAccessControl,
+> = (string extends TRole
+  ? Omit<IManagedCommandsOptions<TRole, OC, C, TAccess>, "getUserRoles"> & { getUserRoles?: never }
+  : IManagedCommandsOptions<TRole, OC, C, TAccess>) &
+  (DefaultAccessControl extends TAccess
+    ? Partial<AuthorizeOptions<OC, TRole, TAccess>>
+    : AuthorizeOptions<OC, TRole, TAccess>)
 
 /**
  * A class to manage commands in a grammY bot, with support for argument parsing, permission handling, and hooks for various events.
@@ -152,18 +204,21 @@ export type ManagedCommandsOptions<TRole extends string, OC extends Context, C e
  *
  * @typeParam TRole A string type representing the possible roles for command permissions. This is used in the `permissions` field of the command options and in the `permissionHandler`.
  * @typeParam C The context type for the bot, used in the hooks and permission handler. Defaults to `Context`.
+ * @typeParam TAccess The application-defined access control, see {@link AccessControl}
  * @see Command for the options available when creating a command
  */
 export class ManagedCommands<
   TRole extends string = string,
   OC extends ManagedCommandsFlavor<Context> = ManagedCommandsFlavor<Context>,
   C extends CommandScopedContext = CommandScopedContext,
+  TAccess extends AccessControl = DefaultAccessControl,
 > implements MiddlewareObj<OC>
 {
   private composer = new Composer<OC>()
-  private commands: Record<string, AnyCommand<TRole>[]> = {}
+  private commands: Record<string, AnyCommand<TRole, Context, TAccess>[]> = {}
   private getUserRoles: (userId: number, context: CommandContext<OC>) => Promise<TRole[]>
-  private hooks: ManagedCommandsHooks<OC, C, TRole>
+  private authorize: Authorize<OC, TRole, TAccess>
+  private hooks: ManagedCommandsHooks<OC, C, TRole, TAccess>
   private adapter: ConversationStorage<OC, ConversationData>
   private registeredTriggers = new Set<string>()
 
@@ -173,9 +228,9 @@ export class ManagedCommands<
    * @param cmd The command object to check for requirement
    * @returns A Result containing the parsed `reply_to_message` or an error message
    */
-  private static parseReplyTo<R extends CommandReplyTo>(
+  private static parseReplyTo<R extends CommandReplyTo, TAccess extends AccessControl>(
     msg: Message,
-    cmd: Command<CommandArgs, R, CommandScope>
+    cmd: Command<CommandArgs, R, CommandScope, string, Context, TAccess>
   ): Result<RepliedTo<R>, string> {
     if (cmd.reply === "required" && !msg.reply_to_message) {
       return err("This command requires a reply")
@@ -214,9 +269,9 @@ export class ManagedCommands<
    * @param cmd The command object to check for arguments requirement
    * @returns A Result containing the parsed arguments as an {@link ArgumentMap} or an error message
    */
-  private static parseArgs(
+  private static parseArgs<TAccess extends AccessControl>(
     msgText: string,
-    cmd: Command<CommandArgs, CommandReplyTo, CommandScope>
+    cmd: Command<CommandArgs, CommandReplyTo, CommandScope, string, Context, TAccess>
   ): Result<ArgumentMap, string> {
     const args: ArgumentMap = {}
     if (!cmd.args || cmd.args.length === 0) return ok(args)
@@ -239,9 +294,9 @@ export class ManagedCommands<
    * @param cmd The command opbect to check for arguments and `reply_to_message` requirements
    * @returns A Result containing the parsed arguments and `reply_to_message`, see {@link Command}
    */
-  private static parseCommand<R extends CommandReplyTo>(
+  private static parseCommand<R extends CommandReplyTo, TAccess extends AccessControl>(
     msg: Message,
-    cmd: Command<CommandArgs, R, CommandScope>
+    cmd: Command<CommandArgs, R, CommandScope, string, Context, TAccess>
   ): Result<{ args: ArgumentMap; repliedTo: RepliedTo<R> }, string[]> {
     const text = msg.text ?? msg.caption
     if (!text) return err(["Cannot parse arguments"])
@@ -261,7 +316,7 @@ export class ManagedCommands<
    * @param cmd The command to print usage for
    * @returns A markdown formatted string representing the usage of the command
    */
-  private static formatCommandUsage(cmd: AnyCommand): string {
+  private static formatCommandUsage<TAccess extends AccessControl>(cmd: AnyCommand<string, Context, TAccess>): string {
     const args = cmd.args ?? []
     const scope =
       cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
@@ -279,7 +334,7 @@ export class ManagedCommands<
     ])
   }
 
-  private static formatCommandShort(cmd: AnyCommand): string {
+  private static formatCommandShort<TAccess extends AccessControl>(cmd: AnyCommand<string, Context, TAccess>): string {
     const args = cmd.args ?? []
     return fmt(({ i, n }) => [
       typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | "),
@@ -293,7 +348,7 @@ export class ManagedCommands<
    * @param cmd The command
    * @returns a unique ID for the command based on its trigger(s)
    */
-  public static commandID(cmd: AnyCommand) {
+  public static commandID<TAccess extends AccessControl>(cmd: AnyCommand<string, Context, TAccess>) {
     // only available characters in command triggers are a-z, 0-9 and _
     // https://core.telegram.org/bots/features#commands
     return typeof cmd.trigger === "string" ? cmd.trigger : cmd.trigger.join("-")
@@ -344,8 +399,10 @@ export class ManagedCommands<
    *
    * @param options The options to use for the ManagedCommands instance
    */
-  constructor(options?: ManagedCommandsOptions<TRole, OC, C>) {
+  constructor(options?: ManagedCommandsOptions<TRole, OC, C, TAccess>) {
     this.getUserRoles = options?.getUserRoles ?? (async () => [])
+    // without an `authorize` option, TAccess is the default and its authorization is the PermissionCheck
+    this.authorize = options?.authorize ?? ((({ check }) => check()) as Authorize<OC, TRole, TAccess>)
     this.hooks = options?.hooks ?? {}
     this.adapter = options?.adapter ?? new MemorySessionStorage()
 
@@ -400,43 +457,56 @@ export class ManagedCommands<
   }
 
   public getCommands() {
-    const cmds: AnyCommand<TRole>[] = []
+    const cmds: AnyCommand<TRole, Context, TAccess>[] = []
     for (const collection in this.commands) {
       cmds.push(...this.commands[collection])
     }
     return cmds
   }
 
-  private async checkPermissions(command: AnyCommand<TRole>, ctx: CommandContext<OC>): Promise<boolean> {
-    if (!command.permissions) return true
-    if (!ctx.from) return false
+  /** Group allow/deny lists: where a command may run, whoever runs it. */
+  private static isAllowedInChat<TAccess extends AccessControl>(
+    command: AnyCommand<string, Context, TAccess>,
+    ctx: CommandContext<Context>
+  ): boolean {
+    if (!command.permissions || !isAllowedInGroups(command)) return true
+    if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") return true
+    const { allowedGroupsId, excludedGroupsId } = command.permissions
+    if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
+    if (excludedGroupsId?.includes(ctx.chatId)) return false
+    return true
+  }
+
+  /** The built-in role and group admin check */
+  private async checkPermissions(
+    command: AnyCommand<TRole, Context, TAccess>,
+    ctx: CommandContext<OC>
+  ): Promise<PermissionCheck> {
+    if (!command.permissions) return { allowed: true, via: "unrestricted" }
+    if (!ctx.from) return { allowed: false }
 
     const { allowedRoles, excludedRoles } = command.permissions
 
     if (isAllowedInGroups(command) && (ctx.chat.type === "group" || ctx.chat.type === "supergroup")) {
-      const { allowGroupAdmins, allowedGroupsId, excludedGroupsId } = command.permissions
-
-      if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
-      if (excludedGroupsId?.includes(ctx.chatId)) return false
-
-      if (allowGroupAdmins) {
+      if (command.permissions.allowGroupAdmins) {
         if (this.hooks.overrideGroupAdminCheck) {
           const isAdmin = await this.hooks.overrideGroupAdminCheck(ctx.from.id, ctx.chatId, ctx)
-          if (isAdmin) return true
+          if (isAdmin) return { allowed: true, via: "group_admin" }
         } else {
           const { status: groupRole } = await ctx.getChatMember(ctx.from.id)
-          if (groupRole === "administrator" || groupRole === "creator") return true
+          if (groupRole === "administrator" || groupRole === "creator") return { allowed: true, via: "group_admin" }
         }
       }
     }
 
+    if (!allowedRoles && !excludedRoles) return { allowed: true, via: "unrestricted" }
     const roles = await this.getUserRoles(ctx.from.id, ctx)
 
     // blacklist is stronger than whitelist
-    if (allowedRoles?.every((r) => !roles.includes(r))) return false
-    if (excludedRoles?.some((r) => roles.includes(r))) return false
+    if (allowedRoles?.every((r) => !roles.includes(r))) return { allowed: false }
+    if (excludedRoles?.some((r) => roles.includes(r))) return { allowed: false }
 
-    return true
+    return { allowed: true, via: allowedRoles ? "role" : "unrestricted" }
   }
 
   /**
@@ -445,7 +515,7 @@ export class ManagedCommands<
    * @returns The ManagedCommands instance for chaining
    */
   createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
-    cmd: Command<A, R, S, TRole>,
+    cmd: Command<A, R, S, TRole, Context, TAccess>,
     collection: string = "default"
   ): this {
     const triggers = Array.isArray(cmd.trigger) ? cmd.trigger : [cmd.trigger]
@@ -472,9 +542,10 @@ export class ManagedCommands<
           conv: CommandConversation<S>,
           ctx: CommandScopedContext<S>,
           args: ArgumentMap<A>,
-          repliedTo: RepliedTo<R>
+          repliedTo: RepliedTo<R>,
+          authorization: TAccess["authorization"]
         ) => {
-          const hookParams: Parameters<InternalHook<C, TRole>>[0] = {
+          const hookParams: Parameters<InternalHook<C, TRole, unknown, TAccess>>[0] = {
             context: ctx as CommandContext<C>,
             command: cmd,
             // We cast the conversation type to unknown cause hooks cannot be aware of the scope of the specific command
@@ -490,6 +561,7 @@ export class ManagedCommands<
               conversation: conv,
               args: args as ArgumentMap<A>,
               repliedTo,
+              authorization,
             })
             .catch(async (error) => {
               // errors should be handled by the hook, if not rethrow them to avoid silent failures
@@ -513,12 +585,12 @@ export class ManagedCommands<
       }
 
       // delete the command call if the user is not allowed to use it
-      if (cmd.permissions) {
-        const allowed = await this.checkPermissions(cmd, ctx)
-        if (!allowed) {
-          if (this.hooks.missingPermissions) await this.hooks.missingPermissions({ context: ctx, command: cmd })
-          return
-        }
+      const authorization = ManagedCommands.isAllowedInChat(cmd, ctx)
+        ? await this.authorize({ context: ctx, command: cmd, check: () => this.checkPermissions(cmd, ctx) })
+        : null
+      if (!authorization?.allowed) {
+        if (this.hooks.missingPermissions) await this.hooks.missingPermissions({ context: ctx, command: cmd })
+        return
       }
 
       // check for the requirements in the command invocation
@@ -557,7 +629,7 @@ export class ManagedCommands<
       const { args, repliedTo } = requirements.value
 
       // enter the conversation that handles the command execution
-      await ctx.conversation.enter(id, args, repliedTo)
+      await ctx.conversation.enter(id, args, repliedTo, authorization)
       if (this.hooks.commandMiddlewareEnd) await this.hooks.commandMiddlewareEnd({ context: ctx, command: cmd })
     })
     return this
@@ -584,7 +656,7 @@ export class ManagedCommands<
    * bot.use(commands)
    * ```
    */
-  withCollection(...collections: CommandsCollection<TRole>[]): this {
+  withCollection(...collections: CommandsCollection<TRole, TAccess>[]): this {
     collections.forEach((c) => {
       c.flush().forEach((cmd) => {
         this.createCommand(cmd, c.name)

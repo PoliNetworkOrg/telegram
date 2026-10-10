@@ -5,7 +5,7 @@ import { run, sequentialize } from "@grammyjs/runner"
 import { Point } from "@influxdata/influxdb-client"
 import { Bot, GrammyError, HttpError } from "grammy"
 import type { Update } from "grammy/types"
-import { apiTestQuery } from "./backend"
+import { backendFor, backendHealthCheck } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
 import { MenuGenerator } from "./lib/menu"
@@ -56,8 +56,6 @@ const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
   // "removed_chat_boost",
 ]
 
-await apiTestQuery()
-
 const bot = new Bot<Context>(env.BOT_TOKEN)
 bot.use(hydrate())
 bot.use(hydrateReply)
@@ -74,8 +72,14 @@ bot.init().then(() => {
     botInfo: bot.botInfo,
   }
   sharedDataInit.resolve(sharedData)
+  void backendHealthCheck(bot.botInfo.id)
 })
 
+// One backend client per update, acting for its sender (RFC v3 §10.1). Not to be confused with ctx.api (Telegram).
+bot.use(async (ctx, next) => {
+  ctx.backend = backendFor(ctx.from)
+  await next()
+})
 bot.use(MenuGenerator.getInstance())
 bot.use(commands)
 bot.use(new BotMembershipHandler())
@@ -137,12 +141,10 @@ const runner = run(bot, {
 
 const terminate = once(async (signal: NodeJS.Signals) => {
   logger.warn(`Received ${signal}, shutting down...`)
-  await Promise.allSettled([
-    MessageUserStorage.getInstance().sync(),
-    redis.quit(),
-    runner.isRunning() && runner.stop(),
-    modules.stop(),
-  ])
+  if (runner.isRunning()) await runner.stop()
+  // Keep Redis available until buffered storage and the audit worker have stopped.
+  await Promise.allSettled([MessageUserStorage.getInstance().sync(), modules.stop()])
+  await redis.quit().catch((error: unknown) => logger.warn({ error }, "[REDIS] shutdown failed"))
   logger.info("Bot stopped!")
   process.exit(0)
 })

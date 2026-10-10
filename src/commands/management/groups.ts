@@ -1,10 +1,12 @@
 import z from "zod"
+import { PERMISSION } from "@/access/catalog"
+import type { CommandAccess } from "@/commands/access"
 import { GroupManagement } from "@/lib/group-management"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import type { Role } from "@/utils/types"
 
-export const groups = new CommandsCollection<Role>("Groups")
+export const groups = new CommandsCollection<Role, CommandAccess>("Groups")
   .createCommand({
     trigger: "updategroup",
     scope: "private",
@@ -18,6 +20,7 @@ export const groups = new CommandsCollection<Role>("Groups")
       },
     ],
     permissions: {
+      requiredPermissions: [PERMISSION.groupsManage],
       allowedRoles: ["owner", "direttivo"],
     },
     handler: async ({ context, args }) => {
@@ -69,6 +72,7 @@ export const groups = new CommandsCollection<Role>("Groups")
       },
     ],
     permissions: {
+      requiredPermissions: [PERMISSION.groupsManage],
       allowedRoles: ["owner", "direttivo"],
     },
     handler: async ({ context }) => {

@@ -6,7 +6,8 @@ import type { Result } from "neverthrow"
 
 import { err, ok } from "neverthrow"
 
-import { api } from "@/backend"
+import { decideAccess, hasPermission, PERMISSION, resolveOne } from "@/access"
+import { type Backend, legacyBackend, serviceBackend } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import type { GroupLinkRegenerationFailure } from "@/modules/tg-logger/types"
@@ -19,7 +20,7 @@ const TELEGRAM_FLOOD_RETRIES = 3
 const BACKEND_BATCH_SIZE = 50
 const BACKEND_ATTEMPTS = 3
 
-type StoredGroup = Awaited<ReturnType<typeof api.tg.groups.getAll.query>>[number]
+type StoredGroup = Awaited<ReturnType<typeof serviceBackend.tg.groups.getAll.query>>[number]
 type GroupDB = Parameters<TRPCClient<AppRouter>["tg"]["groups"]["create"]["mutate"]>[0][0]
 
 export type GroupLinkRegenerationResult = {
@@ -168,7 +169,7 @@ async function synchronizeBatch(updates: GroupDB[]): Promise<{
 
   for (let attempt = 1; attempt <= BACKEND_ATTEMPTS; attempt++) {
     try {
-      const updatedIds = new Set(await api.tg.groups.create.mutate(pending))
+      const updatedIds = new Set(await serviceBackend.tg.groups.create.mutate(pending))
       const unconfirmed = pending.filter((group) => !updatedIds.has(group.telegramId))
       synchronized += pending.length - unconfirmed.length
       if (unconfirmed.length === 0) return { synchronized, failures: [] }
@@ -210,7 +211,7 @@ export const GroupManagement = {
       const startLog = await modules.get("tgLogger").groupManagement({ type: "REGENERATE_LINKS_START", requestedBy })
       if (startLog === null) throw new Error("Cannot log the operation in the Group Management topic.")
 
-      const groups = await api.tg.groups.getAll.query()
+      const groups = await serviceBackend.tg.groups.getAll.query()
       const result: GroupLinkRegenerationResult = {
         total: groups.length,
         regenerated: 0,
@@ -288,7 +289,7 @@ export const GroupManagement = {
 
     // chat.username does not start with @
     const newGroup: GroupDB = { telegramId: chat.id, title: chat.title, link: chat.invite_link, tag: chat.username }
-    const res = await api.tg.groups.create.mutate([newGroup])
+    const res = await serviceBackend.tg.groups.create.mutate([newGroup])
     if (!res.length || res[0] !== chat.id) {
       return errorBackend(chat, "CREATE", res.length >= 1 && res[0] !== chat.id)
     }
@@ -322,7 +323,7 @@ export const GroupManagement = {
       return errorNoInviteLink(chat, "UPDATE")
     }
 
-    const saved = await api.tg.groups.getById.query({ telegramId: chat.id }).catch(() => null)
+    const saved = await serviceBackend.tg.groups.getById.query({ telegramId: chat.id }).catch(() => null)
     if (!saved) {
       const reason = "Group with this chatId does not exist in the database."
       logger.warn({ chat: stripChatInfo(chat), reason }, "[GroupManagement] Cannot UPDATE group")
@@ -331,7 +332,7 @@ export const GroupManagement = {
 
     // chat.username does not start with @
     const updatedGroup: GroupDB = { telegramId: chat.id, title: chat.title, link: chat.invite_link, tag: chat.username }
-    const res = await api.tg.groups.create.mutate([updatedGroup])
+    const res = await serviceBackend.tg.groups.create.mutate([updatedGroup])
     if (!res.length || res[0] !== chat.id) {
       return errorBackend(chat, "UPDATE", res.length >= 1 && res[0] !== chat.id)
     }
@@ -347,7 +348,7 @@ export const GroupManagement = {
   },
 
   async delete(chat: Chat): Promise<Result<void, string>> {
-    const deleted = await api.tg.groups.delete.mutate({ telegramId: chat.id })
+    const deleted = await serviceBackend.tg.groups.delete.mutate({ telegramId: chat.id })
     if (!deleted) {
       const reason = "Group with this chatId does not exist in the database."
       logger.warn({ chat, reason }, "[GroupManagement] Cannot DELETE group")
@@ -359,8 +360,29 @@ export const GroupManagement = {
     return ok()
   },
 
-  async checkAdderPermission(chat: Chat, addedBy: User): Promise<boolean> {
-    const { allowed } = await api.tg.permissions.canAddBot.query({ userId: addedBy.id })
+  /**
+   * Leaves the group unless the adder holds `tg:bot:add` (RFC v3 §10.2). When that cannot be
+   * checked the bot stays but does not register the group.
+   *
+   * @param backend the update's client, acting for the adder
+   */
+  async checkAdderPermission(chat: Chat, addedBy: User, backend: Backend): Promise<boolean> {
+    let allowed: boolean
+    try {
+      allowed = await decideAccess({
+        check: "bot_add",
+        ids: { actorId: addedBy.id, chatId: chat.id },
+        legacy: async () => (await legacyBackend.tg.permissions.canAddBot.query({ userId: addedBy.id })).allowed,
+        idp: async () => hasPermission(await resolveOne(backend, addedBy.id), PERMISSION.botAdd),
+      })
+    } catch (error) {
+      logger.error(
+        { error, chat, addedBy: printUsername(addedBy) },
+        "[GroupManagement] checkAdderPermission UNAVAILABLE, the group is not registered"
+      )
+      return false
+    }
+
     if (allowed) {
       logger.debug(
         { chat, addedBy: printUsername(addedBy), allowed },

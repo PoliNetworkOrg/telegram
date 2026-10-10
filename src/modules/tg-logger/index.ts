@@ -11,7 +11,8 @@ import type { ModuleShared } from "@/utils/types"
 import { after } from "@/utils/wait"
 import { modules } from ".."
 import { BanAllQueueCapacityError } from "../moderation/ban-all-flow"
-import type { ModerationAction, PreDeleteResult } from "../moderation/types"
+import { type BanAllEntryPoint, isBanAllImmune } from "../moderation/ban-all-immunity"
+import type { ModerationAction, Moderator, PreDeleteResult } from "../moderation/types"
 import { type BanAll, getBanAllText } from "./ban-all"
 import { grantCreatedMenu, grantMessageMenu } from "./grants"
 import { getReportText, type Report, reportMenu } from "./report"
@@ -33,6 +34,13 @@ type Topics = {
   exceptions: number
   groupManagement: number
   grants: number
+}
+
+function fmtGrantActor(actor: Types.GrantActor): string {
+  if ("id" in actor) return fmtUser(actor)
+  return actor.telegramId === null
+    ? fmt(({ n }) => n`${actor.displayName}`)
+    : fmtUser({ id: actor.telegramId, first_name: actor.displayName })
 }
 
 const MOD_ACTION_TITLE = (props: ModerationAction) =>
@@ -197,16 +205,36 @@ export class TgLogger extends Module<ModuleShared> {
     }
   }
 
+  /**
+   * Starts a network-wide ban or unban. The authorization of `reporter` is checked by the caller;
+   * the target's immunity is checked here, once, for every entry point (RFC v3 §10.3).
+   */
   public async banAll(
     target: User | number,
-    reporter: User,
+    reporter: Moderator,
     type: "BAN" | "UNBAN",
+    entryPoint: BanAllEntryPoint,
     reason?: string,
     idempotencyKey?: string
   ): Promise<BanAllStartResult> {
+    if (type === "BAN") {
+      const targetId = typeof target === "number" ? target : target.id
+      const immune = await isBanAllImmune(targetId, entryPoint).catch((error: unknown) => {
+        logger.error({ error, targetId, entryPoint }, "[banall] Cannot check the target's immunity")
+        return null
+      })
+      if (immune === null)
+        return {
+          started: false,
+          message: fmt(({ n }) => n`Cannot check whether this user is immune, try again later.`),
+        }
+      if (immune)
+        return { started: false, message: fmt(({ n }) => n`This user has special roles so cannot be banned.`) }
+    }
+
     const banAll: BanAll = {
       type,
-      reporter: reporter,
+      reporter: reporter.user,
       reason,
       target,
       state: {
@@ -229,7 +257,7 @@ export class TgLogger extends Module<ModuleShared> {
     }
 
     try {
-      const start = await modules.get("banAll").initiateBanAll(banAll, msg.message_id, idempotencyKey)
+      const start = await modules.get("banAll").initiateBanAll(banAll, msg.message_id, reporter.basis, idempotencyKey)
       if (start.alreadyExisted) {
         await this.shared.api
           .editMessageText(
@@ -485,7 +513,7 @@ export class TgLogger extends Module<ModuleShared> {
           ({ n, b }) => [
             b`✳ New Grant`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`By:`} ${fmtUser(props.by)}`,
+            n`${b`By:`} ${fmtGrantActor(props.by)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
             n`\n${b`Valid since:`} ${fmtDate(props.since)}`,
             n`${b`Valid until:`} ${fmtDate(props.until)}`,
@@ -503,7 +531,7 @@ export class TgLogger extends Module<ModuleShared> {
           ({ n, b }) => [
             b`🛑 Grant Interruption`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`By:`} ${fmtUser(props.by)}`,
+            n`${b`By:`} ${fmtGrantActor(props.by)}`,
           ],
           { sep: "\n" }
         )

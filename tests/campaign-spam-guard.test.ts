@@ -11,15 +11,17 @@ import type { Context } from "@/utils/types"
 
 vi.mock("@/env", () => ({ env: { BOT_TOKEN: "test-token-for-campaign-fingerprints-123456" } }))
 vi.mock("@/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
-vi.mock("@/backend", () => ({
-  api: {
+vi.mock("@/backend", () => {
+  // Anonymous mode: the service and legacy clients are the same.
+  const client = {
     tg: {
       permissions: { getRoles: { query: vi.fn().mockResolvedValue({ roles: [] }) } },
       grants: { checkUser: { query: vi.fn().mockResolvedValue({ isGranted: false }) } },
       auditLog: { getById: { query: vi.fn().mockResolvedValue([]) } },
     },
-  },
-}))
+  }
+  return { idpConfig: null, serviceBackend: client, legacyBackend: client, backendFor: () => client }
+})
 vi.mock("@/modules", () => ({ modules: {} }))
 vi.mock("@/modules/moderation", () => ({ Moderation: {} }))
 vi.mock("@/modules/telemetry", async () => import("@/modules/telemetry/middleware"))

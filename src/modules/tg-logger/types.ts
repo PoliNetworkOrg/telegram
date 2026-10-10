@@ -80,6 +80,9 @@ export type GroupManagement =
       reason: string
     }
 
+/** Who created or interrupted a grant: a Telegram user, or a dashboard user known by name only. */
+export type GrantActor = User | { displayName: string; telegramId: number | null }
+
 export type GrantLog = {} & (
   | {
       action: "USAGE"
@@ -90,7 +93,7 @@ export type GrantLog = {} & (
   | {
       action: "CREATE"
       target: User
-      by: User
+      by: GrantActor
       since: Date
       until: Date
       reason?: string
@@ -98,6 +101,6 @@ export type GrantLog = {} & (
   | {
       action: "INTERRUPT"
       target: User
-      by: User
+      by: GrantActor
     }
 )

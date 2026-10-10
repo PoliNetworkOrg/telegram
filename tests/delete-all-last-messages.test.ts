@@ -7,7 +7,7 @@ const dependencies = vi.hoisted(() => ({
 }))
 
 vi.mock("@/backend", () => ({
-  api: {
+  serviceBackend: {
     tg: {
       messages: { getLastByUser: { query: dependencies.getLastByUser } },
     },

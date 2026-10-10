@@ -1,21 +1,23 @@
 import type { User } from "grammy/types"
 import z from "zod"
-import { api } from "@/backend"
+import { PERMISSION } from "@/access/catalog"
+import { serviceBackend } from "@/backend"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
+import { moderatorFor } from "@/modules/moderation"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
 
-const BYPASS_ROLES: Role[] = ["president", "owner", "direttivo"]
-
-export const banAll = new CommandsCollection<Role>("Ban All")
+export const banAll = new CommandsCollection<Role, CommandAccess>("Ban All")
   .createCommand({
     trigger: "ban_all",
     description: "PERMA BAN a user from all the Network's groups",
     scope: "private",
     permissions: {
+      requiredPermissions: [PERMISSION.moderateGlobal],
       allowedRoles: ["owner", "direttivo"],
     },
     args: [
@@ -30,7 +32,7 @@ export const banAll = new CommandsCollection<Role>("Ban All")
         description: "The reason why you ban the user",
       },
     ],
-    handler: async ({ args, context }) => {
+    handler: async ({ args, context, authorization }) => {
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
       logger.debug(
@@ -43,12 +45,7 @@ export const banAll = new CommandsCollection<Role>("Ban All")
         return
       }
 
-      const dbUser = await api.tg.users.get.query({ userId })
-      const { roles } = await api.tg.permissions.getRoles.query({ userId })
-      if (roles?.some((r) => BYPASS_ROLES.includes(r))) {
-        await context.reply(fmt(({ n }) => n`This user has special roles so cannot be banned.`))
-        return
-      }
+      const dbUser = await serviceBackend.tg.users.get.query({ userId })
 
       const target: User | number = dbUser.user
         ? {
@@ -61,7 +58,10 @@ export const banAll = new CommandsCollection<Role>("Ban All")
           }
         : userId
 
-      const result = await modules.get("tgLogger").banAll(target, context.from, "BAN", args.reason)
+      // The target's immunity is checked by banAll.
+      const result = await modules
+        .get("tgLogger")
+        .banAll(target, moderatorFor(context.from, authorization), "BAN", "command", args.reason)
       await context.reply(result.message)
     },
   })
@@ -70,6 +70,7 @@ export const banAll = new CommandsCollection<Role>("Ban All")
     description: "UNBAN a user from all the Network's groups",
     scope: "private",
     permissions: {
+      requiredPermissions: [PERMISSION.moderateGlobal],
       allowedRoles: ["owner", "direttivo"],
     },
     args: [
@@ -79,7 +80,7 @@ export const banAll = new CommandsCollection<Role>("Ban All")
         description: "The username or the user id of the user you want to unban from all groups",
       },
     ],
-    handler: async ({ args, context }) => {
+    handler: async ({ args, context, authorization }) => {
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 
@@ -88,7 +89,7 @@ export const banAll = new CommandsCollection<Role>("Ban All")
         return
       }
 
-      const dbUser = await api.tg.users.get.query({ userId })
+      const dbUser = await serviceBackend.tg.users.get.query({ userId })
 
       const target: User | number = dbUser.user
         ? {
@@ -101,7 +102,9 @@ export const banAll = new CommandsCollection<Role>("Ban All")
           }
         : userId
 
-      const result = await modules.get("tgLogger").banAll(target, context.from, "UNBAN")
+      const result = await modules
+        .get("tgLogger")
+        .banAll(target, moderatorFor(context.from, authorization), "UNBAN", "command")
       await context.reply(result.message)
     },
   })

@@ -1,15 +1,19 @@
+import { PERMISSION } from "@/access/catalog"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { Role } from "@/utils/types"
 
-export const pin = new CommandsCollection<Role>()
+export const pin = new CommandsCollection<Role, CommandAccess>()
   .createCommand({
     trigger: "pin",
     description: "Pin a message in a group",
     scope: "group",
     reply: "required",
     permissions: {
+      requiredPermissions: [PERMISSION.messagesPin],
+      allowTelegramChatAdmins: true,
       allowGroupAdmins: true,
       allowedRoles: ["direttivo", "owner"],
     },
@@ -46,6 +50,8 @@ export const pin = new CommandsCollection<Role>()
     scope: "group",
     reply: "required",
     permissions: {
+      requiredPermissions: [PERMISSION.messagesPin],
+      allowTelegramChatAdmins: true,
       allowGroupAdmins: true,
       allowedRoles: ["direttivo", "owner"],
     },

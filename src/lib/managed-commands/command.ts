@@ -43,6 +43,30 @@ export type CommandReplyTo = "required" | "optional" | undefined
 
 export type CommandScope = "private" | "group" | "both"
 
+/**
+ * The outcome of the built-in permission check. When allowed, `via` tells what let the user through:
+ * - `group_admin`: the group admin shortcut (`allowGroupAdmins`)
+ * - `role`: one of the `allowedRoles`
+ * - `unrestricted`: no role was required
+ */
+export type PermissionCheck = { allowed: false } | { allowed: true; via: "group_admin" | "role" | "unrestricted" }
+
+/**
+ * Extends the built-in permission check with application-defined access control.
+ * - `permissions`: additional fields commands can declare in their `permissions`
+ * - `authorization`: what the `authorize` option decides, passed to the command handler
+ */
+export interface AccessControl {
+  permissions: object
+  authorization: { allowed: boolean }
+}
+
+/** No extension: commands declare roles only and handlers receive the built-in {@link PermissionCheck}. */
+export interface DefaultAccessControl extends AccessControl {
+  permissions: Record<never, never>
+  authorization: PermissionCheck
+}
+
 interface PrivatePermissions<TRole extends string> {
   /** The roles that are allowed to use the command */
   allowedRoles?: TRole[]
@@ -62,9 +86,10 @@ interface GroupPermissions<TRole extends string> extends PrivatePermissions<TRol
   /** Group IDs where the command is not allowed, if a group ID is in both allowedGroupsId and excludedGroupsId, the exclusion takes precedence */
   excludedGroupsId?: number[]
 }
-type Permissions<TRole extends string, S extends CommandScope> = S extends "private"
+type Permissions<TRole extends string, S extends CommandScope, TAccess extends AccessControl> = (S extends "private"
   ? PrivatePermissions<TRole>
-  : GroupPermissions<TRole>
+  : GroupPermissions<TRole>) &
+  TAccess["permissions"]
 
 export type CommandScopedContext<
   S extends CommandScope = CommandScope,
@@ -87,6 +112,7 @@ export type CommandConversation<S extends CommandScope = CommandScope, C extends
  * @template R The type of the command reply, this should be "required", "optional" or undefined
  * @template S The scope of the command, this should be "private", "group" or "both"
  * @template TRole The type of the roles used in permissions, this should be a string literal type representing the possible roles in the bot (e.g. "admin" | "moderator" | "user")
+ * @template TAccess The application-defined access control, see {@link AccessControl}
  */
 export interface Command<
   A extends CommandArgs,
@@ -94,6 +120,7 @@ export interface Command<
   S extends CommandScope,
   TRole extends string = string,
   C extends Context = Context,
+  TAccess extends AccessControl = DefaultAccessControl,
 > {
   /**
    * The command trigger, the string that will be used to call the command.
@@ -115,7 +142,7 @@ export interface Command<
    *
    * If the command is allowed in groups, you can also allow or exclude specific group IDs and whether or not to consider permissions for group admins.
    */
-  permissions?: Permissions<TRole, S>
+  permissions?: Permissions<TRole, S, TAccess>
   /**
    * The type of reply that the command accepts, can be "required", "optional" or undefined.
    * If the command accepts a reply, it will be available in the handler as `repliedTo`.
@@ -154,19 +181,22 @@ export interface Command<
      * This will be undefined if the command does not accept a reply.
      */
     repliedTo: RepliedTo<R>
+    /**
+     * The outcome of the permission check that allowed the user to run the command,
+     * see the `authorize` option of {@link ManagedCommands}.
+     */
+    authorization: TAccess["authorization"]
   }) => Promise<void>
 }
 
 /**
  * A generic command
  */
-export type AnyCommand<TRole extends string = string, C extends Context = Context> = Command<
-  CommandArgs,
-  CommandReplyTo,
-  CommandScope,
-  TRole,
-  C
->
+export type AnyCommand<
+  TRole extends string = string,
+  C extends Context = Context,
+  TAccess extends AccessControl = DefaultAccessControl,
+> = Command<CommandArgs, CommandReplyTo, CommandScope, TRole, C, TAccess>
 
 /**
  * Type guard to check if a command is allowed in groups.
@@ -191,7 +221,8 @@ export function isAllowedInGroups<
   R extends CommandReplyTo,
   TRole extends string = string,
   C extends Context = Context,
->(cmd: Command<A, R, CommandScope, TRole, C>): cmd is Command<A, R, "group" | "both", TRole, C> {
+  TAccess extends AccessControl = DefaultAccessControl,
+>(cmd: Command<A, R, CommandScope, TRole, C, TAccess>): cmd is Command<A, R, "group" | "both", TRole, C, TAccess> {
   return cmd.scope !== "private"
 }
 
@@ -218,6 +249,7 @@ export function isAllowedInPrivateOnly<
   R extends CommandReplyTo,
   TRole extends string = string,
   C extends Context = Context,
->(cmd: Command<A, R, CommandScope, TRole, C>): cmd is Command<A, R, "private", TRole, C> {
+  TAccess extends AccessControl = DefaultAccessControl,
+>(cmd: Command<A, R, CommandScope, TRole, C, TAccess>): cmd is Command<A, R, "private", TRole, C, TAccess> {
   return cmd.scope === "private"
 }

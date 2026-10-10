@@ -1,11 +1,14 @@
 import { z } from "zod"
-import { api } from "@/backend"
+import { decisionMode, resolveOne } from "@/access"
+import { PERMISSION } from "@/access/catalog"
+import { legacyBackend, serviceBackend } from "@/backend"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString, type Role } from "@/utils/types"
 
-export const role = new CommandsCollection<Role>("Roles")
+export const role = new CommandsCollection<Role, CommandAccess>("Roles")
   .createCommand({
     trigger: "getroles",
     scope: "private",
@@ -17,6 +20,8 @@ export const role = new CommandsCollection<Role>("Roles")
         description: "The username or the user id of the user you want to update the role",
       },
     ],
+    // Open to everyone before the IdP migration; RFC v3 §10.2 restricts it.
+    permissions: { requiredPermissions: [PERMISSION.usersRead] },
     handler: async ({ context, args }) => {
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
@@ -26,9 +31,15 @@ export const role = new CommandsCollection<Role>("Roles")
         return
       }
 
-      const { roles } = await api.tg.permissions.getRoles.query({ userId })
+      // The source the bot decides with: the IdP once its decisions apply, the legacy roles before that.
+      const permissions =
+        decisionMode === "enforce"
+          ? [...(await resolveOne(serviceBackend, userId)).permissions].sort()
+          : ((await legacyBackend.tg.permissions.getRoles.query({ userId })).roles ?? [])
       await context.reply(
-        fmt(({ b }) => (roles?.length ? [`Roles:`, b`${roles.join(" ")}`] : "This user has no roles"))
+        fmt(({ b, n }) =>
+          permissions.length ? n`Permissions: ${b`${permissions.join(" ")}`}` : "This user has no permissions"
+        )
       )
     },
   })
@@ -56,7 +67,7 @@ export const role = new CommandsCollection<Role>("Roles")
         return
       }
 
-      const { roles, error } = await api.tg.permissions.addRole.mutate({
+      const { roles, error } = await legacyBackend.tg.permissions.addRole.mutate({
         userId,
         adderId: context.from.id,
         role: args.role,
@@ -98,7 +109,7 @@ export const role = new CommandsCollection<Role>("Roles")
         return
       }
 
-      const { roles, error } = await api.tg.permissions.removeRole.mutate({
+      const { roles, error } = await legacyBackend.tg.permissions.removeRole.mutate({
         userId,
         removerId: context.from.id,
         role: args.role,
