@@ -1,11 +1,11 @@
 import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
 import { Err, Ok, type Result } from "neverthrow"
-import { MessageUserStorage } from "@/middlewares/message-user-storage"
-import { getTelegramId } from "./telegram-id"
 import { logger } from "@/logger"
+import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
+import { getTelegramId } from "./telegram-id"
 
 export async function getUser<C extends Context>(userId: number, ctx: C | null): Promise<User | null> {
   // TODO: check if this works correctly
@@ -44,8 +44,11 @@ export async function getOverloadUser<C extends Context>(
     }
     return new Ok({ user: repliedTo.from, reason: [firstArg, secondArg].filter(Boolean).join(" ") })
   }
-
+  if (!firstArg) {
+    return new Err("[getOverloadUser] No firstArg passed (without repliedTo)")
+  }
   const user = await resolveUser(firstArg, context)
+
   if (!user) {
     return new Err("SILENT_ERROR")
   }
@@ -56,11 +59,7 @@ export async function getOverloadUser<C extends Context>(
   })
 }
 
-
-export async function resolveUser(
-  usernameOrId: string | number | undefined,
-  c: Context
-): Promise<User | null> {
+export async function resolveUser(usernameOrId: string | number | undefined, c: Context): Promise<User | null> {
   if (!usernameOrId) return null
 
   const userId: number | null =
