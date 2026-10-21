@@ -1,28 +1,10 @@
-import { type Backend, idpConfig, legacyBackend } from "@/backend"
-import { env } from "@/env"
+import type { Backend } from "@/backend"
 import { logger } from "@/logger"
-import type { Role } from "@/utils/types"
 import type { Permission } from "./catalog"
-import {
-  type AccessEntry,
-  DENIED,
-  type DecideOptions,
-  type Decision,
-  type DecisionMode,
-  decide,
-  idpDecision,
-  NO_ACCESS,
-  sameAllowed,
-} from "./decision"
+import { type AccessEntry, DENIED, type Decision, idpDecision, NO_ACCESS } from "./decision"
 
 export { PERMISSION, type Permission } from "./catalog"
 export * from "./decision"
-
-if (!idpConfig && env.IDP_DECISIONS === "enforce")
-  throw new Error("IDP_DECISIONS=enforce needs the IdP configuration (IDP_PUBLIC_URL, OAUTH_BOT_*)")
-
-/** How the bot decides who may do what (RFC v3 §13 Phase 4). */
-export const decisionMode: DecisionMode = idpConfig ? env.IDP_DECISIONS : "anonymous"
 
 /** IdP access of Telegram users, from the backend's snapshot. Unlinked users hold nothing. */
 export async function resolveAccess(backend: Backend, telegramIds: number[]): Promise<Map<number, AccessEntry>> {
@@ -39,14 +21,9 @@ export async function resolveOne(backend: Backend, telegramId: number): Promise<
   return (await resolveAccess(backend, [telegramId])).get(telegramId) ?? NO_ACCESS
 }
 
-/** {@link decide} in the configured mode. */
-export function decideAccess<T>(options: Omit<DecideOptions<T>, "mode" | "logger">): Promise<T> {
-  return decide({ ...options, mode: decisionMode, logger })
-}
-
 /**
- * Whether a person may run a command or press a button (RFC v3 §10.2), in the configured mode.
- * Once IdP decisions apply, an unavailable decision denies; legacy failures surface as before.
+ * Whether a person may run a command or press a button (RFC v3 §10.2). An unavailable decision
+ * denies.
  */
 export async function authorizeAction(options: {
   check: string
@@ -57,31 +34,14 @@ export async function authorizeAction(options: {
   required: readonly Permission[]
   /** Set only where the chat's native admins may act too (RFC v3 §4 decision 2). */
   isChatAdmin?: () => Promise<boolean>
-  legacy: () => Promise<Decision>
 }): Promise<Decision> {
-  return decideAccess({
-    check: options.check,
-    ids: { actorId: options.actorId, chatId: options.chatId },
-    legacy: options.legacy,
-    idp: () =>
-      idpDecision({
-        required: options.required,
-        actor: () => resolveOne(options.backend, options.actorId),
-        isChatAdmin: options.isChatAdmin,
-      }),
-    same: sameAllowed,
+  return idpDecision({
+    required: options.required,
+    actor: () => resolveOne(options.backend, options.actorId),
+    isChatAdmin: options.isChatAdmin,
   }).catch((error: unknown) => {
-    if (decisionMode !== "enforce") throw error
-    logger.error({ error, check: options.check, actorId: options.actorId }, "[ACCESS] IdP decision unavailable, denied")
+    const { check, actorId, chatId } = options
+    logger.error({ error, check, actorId, chatId }, "[ACCESS] IdP decision unavailable, denied")
     return DENIED
   })
-}
-
-/**
- * Roles from the legacy `tg_permissions` table. Used only by the legacy side of a decision and the
- * legacy role commands; goes away with the switch to IdP decisions.
- */
-export async function legacyRoles(userId: number): Promise<Role[]> {
-  const { roles } = await legacyBackend.tg.permissions.getRoles.query({ userId })
-  return roles ?? []
 }

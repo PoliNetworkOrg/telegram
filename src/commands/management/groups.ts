@@ -4,9 +4,8 @@ import type { CommandAccess } from "@/commands/access"
 import { GroupManagement } from "@/lib/group-management"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
-import type { Role } from "@/utils/types"
 
-export const groups = new CommandsCollection<Role, CommandAccess>("Groups")
+export const groups = new CommandsCollection<string, CommandAccess>("Groups")
   .createCommand({
     trigger: "updategroup",
     scope: "private",
@@ -21,7 +20,6 @@ export const groups = new CommandsCollection<Role, CommandAccess>("Groups")
     ],
     permissions: {
       requiredPermissions: [PERMISSION.groupsManage],
-      allowedRoles: ["owner", "direttivo"],
     },
     handler: async ({ context, args }) => {
       const group = await context.api.getChat(args.chatId).catch(() => null)
@@ -73,7 +71,6 @@ export const groups = new CommandsCollection<Role, CommandAccess>("Groups")
     ],
     permissions: {
       requiredPermissions: [PERMISSION.groupsManage],
-      allowedRoles: ["owner", "direttivo"],
     },
     handler: async ({ context }) => {
       const response = await GroupManagement.regenerateInviteLinks(context.from)

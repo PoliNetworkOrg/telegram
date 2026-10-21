@@ -3,9 +3,8 @@ import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
-import type { Role } from "@/utils/types"
 
-export const pin = new CommandsCollection<Role, CommandAccess>()
+export const pin = new CommandsCollection<string, CommandAccess>()
   .createCommand({
     trigger: "pin",
     description: "Pin a message in a group",
@@ -14,8 +13,6 @@ export const pin = new CommandsCollection<Role, CommandAccess>()
     permissions: {
       requiredPermissions: [PERMISSION.messagesPin],
       allowTelegramChatAdmins: true,
-      allowGroupAdmins: true,
-      allowedRoles: ["direttivo", "owner"],
     },
     handler: async ({ context, repliedTo }) => {
       const member = await context.getChatMember(context.me.id)
@@ -52,8 +49,6 @@ export const pin = new CommandsCollection<Role, CommandAccess>()
     permissions: {
       requiredPermissions: [PERMISSION.messagesPin],
       allowTelegramChatAdmins: true,
-      allowGroupAdmins: true,
-      allowedRoles: ["direttivo", "owner"],
     },
     handler: async ({ context, repliedTo }) => {
       const member = await context.getChatMember(context.me.id)

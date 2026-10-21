@@ -1,20 +1,17 @@
-import { decisionMode } from "@/access"
 import { PERMISSION } from "@/access/catalog"
-import { backendAs, serviceBackend } from "@/backend"
+import { backendAs } from "@/backend"
 import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt, fmtDate } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
-import type { Role } from "@/utils/types"
 
-export const audit = new CommandsCollection<Role, CommandAccess>("Auditing").createCommand({
+export const audit = new CommandsCollection<string, CommandAccess>("Auditing").createCommand({
   trigger: "audit",
   scope: "private",
   description: "Get the audit log of a user",
   args: [{ key: "username", optional: false, description: "Username or userid" }],
   permissions: {
     requiredPermissions: [PERMISSION.auditRead],
-    allowedRoles: ["hr", "owner", "direttivo"],
   },
   handler: async ({ context, args }) => {
     let userId: number | null = parseInt(args.username, 10)
@@ -27,10 +24,8 @@ export const audit = new CommandsCollection<Role, CommandAccess>("Auditing").cre
       return
     }
 
-    // Once IdP decisions apply, the backend checks `tg:audit:read` for the actor as well. In shadow
-    // mode the legacy decision applies, so the bot reads as itself.
-    const backend = decisionMode === "enforce" ? backendAs(context.from.id) : serviceBackend
-    const list = await backend.tg.auditLog.getById.query({ targetId: userId })
+    // The backend checks `tg:audit:read` for the actor as well.
+    const list = await backendAs(context.from.id).tg.auditLog.getById.query({ targetId: userId })
     await context.reply(
       fmt(
         ({ b, n, i, u, link, code }) => [

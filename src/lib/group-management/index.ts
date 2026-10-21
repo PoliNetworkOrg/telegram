@@ -6,8 +6,8 @@ import type { Result } from "neverthrow"
 
 import { err, ok } from "neverthrow"
 
-import { decideAccess, hasPermission, PERMISSION, resolveOne } from "@/access"
-import { type Backend, legacyBackend, serviceBackend } from "@/backend"
+import { hasPermission, PERMISSION, resolveOne } from "@/access"
+import { type Backend, serviceBackend } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import type { GroupLinkRegenerationFailure } from "@/modules/tg-logger/types"
@@ -369,12 +369,7 @@ export const GroupManagement = {
   async checkAdderPermission(chat: Chat, addedBy: User, backend: Backend): Promise<boolean> {
     let allowed: boolean
     try {
-      allowed = await decideAccess({
-        check: "bot_add",
-        ids: { actorId: addedBy.id, chatId: chat.id },
-        legacy: async () => (await legacyBackend.tg.permissions.canAddBot.query({ userId: addedBy.id })).allowed,
-        idp: async () => hasPermission(await resolveOne(backend, addedBy.id), PERMISSION.botAdd),
-      })
+      allowed = hasPermission(await resolveOne(backend, addedBy.id), PERMISSION.botAdd)
     } catch (error) {
       logger.error(
         { error, chat, addedBy: printUsername(addedBy) },

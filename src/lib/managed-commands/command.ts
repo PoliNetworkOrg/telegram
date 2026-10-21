@@ -80,7 +80,7 @@ interface GroupPermissions<TRole extends string> extends PrivatePermissions<TRol
    * You can use hooks to override what is considered a group admin, by default it considers users with
    * Telegram Chat Role of "administrator" or "creator" as group admins
    */
-  allowGroupAdmins: boolean
+  allowGroupAdmins?: boolean
   /** Group IDs where the command is allowed */
   allowedGroupsId?: number[]
   /** Group IDs where the command is not allowed, if a group ID is in both allowedGroupsId and excludedGroupsId, the exclusion takes precedence */

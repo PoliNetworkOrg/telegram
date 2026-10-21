@@ -17,25 +17,20 @@ export type Backend = TRPCClient<AppRouter>
 export type ApiOutput = inferRouterOutputs<AppRouter>
 export type ApiInput = inferRouterInputs<AppRouter>
 
-/** The bot's IdP client configuration; null while it still calls the backend anonymously. */
-export const idpConfig = parseIdpConfig(env)
-
 /** The `telegram-bot` service token (RFC v3 §10.1), cached and renewed at half its lifetime. */
-export const serviceTokens: TokenSource | null = idpConfig
-  ? serviceTokenSource({
-      ...idpConfig,
-      onError: (error) => logger.warn({ error }, "[IDP] service token renewal failed, using the cached token"),
-    })
-  : null
+export const serviceTokens: TokenSource = serviceTokenSource({
+  ...parseIdpConfig(env),
+  onError: (error) => logger.warn({ error }, "[IDP] service token renewal failed, using the cached token"),
+})
 
-function createBackendClient(tokens: TokenSource | null, actorTelegramId: number | null = null): Backend {
+function createBackendClient(tokens: TokenSource, actorTelegramId: number | null = null): Backend {
   return createTRPCClient<AppRouter>({
     links: [
       trpcTelemetryLink,
       httpBatchLink({
         url,
         transformer: SuperJSON,
-        fetch: tokens ? authenticatedFetch(tokens, actorTelegramId) : undefined,
+        fetch: authenticatedFetch(tokens, actorTelegramId),
       }),
     ],
   })
@@ -43,16 +38,9 @@ function createBackendClient(tokens: TokenSource | null, actorTelegramId: number
 
 /**
  * Acts as the bot itself: background work (storage flush, ban-all, cron, startup) and every lookup
- * the backend grants only to the service (RFC v3 §8.1). Anonymous when the IdP is not configured.
+ * the backend grants only to the service (RFC v3 §8.1).
  */
 export const serviceBackend: Backend = createBackendClient(serviceTokens)
-
-/**
- * Always anonymous. Only for the procedures the RFC removes and the backend refuses to token
- * callers (`tg.permissions.*`, `tg.link.link`, `tg.auditLog.create`, `test.dbQuery`), which keep
- * working while the backend allows legacy calls (RFC v3 §13).
- */
-export const legacyBackend: Backend = serviceTokens ? createBackendClient(null) : serviceBackend
 
 /**
  * Acts for a Telegram user through `X-PN-Actor` (RFC v3 §6.3). The backend accepts such an actor
@@ -60,7 +48,7 @@ export const legacyBackend: Backend = serviceTokens ? createBackendClient(null) 
  * person's IdP permissions there.
  */
 export function backendAs(telegramId: number): Backend {
-  return serviceTokens ? createBackendClient(serviceTokens, telegramId) : serviceBackend
+  return createBackendClient(serviceTokens, telegramId)
 }
 
 /** One client per update: acting for its human sender, otherwise the service (RFC v3 §10.1). */
@@ -68,12 +56,11 @@ export function backendFor(from: User | undefined): Backend {
   return from && !from.is_bot ? backendAs(from.id) : serviceBackend
 }
 
-/** Startup check; with a token it also proves the IdP issues one the backend accepts. */
+/** Startup check; it also proves the IdP issues a token the backend accepts. */
 export async function backendHealthCheck(botId: number) {
   try {
-    if (serviceTokens) await serviceBackend.tg.access.resolve.query({ telegramIds: [botId] })
-    else await legacyBackend.test.dbQuery.query({ dbName: "tg" })
-    logger.info(`[BACKEND] connected${serviceTokens ? " with the IdP service token" : ""}`)
+    await serviceBackend.tg.access.resolve.query({ telegramIds: [botId] })
+    logger.info("[BACKEND] connected with the IdP service token")
   } catch (err) {
     if (err instanceof TRPCClientError && err.message.startsWith("fetch failed"))
       logger.error(`[BACKEND] can't connect`)

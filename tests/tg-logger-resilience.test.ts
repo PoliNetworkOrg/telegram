@@ -7,7 +7,13 @@ vi.hoisted(() => {
   process.env.BOT_TOKEN = "test-token"
   process.env.BACKEND_URL = "backend.test"
   process.env.NODE_ENV = "development"
+  process.env.IDP_PUBLIC_URL = "https://auth.test"
+  process.env.OAUTH_BACKEND_RESOURCE_URI = "https://backend.test"
+  process.env.OAUTH_BOT_CLIENT_ID = "bot-id"
+  process.env.OAUTH_BOT_PRIVATE_JWK = JSON.stringify({ alg: "EdDSA", kid: "test" })
 })
+
+vi.mock("@/backend", () => ({ serviceBackend: {}, backendAs: vi.fn(), backendFor: vi.fn() }))
 
 vi.mock("@/lib/redis-fallback-adapter", () => ({
   RedisFallbackAdapter: class {},

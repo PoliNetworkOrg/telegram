@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { TRPCClientError } from "@trpc/client"
-import { legacyBackend, serviceBackend, serviceTokens } from "@/backend"
+import { serviceBackend } from "@/backend"
 import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
@@ -49,39 +49,25 @@ export function toRecordInput(entry: AuditEntry, idempotencyKey: string): AuditR
 
 /**
  * Records moderation actions in the backend's audit log (RFC v3 §9.2, §10.2): through the outbox
- * and `tg.auditLog.record` with the service token, or `tg.auditLog.create` while the bot still
- * calls the backend anonymously.
+ * and `tg.auditLog.record` with the service token.
  */
 export class AuditLog extends Module<ModuleShared> {
-  private outbox = serviceTokens
-    ? new AuditOutbox({
-        store: new RedisOutboxStore(redis),
-        send: (input) => serviceBackend.tg.auditLog.record.mutate(input),
-        isPermanent,
-        logger,
-      })
-    : null
+  private outbox = new AuditOutbox({
+    store: new RedisOutboxStore(redis),
+    send: (input) => serviceBackend.tg.auditLog.record.mutate(input),
+    isPermanent,
+    logger,
+  })
 
   async record(entry: AuditEntry, idempotencyKey = `tg-bot:${randomUUID()}`): Promise<void> {
-    if (this.outbox) return this.outbox.enqueue(toRecordInput(entry, idempotencyKey))
-
-    await legacyBackend.tg.auditLog.create
-      .mutate({
-        adminId: entry.actorId,
-        targetId: entry.targetId,
-        type: entry.type,
-        groupId: entry.groupId,
-        until: entry.until,
-        reason: entry.reason,
-      })
-      .catch((error: unknown) => logger.warn({ error, type: entry.type }, "[AUDIT] failed to create audit log"))
+    return this.outbox.enqueue(toRecordInput(entry, idempotencyKey))
   }
 
   override start() {
-    this.outbox?.start()
+    this.outbox.start()
   }
 
   override async stop() {
-    await this.outbox?.stop()
+    await this.outbox.stop()
   }
 }
