@@ -68,11 +68,6 @@ describe("service and actor requests", () => {
 })
 
 describe("IdP deployment configuration", () => {
-  it("only an entirely absent configuration selects anonymous mode", () => {
-    expect(parseIdpConfig({})).toBeNull()
-    expect(() => parseIdpConfig({ IDP_INTERNAL_URL: "http://auth:3000" })).toThrow("Incomplete IdP configuration")
-  })
-
   it("keeps the public assertion audience when using an internal token transport", () => {
     const config = parseIdpConfig({
       IDP_PUBLIC_URL: "https://auth.test",
@@ -81,9 +76,9 @@ describe("IdP deployment configuration", () => {
       OAUTH_BOT_CLIENT_ID: "bot-id",
       OAUTH_BOT_PRIVATE_JWK: JSON.stringify({ alg: "EdDSA", kid: "test" }),
     })
-    expect(config?.tokenUrl).toBe("http://auth:3000/api/auth/oauth2/token")
-    expect(config?.tokenAudience).toBe("https://auth.test/api/auth/oauth2/token")
-    expect(config?.scopes).toEqual(BOT_SCOPES)
+    expect(config.tokenUrl).toBe("http://auth:3000/api/auth/oauth2/token")
+    expect(config.tokenAudience).toBe("https://auth.test/api/auth/oauth2/token")
+    expect(config.scopes).toEqual(BOT_SCOPES)
   })
 
   it("never echoes malformed private key material", () => {

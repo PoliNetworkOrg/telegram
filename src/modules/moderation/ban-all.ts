@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { type ConnectionOptions, FlowProducer, type Job, Queue, Worker } from "bullmq"
-import { serviceBackend, serviceTokens } from "@/backend"
+import { serviceBackend } from "@/backend"
 import { env } from "@/env"
 import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
@@ -140,8 +140,7 @@ export class BanAllQueue extends Module<ModuleShared> {
           ? `tg-bot:ban-all:${createHash("sha256").update(banAllFlowId(banAll.type, idempotencyKey)).digest("hex")}`
           : `tg-bot:ban-all:${randomUUID()}`,
       }
-      // The anonymous legacy endpoint has no idempotency support, so it must never replay.
-      const flow = createBanAllFlow(banAll, messageId, chats, idempotencyKey, serviceTokens ? audit : undefined)
+      const flow = createBanAllFlow(banAll, messageId, chats, idempotencyKey, audit)
       // Store the recovery data atomically with the flow. Do not audit an insertion that failed.
       await this.flowProducer.add(flow)
       await this.auditFlow({ ...flow.data, audit })

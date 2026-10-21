@@ -1,9 +1,8 @@
 import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
-import type { Role } from "@/utils/types"
 
-export const testformat = new CommandsCollection<Role, CommandAccess>().createCommand({
+export const testformat = new CommandsCollection<string, CommandAccess>().createCommand({
   trigger: "test_format",
   scope: "private",
   description: "Test the formatting",

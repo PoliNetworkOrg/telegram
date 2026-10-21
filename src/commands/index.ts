@@ -1,7 +1,5 @@
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 import { Point } from "@influxdata/influxdb-client"
-import { legacyRoles } from "@/access"
-import { legacyBackend } from "@/backend"
 import { type CommandScopedContext, ManagedCommands } from "@/lib/managed-commands"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
@@ -10,11 +8,10 @@ import type { TelemetryContextFlavor } from "@/modules/telemetry"
 import { redis } from "@/redis"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
-import type { Context, Role } from "@/utils/types"
+import type { Context } from "@/utils/types"
 import { printCtxFrom } from "@/utils/users"
 import { authorizeCommand, type CommandAccess } from "./access"
 import { invite } from "./invite"
-import { linkAdminDashboard } from "./link-admin-dashboard"
 import { management } from "./management"
 import { moderation } from "./moderation"
 import { pin } from "./pin"
@@ -29,7 +26,7 @@ const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
 
 type ConversationContext = TelemetryContextFlavor<CommandScopedContext>
 
-export const commands = new ManagedCommands<Role, Context, ConversationContext, CommandAccess>({
+export const commands = new ManagedCommands<string, Context, ConversationContext, CommandAccess>({
   adapter,
   plugins: [
     (ctx, next) => {
@@ -95,12 +92,6 @@ export const commands = new ManagedCommands<Role, Context, ConversationContext, 
       context.point.intField("duration", (await conversation.now()) - context.stackTimes.managedCommands)
       modules.get("influx").writePoint(context.point)
     },
-    overrideGroupAdminCheck: async (userId, groupId, ctx) => {
-      const { status: groupRole } = await ctx.getChatMember(userId)
-      if (groupRole === "administrator" || groupRole === "creator") return true
-      const isDbAdmin = await legacyBackend.tg.permissions.checkGroup.query({ userId, groupId })
-      return isDbAdmin
-    },
     commandMiddlewareStart: async ({ context, command }) => {
       context.stackTimes = { managedCommands: Date.now() }
       context.point.tag("command", ManagedCommands.commandID(command)).tag("chat_type", context.chat.type)
@@ -109,10 +100,6 @@ export const commands = new ManagedCommands<Role, Context, ConversationContext, 
       logger.debug(`[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)}`)
       context.point.intField("managed_commands_duration", Date.now() - context.stackTimes.managedCommands)
     },
-  },
-  getUserRoles: async (userId) => {
-    // TODO: cache this to avoid hitting the db on every command
-    return await legacyRoles(userId)
   },
   authorize: authorizeCommand,
 })
@@ -145,4 +132,4 @@ export const commands = new ManagedCommands<Role, Context, ConversationContext, 
       )
     },
   })
-  .withCollection(linkAdminDashboard, report, search, management, moderation, pin, invite)
+  .withCollection(report, search, management, moderation, pin, invite)

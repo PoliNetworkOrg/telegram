@@ -7,10 +7,10 @@ import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import { getTelegramId } from "@/utils/telegram-id"
-import { numberOrString, type Role } from "@/utils/types"
+import { numberOrString } from "@/utils/types"
 import { getOverloadUser, getUser } from "@/utils/users"
 
-export const mute = new CommandsCollection<Role, CommandAccess>("Muting")
+export const mute = new CommandsCollection<string, CommandAccess>("Muting")
   .createCommand({
     trigger: "tmute",
     args: [
@@ -28,9 +28,6 @@ export const mute = new CommandsCollection<Role, CommandAccess>("Muting")
     permissions: {
       requiredPermissions: [PERMISSION.moderate],
       allowTelegramChatAdmins: true,
-      allowedRoles: ["owner", "direttivo"],
-      excludedRoles: ["creator"],
-      allowGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo, authorization }) => {
       if (!repliedTo.from) {
@@ -67,9 +64,6 @@ export const mute = new CommandsCollection<Role, CommandAccess>("Muting")
     permissions: {
       requiredPermissions: [PERMISSION.moderate],
       allowTelegramChatAdmins: true,
-      allowedRoles: ["owner", "direttivo"],
-      excludedRoles: ["creator"],
-      allowGroupAdmins: true,
     },
     handler: async ({ args, context, repliedTo, authorization }) => {
       const userOverload = await getOverloadUser(context, repliedTo, args.reasonOrUser, args.reason)
@@ -105,9 +99,6 @@ export const mute = new CommandsCollection<Role, CommandAccess>("Muting")
     permissions: {
       requiredPermissions: [PERMISSION.moderate],
       allowTelegramChatAdmins: true,
-      allowedRoles: ["owner", "direttivo"],
-      excludedRoles: ["creator"],
-      allowGroupAdmins: true,
     },
     handler: async ({ args, context, authorization }) => {
       const userId: number | null =

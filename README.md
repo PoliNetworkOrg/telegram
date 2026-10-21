@@ -81,7 +81,7 @@ first-post classifications with reasons and cross-chat counts, join decisions an
 review delivery, local bans, network BanAll starts, moderator decisions, and dependency failures. Identifiers let
 operators correlate actions without logging raw message text, contact details, or the fingerprint secret.
 
-## IdP migration (Phase 4b)
+## IdP authorization
 
 The bot uses `@polinetwork/auth-kit` to obtain a cached `client_credentials` token with
 `private_key_jwt`. Register a separate `telegram-bot` client in the IdP and link it to the backend
@@ -90,11 +90,11 @@ resource. Its scopes are `backend:tg:read`, `backend:tg:ingest`, `backend:tg:gro
 inject the private JWK from the bot's Key Vault as `OAUTH_BOT_PRIVATE_JWK` (JSON with `kid`, `alg`
 and private key material). Never put the key in the repository or logs.
 
-Set `IDP_PUBLIC_URL`, `OAUTH_BACKEND_RESOURCE_URI`, `OAUTH_BOT_CLIENT_ID` and
-`OAUTH_BOT_PRIVATE_JWK` together. `IDP_INTERNAL_URL` optionally routes token requests inside the
-cluster; assertion audiences retain the public token URL. An entirely absent configuration
-keeps anonymous calls. A partial configuration fails startup. `BACKEND_URL` continues to be a
-host and port, without a URL scheme, matching the existing backend transport.
+`IDP_PUBLIC_URL`, `OAUTH_BACKEND_RESOURCE_URI`, `OAUTH_BOT_CLIENT_ID` and
+`OAUTH_BOT_PRIVATE_JWK` are required; startup fails without them. The bot never calls the backend
+anonymously. `IDP_INTERNAL_URL` optionally routes token requests inside the cluster; assertion
+audiences retain the public token URL. `BACKEND_URL` continues to be a host and port, without a URL
+scheme, matching the existing backend transport.
 
 Each human update gets an isolated actor client (`ctx.backend`, `X-PN-Actor: telegram:<id>`).
 Service-only operations, including buffered message/user ingestion, group synchronization,
@@ -105,29 +105,18 @@ persist a tRPC client. A batch belongs to one client and cannot mix actors. Back
 fall back to anonymous transport. The socket authenticates with `auth.token`; a server expiry
 disconnect triggers reconnect, and rejected handshakes invalidate the token with retry backoff.
 
-`IDP_DECISIONS=shadow` is the default. It computes both checks, logs `[ACCESS] shadow` differences,
-and acts exclusively on the original role decision. Legacy roles and group administrators are
-read anonymously; grant interruption also stays on the anonymous legacy path with
-`interruptedById`. `/audit` uses the service read path during shadow, so the backend's actor
-permission check cannot override the legacy command decision. The backend must keep
-`LEGACY_ANONYMOUS=allow` throughout shadow. Grants are read through the backend's migration
-helper, which includes active grants from both tables. An IdP lookup failure is logged and never
-changes a successful shadow decision.
-
-After comparing differences for roughly a week and reconciling roles and Telegram links, set
-`IDP_DECISIONS=enforce` to apply IdP permissions. An unavailable actor check denies actions;
-native chat administrators retain the documented chat-local shortcut. Immunity applies to every
+Commands, callback menus and target checks act on the IdP permissions resolved through
+`tg.access.resolve` (RFC v3 §10.2). An unavailable actor check denies actions; native chat
+administrators (Telegram status `administrator` or `creator`) retain the documented chat-local
+shortcut, which replaces the removed `tg_group_admins` table. Immunity (`tg:immune`) applies to every
 ban-all entry point at enqueue; jobs already accepted continue without permission rechecks.
-`/getroles` lists the legacy roles until enforcement, then the IdP permissions. `/addrole`,
-`/delrole`, `/link` and the unregistered test commands remain in this transitional source tree;
-remove them and the legacy role/group-admin checks in the coordinated cleanup before setting
-`LEGACY_ANONYMOUS=deny`.
-Switching the mode alone does not remove those legacy commands.
+`/getroles` lists the IdP permissions. Roles are managed in the IdP, so the bot no longer has
+`/addrole`, `/delrole` or `/link`.
 
 Moderation audit records use `tg.auditLog.record` and a Redis outbox with stable idempotency keys,
 actor IDs and the basis (`idp_permission`, `telegram_chat_admin`, `automatic`, `telegram_ui`).
-Automatic actions have no human actor. During shadow, a legacy role pass uses the permission
-path basis; the backend flags cases where the snapshot does not back that claim for review.
+Automatic actions have no human actor; the backend flags `idp_permission` records that the
+snapshot does not back for review.
 Redis hashes and a due-time sorted set are changed atomically. Backend outages retry with capped
 exponential backoff; permanent input errors move to `audit-outbox:dead` for inspection. Enable
 Redis AOF, use persistent storage and a non-evicting policy for the audit data. Shutdown keeps
@@ -135,18 +124,17 @@ Redis alive until the runner, buffered storage and module workers stop. If Redis
 record, the bot attempts direct delivery; if both systems fail the full record is logged as lost.
 This fallback is best effort: durability requires functioning persistent Redis, and a crash
 between a Telegram action and its outbox write can still lose that action's audit record. Ban-all
-token-authenticated flow creation persists audit recovery data atomically with the job. Audit delivery starts only
+flow creation persists audit recovery data atomically with the job. Audit delivery starts only
 after a confirmed insertion; caller retries and the resumed orchestrator deliver the same key,
 so a crash in between is recovered without duplicate history. Older jobs without this recovery
-data keep their original behavior. Anonymous flows record once and do not replay because the
-legacy audit endpoint has no idempotency support.
+data keep their original behavior.
 
 Grant socket messages accept both the legacy `adminId` and the new `{ sub, telegramId,
 displayName }` actor. A dashboard user without a linked Telegram account can therefore be shown
 by display name in the grants topic.
 
-Deploy the Phase 3 backend API/SDK before enabling these variables. Validate token acquisition,
-service-only ingestion, actor isolation, socket expiry/reconnect, audit retry/deduplication and
-shadow differences in a test environment. Unit tests do not verify real IdP, Telegram or Key
-Vault connectivity. Roll back the bot image/configuration while keeping backend anonymous
-compatibility enabled; keep Redis persistence so pending audits survive a rollback/restart.
+Validate token acquisition, service-only ingestion, actor isolation, socket expiry/reconnect and
+audit retry/deduplication in a test environment. Unit tests do not verify real IdP, Telegram or Key
+Vault connectivity. Keep Redis persistence so pending audits survive a rollback/restart. Bot images
+from before this cleanup still call the backend anonymously; rolling back to one needs the
+backend's `LEGACY_ANONYMOUS=allow`.

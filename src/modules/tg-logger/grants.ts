@@ -1,17 +1,8 @@
 import { TRPCClientError } from "@trpc/client"
 import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
-import {
-  authorizeAction,
-  DENIED,
-  decideAccess,
-  decisionMode,
-  hasPermission,
-  legacyRoles,
-  PERMISSION,
-  resolveOne,
-} from "@/access"
-import { type ApiOutput, backendAs, backendFor, legacyBackend } from "@/backend"
+import { authorizeAction, PERMISSION } from "@/access"
+import { type ApiOutput, backendAs, backendFor } from "@/backend"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
 import { modules } from ".."
@@ -28,29 +19,17 @@ type GrantedMessage = {
 type InterruptResult = ApiOutput["tg"]["grants"]["interrupt"]
 
 /**
- * Interrupting is checked by the backend (RFC v3 §10.2): with IdP decisions it acts for the user,
- * who needs `tg:grants:manage`; before that the legacy path checks the stored roles, and in shadow
- * mode the IdP decision is only compared.
+ * Interrupting is checked by the backend (RFC v3 §10.2): it acts for the user, who needs
+ * `tg:grants:manage`.
  */
 async function interruptGrant(from: User, target: User): Promise<InterruptResult> {
-  if (decisionMode === "enforce")
-    return backendAs(from.id)
-      .tg.grants.interrupt.mutate({ userId: target.id })
-      .catch((error: unknown) => {
-        if (error instanceof TRPCClientError && error.data?.code === "FORBIDDEN")
-          return { success: false, error: "UNAUTHORIZED" } as const
-        throw error
-      })
-
-  const legacy = legacyBackend.tg.grants.interrupt.mutate({ interruptedById: from.id, userId: target.id })
-  if (decisionMode === "shadow")
-    await decideAccess({
-      check: "grants_menu:interrupt",
-      ids: { actorId: from.id, targetId: target.id },
-      legacy: async () => (await legacy).error !== "UNAUTHORIZED",
-      idp: async () => hasPermission(await resolveOne(backendFor(from), from.id), PERMISSION.grantsManage),
-    }).catch(() => {})
-  return legacy
+  return backendAs(from.id)
+    .tg.grants.interrupt.mutate({ userId: target.id })
+    .catch((error: unknown) => {
+      if (error instanceof TRPCClientError && error.data?.code === "FORBIDDEN")
+        return { success: false, error: "UNAUTHORIZED" } as const
+      throw error
+    })
 }
 
 async function handleInterrupt(ctx: CallbackCtx<Context>, target: User) {
@@ -83,14 +62,11 @@ const getFeedback = (error: Error): string | null => {
 }
 
 async function handleDelete(ctx: CallbackCtx<Context>, data: GrantedMessage): Promise<{ error: Error }> {
-  const userId = ctx.from.id
   const authorization = await authorizeAction({
     check: "grants_menu:delete",
-    actorId: userId,
+    actorId: ctx.from.id,
     backend: backendFor(ctx.from),
     required: [PERMISSION.grantsManage],
-    legacy: async () =>
-      (await legacyRoles(userId)).includes("direttivo") ? { allowed: true, basis: "idp_permission" } : DENIED,
   })
   if (!authorization.allowed) return { error: "UNAUTHORIZED" }
 

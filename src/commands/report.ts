@@ -7,7 +7,6 @@ import { logger } from "@/logger"
 import { modules } from "@/modules"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
-import type { Role } from "@/utils/types"
 
 export const logReport = async (context: Filter<Context, "message"> | CommandScopedContext, repliedTo: Message) => {
   const reportSent = await modules.get("tgLogger").report(repliedTo, context.from)
@@ -28,7 +27,7 @@ export const logReport = async (context: Filter<Context, "message"> | CommandSco
   })
 }
 
-export const report = new CommandsCollection<Role, CommandAccess>().createCommand({
+export const report = new CommandsCollection<string, CommandAccess>().createCommand({
   trigger: ["report", "admin"],
   description: "Report a message to admins",
   scope: "group",

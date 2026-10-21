@@ -55,18 +55,18 @@ type SocketError = {
 export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }> {
   private io: TelegramSocket
   private lastErrorCode: string | null = null
-  private tokenAuth = serviceTokens ? new SocketTokenAuth(serviceTokens, { logger }) : null
+  private tokenAuth = new SocketTokenAuth(serviceTokens, { logger })
 
   constructor() {
     super()
     this.io = io(`http://${env.BACKEND_URL}`, {
       path: WS_PATH,
-      // With the IdP the bot is identified by its token (RFC v3 §8.3); before, by the query.
-      ...(this.tokenAuth ? { auth: this.tokenAuth.auth } : { query: { type: "telegram" } }),
+      // The bot is identified by its token (RFC v3 §8.3).
+      auth: this.tokenAuth.auth,
       autoConnect: false,
       parser,
     })
-    this.tokenAuth?.attach(this.io)
+    this.tokenAuth.attach(this.io)
     this.io.on("connect", () => {
       logger.info("[WS] connected")
       this.lastErrorCode = null
@@ -186,7 +186,7 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
   }
 
   override async stop() {
-    this.tokenAuth?.stop()
+    this.tokenAuth.stop()
     this.io.disconnect()
   }
 

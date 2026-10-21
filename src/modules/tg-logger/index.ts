@@ -219,7 +219,7 @@ export class TgLogger extends Module<ModuleShared> {
   ): Promise<BanAllStartResult> {
     if (type === "BAN") {
       const targetId = typeof target === "number" ? target : target.id
-      const immune = await isBanAllImmune(targetId, entryPoint).catch((error: unknown) => {
+      const immune = await isBanAllImmune(targetId).catch((error: unknown) => {
         logger.error({ error, targetId, entryPoint }, "[banall] Cannot check the target's immunity")
         return null
       })

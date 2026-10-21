@@ -4,9 +4,8 @@ import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation, moderatorFor } from "@/modules/moderation"
 import { ephemeral } from "@/utils/messages"
-import type { Role } from "@/utils/types"
 
-export const kick = new CommandsCollection<Role, CommandAccess>("Kicking").createCommand({
+export const kick = new CommandsCollection<string, CommandAccess>("Kicking").createCommand({
   trigger: "kick",
   args: [{ key: "reason", optional: true, description: "Optional reason to kick the user" }],
   description: "Kick a user from a group",
@@ -15,9 +14,6 @@ export const kick = new CommandsCollection<Role, CommandAccess>("Kicking").creat
   permissions: {
     requiredPermissions: [PERMISSION.moderate],
     allowTelegramChatAdmins: true,
-    allowedRoles: ["owner", "direttivo"],
-    excludedRoles: ["creator"],
-    allowGroupAdmins: true,
   },
   handler: async ({ args, context, repliedTo, authorization }) => {
     if (!repliedTo.from) {

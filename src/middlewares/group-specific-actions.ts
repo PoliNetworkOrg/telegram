@@ -1,6 +1,6 @@
 import type { Filter } from "grammy"
 import { err, ok, type Result } from "neverthrow"
-import { decideAccess, hasPermission, legacyRoles, PERMISSION, resolveOne } from "@/access"
+import { hasPermission, PERMISSION, resolveOne } from "@/access"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
 import { type TelemetryContextFlavor, TrackedMiddleware } from "@/modules/telemetry"
@@ -37,17 +37,14 @@ export class GroupSpecificActions<C extends TelemetryContextFlavor<Context>> ext
       .on("message:text", async (ctx, next) => {
         if (ctx.from.id === ctx.me.id) return next() // skip if bot
         const userId = ctx.from.id
-        // RFC v3 §10.2: `tg:trusted` (legacy: any role) is exempt from the hashtag rules
-        const exempt = await decideAccess({
-          check: "hashtag_exemption",
-          ids: { actorId: userId, chatId: ctx.chatId },
-          legacy: async () => (await legacyRoles(userId)).length > 0,
-          idp: async () => hasPermission(await resolveOne(ctx.backend, userId), PERMISSION.trusted),
-        }).catch((error: unknown) => {
-          // Not knowing is no reason to delete someone's message.
-          logger.warn({ error, userId }, "GroupSpecificActions: cannot check the hashtag exemption")
-          return true
-        })
+        // RFC v3 §10.2: `tg:trusted` is exempt from the hashtag rules
+        const exempt = await resolveOne(ctx.backend, userId)
+          .then((entry) => hasPermission(entry, PERMISSION.trusted))
+          .catch((error: unknown) => {
+            // Not knowing is no reason to delete someone's message.
+            logger.warn({ error, userId }, "GroupSpecificActions: cannot check the hashtag exemption")
+            return true
+          })
         if (exempt) return next()
 
         const chatMember = await ctx.getChatMember(ctx.from.id)

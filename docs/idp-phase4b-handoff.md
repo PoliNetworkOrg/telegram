@@ -1,5 +1,11 @@
 # Phase 4b Telegram handoff
 
+> **Superseded by the Phase 5 bot cleanup.** Cutover step 7 is done: `/addrole`, `/delrole`,
+> `/link`, `/test_db`, the shadow mode and every anonymous backend call are removed, so
+> `IDP_DECISIONS` no longer exists and the IdP variables are required. The bot always applies IdP
+> decisions; native chat admins replace `tg_group_admins`. This document is kept as the
+> record of Phase 4b; see the README for the current behaviour.
+
 Branch: `feat/idp-phase4b-bot`. The working tree contains the completed local implementation;
 no commit, staging, push, PR or deployment was performed during continuation.
 

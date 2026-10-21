@@ -65,17 +65,13 @@ async function editReportMessage<C extends Context>(report: Report, ctx: Callbac
 
 const NOT_ALLOWED = { feedback: "❌ You don't have enough permissions" }
 
-/**
- * RFC v3 §10.2: the report menu had no checks of its own, as only the admin group sees it. That stays
- * the legacy decision; the IdP decision needs the action's permission.
- */
+/** RFC v3 §10.2: each report-menu action needs its own permission. */
 function authorizeReportAction(ctx: CallbackCtx<Context>, button: string, permission: Permission): Promise<Decision> {
   return authorizeAction({
     check: `report_menu:${button}`,
     actorId: ctx.from.id,
     backend: backendFor(ctx.from),
     required: [permission],
-    legacy: async () => ({ allowed: true, basis: "idp_permission" }),
   })
 }
 

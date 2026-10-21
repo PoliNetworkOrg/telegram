@@ -1,4 +1,4 @@
-import { authorizeAction, DENIED, type Decision, legacyRoles, PERMISSION } from "@/access"
+import { authorizeAction, type Decision, PERMISSION } from "@/access"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
@@ -6,7 +6,6 @@ import { Moderation, moderatorFor } from "@/modules/moderation"
 import type { Moderator } from "@/modules/moderation/types"
 import { fmt, fmtChat, fmtUser } from "@/utils/format"
 import type { Context } from "@/utils/types"
-import { hasCampaignReviewRole } from "./authorization"
 import { CAMPAIGN_REVIEW_RETENTION_SECONDS, campaignActorFromUser } from "./reputation"
 import {
   type CampaignSpamReview,
@@ -38,8 +37,6 @@ async function authorizeAndOpenReview(
       actorId: userId,
       backend: ctx.backend,
       required: [PERMISSION.moderateGlobal],
-      legacy: async () =>
-        hasCampaignReviewRole(await legacyRoles(userId)) ? { allowed: true, basis: "idp_permission" } : DENIED,
     })
     if (!decision.allowed) return { feedback: "You are not authorized for this action" }
   } catch (error) {

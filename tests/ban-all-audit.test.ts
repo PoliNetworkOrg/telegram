@@ -3,7 +3,6 @@ import type { BanAllFlow } from "@/modules/moderation/ban-all-flow"
 import type { BanAll } from "@/modules/tg-logger/ban-all"
 
 const state = vi.hoisted(() => ({
-  authenticated: true,
   add: vi.fn(),
   audit: vi.fn(),
   getJob: vi.fn(),
@@ -31,9 +30,6 @@ vi.mock("bullmq", () => ({
 }))
 vi.mock("@/env", () => ({ env: { REDIS_PORT: 6379 } }))
 vi.mock("@/backend", () => ({
-  get serviceTokens() {
-    return state.authenticated ? {} : null
-  },
   serviceBackend: { tg: { groups: { getAll: { query: state.getGroups } } } },
 }))
 vi.mock("@/modules", () => ({ modules: { get: () => ({ record: state.audit }) } }))
@@ -50,7 +46,6 @@ const banAll: BanAll = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  state.authenticated = true
   state.getJob.mockResolvedValue(null)
   state.getGroups.mockResolvedValue([{ telegramId: -1001, hide: false }])
   state.add.mockResolvedValue(undefined)
@@ -85,23 +80,6 @@ describe("ban-all enqueue audit recovery", () => {
     })
     expect(state.add).toHaveBeenCalledOnce()
     expect(state.audit.mock.calls[1]).toEqual(state.audit.mock.calls[0])
-  })
-
-  it("anonymous flow records once and does not replay the non-idempotent legacy audit", async () => {
-    state.authenticated = false
-    const queue = new BanAllQueue()
-    await queue.initiateBanAll(banAll, 99, "automatic", "operation")
-    const flow = state.add.mock.calls[0]?.[0] as BanAllFlow
-    expect(flow.data.audit).toBeUndefined()
-    await state.workers.get("[ban_all.orchestrator]")?.({
-      data: flow.data,
-      name: "ban_all",
-      getDependenciesCount: async () => ({ processed: 1 }),
-      updateProgress: vi.fn(async () => undefined),
-    })
-    state.getJob.mockResolvedValue({ data: flow.data })
-    await queue.initiateBanAll(banAll, 100, "automatic", "operation")
-    expect(state.audit).toHaveBeenCalledOnce()
   })
 
   it("the resumed orchestrator recovers the original actor and audit key", async () => {

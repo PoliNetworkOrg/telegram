@@ -1,6 +1,6 @@
 import type { Filter } from "grammy"
 import type { ChatPermissions, Message } from "grammy/types"
-import { decideAccess, hasPermission, legacyRoles, PERMISSION, resolveOne } from "@/access"
+import { hasPermission, PERMISSION, resolveOne } from "@/access"
 import { serviceBackend } from "@/backend"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
@@ -37,7 +37,6 @@ import { type CampaignSpamReview, createCampaignSpamReview } from "./review-payl
 import { campaignSpamConfig } from "./runtime-config"
 import { campaignSpamReputation } from "./service"
 
-const NETWORK_PRIVILEGED_ROLES = new Set(["president", "owner", "direttivo"])
 const FIRST_POST_PERMISSIONS = {
   can_send_messages: true,
   can_send_audios: false,
@@ -130,21 +129,8 @@ export class CampaignSpamGuard<C extends TelemetryContextFlavor<Context>> extend
    */
   private async isJoinExempt(userId: number): Promise<boolean | null> {
     try {
-      return await decideAccess({
-        check: "campaign_join_exemption",
-        ids: { targetId: userId },
-        legacy: async () => {
-          const [roles, grant] = await Promise.all([
-            legacyRoles(userId),
-            serviceBackend.tg.grants.checkUser.query({ userId }),
-          ])
-          return roles.some((role) => NETWORK_PRIVILEGED_ROLES.has(role)) || grant.isGranted
-        },
-        idp: async () => {
-          const entry = await resolveOne(serviceBackend, userId)
-          return hasPermission(entry, PERMISSION.immune) || entry.grant !== null
-        },
-      })
+      const entry = await resolveOne(serviceBackend, userId)
+      return hasPermission(entry, PERMISSION.immune) || entry.grant !== null
     } catch (error) {
       reportDependencyError(error, "join exemption check")
       return null
