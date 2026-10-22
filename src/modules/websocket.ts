@@ -18,13 +18,12 @@ type SocketActor = { sub: string | null; telegramId: string | null; displayName:
 
 /**
  * The author of a grant for the log: their stored Telegram user when there is one, else the name
- * the backend sent. `actor` is optional for backends that still send only `adminId`.
+ * the backend sent.
  */
-async function grantActor(data: { actor?: SocketActor; adminId: number | null }): Promise<GrantActor | null> {
-  const telegramId = data.actor ? (data.actor.telegramId === null ? null : Number(data.actor.telegramId)) : data.adminId
+async function grantActor({ actor }: { actor: SocketActor }): Promise<GrantActor> {
+  const telegramId = actor.telegramId === null ? null : Number(actor.telegramId)
   const stored: User | null = telegramId ? await MessageUserStorage.getInstance().getStoredUser(telegramId) : null
-  if (stored) return stored
-  return data.actor ? { displayName: data.actor.displayName, telegramId } : null
+  return stored ?? { displayName: actor.displayName, telegramId }
 }
 
 type SocketError = {
@@ -112,9 +111,9 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
       const { userId, validSince, validUntil, reason } = data
       const target = await MessageUserStorage.getInstance().getStoredUser(userId)
       const admin = await grantActor(data)
-      if (!target || !admin) {
-        logger.error("[WS] grant create log ERROR -- cannot retrieve users")
-        cb("Cannot retrieve the users")
+      if (!target) {
+        logger.error("[WS] grant create log ERROR -- cannot retrieve the target user")
+        cb("Cannot retrieve the target user")
         return
       }
 
@@ -142,9 +141,9 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
     this.io.on("logGrantInterrupt", async (data, cb) => {
       const target = await MessageUserStorage.getInstance().getStoredUser(data.userId)
       const admin = await grantActor(data)
-      if (!target || !admin) {
-        logger.error("[WS] grant interrupt log ERROR -- cannot retrieve users")
-        cb("Cannot retrieve the users")
+      if (!target) {
+        logger.error("[WS] grant interrupt log ERROR -- cannot retrieve the target user")
+        cb("Cannot retrieve the target user")
         return
       }
 
@@ -166,19 +165,16 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
       cb(null)
     })
 
-    this.io.on(
-      "leaveChat",
-      async (data: { chatId: number; performerId: number | null; performer?: SocketActor }, cb) => {
-        const { chatId, performer } = data
-        const ok = await this.shared.api.leaveChat(chatId).catch(() => false)
+    this.io.on("leaveChat", async ({ chatId, performer }: { chatId: number; performer: SocketActor }, cb) => {
+      const ok = await this.shared.api.leaveChat(chatId).catch(() => false)
 
-        const performedBy = performer
-          ? { performerTelegramId: performer.telegramId, performerSub: performer.sub }
-          : { performerTelegramId: data.performerId }
-        if (ok) logger.info({ chatId, ...performedBy }, "[WS] leave chat performed")
-        cb(ok)
-      }
-    )
+      if (ok)
+        logger.info(
+          { chatId, performerTelegramId: performer.telegramId, performerSub: performer.sub },
+          "[WS] leave chat performed"
+        )
+      cb(ok)
+    })
   }
 
   override async start() {

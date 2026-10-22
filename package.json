@@ -39,7 +39,7 @@
     "@grammyjs/runner": "^2.0.3",
     "@influxdata/influxdb-client": "^1.35.0",
     "@polinetwork/auth-kit": "^1.1.0",
-    "@polinetwork/backend": "^1.4.0",
+    "@polinetwork/backend": "^2.3.0",
     "@socket.io/devalue-parser": "^0.1.0",
     "@t3-oss/env-core": "^0.13.4",
     "@trpc/client": "^11.5.1",

@@ -31,8 +31,8 @@ export const audit = new CommandsCollection<string, CommandAccess>("Auditing").c
         ({ b, n, i, u, link, code }) => [
           b`🧾 Audit Log: ${args.username}\n`,
           ...list.flatMap((el) => {
-            // Automatic actions have no human actor (RFC v3 §9.2); older rows only have adminId.
-            const actorId = el.actorTgId ?? el.adminId
+            // Automatic actions have no human actor (RFC v3 §9.2).
+            const actorId = el.actorTgId
             return [
               `------------------------------------`,
               n`${u`${b`${el.type.toUpperCase()}`}`} ${i`at ${fmtDate(el.createdAt)}`}`,
