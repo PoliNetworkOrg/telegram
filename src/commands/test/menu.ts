@@ -35,7 +35,7 @@ const generateMenu = MenuGenerator.getInstance().create<{
   ],
 ])
 
-export const testmenu = new CommandsCollection<string, CommandAccess>().createCommand({
+export const testmenu = new CommandsCollection<CommandAccess>().createCommand({
   trigger: "testmenu",
   scope: "private",
   description: "Quick conversation",

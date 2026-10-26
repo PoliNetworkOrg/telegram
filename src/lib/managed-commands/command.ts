@@ -46,10 +46,9 @@ export type CommandScope = "private" | "group" | "both"
 /**
  * The outcome of the built-in permission check. When allowed, `via` tells what let the user through:
  * - `group_admin`: the group admin shortcut (`allowGroupAdmins`)
- * - `role`: one of the `allowedRoles`
- * - `unrestricted`: no role was required
+ * - `unrestricted`: the built-in check found nothing to restrict
  */
-export type PermissionCheck = { allowed: false } | { allowed: true; via: "group_admin" | "role" | "unrestricted" }
+export type PermissionCheck = { allowed: false } | { allowed: true; via: "group_admin" | "unrestricted" }
 
 /**
  * Extends the built-in permission check with application-defined access control.
@@ -61,21 +60,16 @@ export interface AccessControl {
   authorization: { allowed: boolean }
 }
 
-/** No extension: commands declare roles only and handlers receive the built-in {@link PermissionCheck}. */
+/** No extension: handlers receive the built-in {@link PermissionCheck}. */
 export interface DefaultAccessControl extends AccessControl {
   permissions: Record<never, never>
   authorization: PermissionCheck
 }
 
-interface PrivatePermissions<TRole extends string> {
-  /** The roles that are allowed to use the command */
-  allowedRoles?: TRole[]
-  /** The roles that are excluded from using the command */
-  excludedRoles?: TRole[]
-}
-interface GroupPermissions<TRole extends string> extends PrivatePermissions<TRole> {
+type PrivatePermissions = Record<never, never>
+interface GroupPermissions {
   /**
-   * Whether to allow group admins to use the command, without considering their external role
+   * Whether to allow group admins to use the command, without considering their other permissions
    *
    * You can use hooks to override what is considered a group admin, by default it considers users with
    * Telegram Chat Role of "administrator" or "creator" as group admins
@@ -86,9 +80,9 @@ interface GroupPermissions<TRole extends string> extends PrivatePermissions<TRol
   /** Group IDs where the command is not allowed, if a group ID is in both allowedGroupsId and excludedGroupsId, the exclusion takes precedence */
   excludedGroupsId?: number[]
 }
-type Permissions<TRole extends string, S extends CommandScope, TAccess extends AccessControl> = (S extends "private"
-  ? PrivatePermissions<TRole>
-  : GroupPermissions<TRole>) &
+type Permissions<S extends CommandScope, TAccess extends AccessControl> = (S extends "private"
+  ? PrivatePermissions
+  : GroupPermissions) &
   TAccess["permissions"]
 
 export type CommandScopedContext<
@@ -111,14 +105,12 @@ export type CommandConversation<S extends CommandScope = CommandScope, C extends
  * @template A The type of the command arguments, this should be an array of {@link ArgumentOptions}
  * @template R The type of the command reply, this should be "required", "optional" or undefined
  * @template S The scope of the command, this should be "private", "group" or "both"
- * @template TRole The type of the roles used in permissions, this should be a string literal type representing the possible roles in the bot (e.g. "admin" | "moderator" | "user")
  * @template TAccess The application-defined access control, see {@link AccessControl}
  */
 export interface Command<
   A extends CommandArgs,
   R extends CommandReplyTo,
   S extends CommandScope,
-  TRole extends string = string,
   C extends Context = Context,
   TAccess extends AccessControl = DefaultAccessControl,
 > {
@@ -138,11 +130,11 @@ export interface Command<
    */
   args?: A
   /**
-   * The permissions required to use the command, you can either allow or exclude specific roles.
+   * The permissions required to use the command, as defined by the application's {@link AccessControl}.
    *
    * If the command is allowed in groups, you can also allow or exclude specific group IDs and whether or not to consider permissions for group admins.
    */
-  permissions?: Permissions<TRole, S, TAccess>
+  permissions?: Permissions<S, TAccess>
   /**
    * The type of reply that the command accepts, can be "required", "optional" or undefined.
    * If the command accepts a reply, it will be available in the handler as `repliedTo`.
@@ -192,11 +184,13 @@ export interface Command<
 /**
  * A generic command
  */
-export type AnyCommand<
-  TRole extends string = string,
-  C extends Context = Context,
-  TAccess extends AccessControl = DefaultAccessControl,
-> = Command<CommandArgs, CommandReplyTo, CommandScope, TRole, C, TAccess>
+export type AnyCommand<C extends Context = Context, TAccess extends AccessControl = DefaultAccessControl> = Command<
+  CommandArgs,
+  CommandReplyTo,
+  CommandScope,
+  C,
+  TAccess
+>
 
 /**
  * Type guard to check if a command is allowed in groups.
@@ -219,10 +213,9 @@ export type AnyCommand<
 export function isAllowedInGroups<
   A extends CommandArgs,
   R extends CommandReplyTo,
-  TRole extends string = string,
   C extends Context = Context,
   TAccess extends AccessControl = DefaultAccessControl,
->(cmd: Command<A, R, CommandScope, TRole, C, TAccess>): cmd is Command<A, R, "group" | "both", TRole, C, TAccess> {
+>(cmd: Command<A, R, CommandScope, C, TAccess>): cmd is Command<A, R, "group" | "both", C, TAccess> {
   return cmd.scope !== "private"
 }
 
@@ -247,9 +240,8 @@ export function isAllowedInGroups<
 export function isAllowedInPrivateOnly<
   A extends CommandArgs,
   R extends CommandReplyTo,
-  TRole extends string = string,
   C extends Context = Context,
   TAccess extends AccessControl = DefaultAccessControl,
->(cmd: Command<A, R, CommandScope, TRole, C, TAccess>): cmd is Command<A, R, "private", TRole, C, TAccess> {
+>(cmd: Command<A, R, CommandScope, C, TAccess>): cmd is Command<A, R, "private", C, TAccess> {
   return cmd.scope === "private"
 }

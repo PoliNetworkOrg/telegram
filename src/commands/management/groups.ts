@@ -5,7 +5,7 @@ import { GroupManagement } from "@/lib/group-management"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 
-export const groups = new CommandsCollection<string, CommandAccess>("Groups")
+export const groups = new CommandsCollection<CommandAccess>("Groups")
   .createCommand({
     trigger: "updategroup",
     scope: "private",

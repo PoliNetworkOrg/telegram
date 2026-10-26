@@ -10,7 +10,7 @@ import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString } from "@/utils/types"
 import { getOverloadUser, getUser } from "@/utils/users"
 
-export const ban = new CommandsCollection<string, CommandAccess>("Banning")
+export const ban = new CommandsCollection<CommandAccess>("Banning")
   .createCommand({
     trigger: "ban",
     args: [

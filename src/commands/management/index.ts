@@ -5,7 +5,7 @@ import { groups } from "./groups"
 import { role } from "./role"
 import { userid } from "./userid"
 
-export const management = new CommandsCollection<string, CommandAccess>("Management").withCollection(
+export const management = new CommandsCollection<CommandAccess>("Management").withCollection(
   audit,
   groups,
   role,

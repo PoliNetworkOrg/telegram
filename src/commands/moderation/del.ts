@@ -6,7 +6,7 @@ import { Moderation } from "@/modules/moderation"
 import { fmt } from "@/utils/format"
 import { ephemeral, getText } from "@/utils/messages"
 
-export const del = new CommandsCollection<string, CommandAccess>("Deletion").createCommand({
+export const del = new CommandsCollection<CommandAccess>("Deletion").createCommand({
   trigger: "del",
   scope: "group",
   permissions: {

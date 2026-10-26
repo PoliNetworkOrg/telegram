@@ -9,9 +9,9 @@ import type {
   DefaultAccessControl,
 } from "./command"
 
-export class CommandsCollection<TRole extends string, TAccess extends AccessControl = DefaultAccessControl> {
+export class CommandsCollection<TAccess extends AccessControl = DefaultAccessControl> {
   private flushed = false
-  private commands: AnyCommand<TRole, Context, TAccess>[] = []
+  private commands: AnyCommand<Context, TAccess>[] = []
 
   constructor(public name?: string) {}
 
@@ -21,8 +21,8 @@ export class CommandsCollection<TRole extends string, TAccess extends AccessCont
    * @returns `this` instance for chaining
    */
   createCommand<const A extends CommandArgs, const R extends CommandReplyTo, const S extends CommandScope>(
-    cmd: Command<A, R, S, TRole, Context, TAccess>
-  ): CommandsCollection<TRole, TAccess> {
+    cmd: Command<A, R, S, Context, TAccess>
+  ): CommandsCollection<TAccess> {
     if (this.flushed) {
       throw new Error("Cannot add commands after the collection has been flushed")
     }
@@ -30,7 +30,7 @@ export class CommandsCollection<TRole extends string, TAccess extends AccessCont
     return this
   }
 
-  withCollection(...collections: CommandsCollection<TRole, TAccess>[]): CommandsCollection<TRole, TAccess> {
+  withCollection(...collections: CommandsCollection<TAccess>[]): CommandsCollection<TAccess> {
     if (this.flushed) {
       throw new Error("Cannot add commands after the collection has been flushed")
     }
@@ -38,7 +38,7 @@ export class CommandsCollection<TRole extends string, TAccess extends AccessCont
     return this
   }
 
-  flush(): AnyCommand<TRole, Context, TAccess>[] {
+  flush(): AnyCommand<Context, TAccess>[] {
     if (this.flushed) {
       throw new Error("The collection has already been flushed")
     }

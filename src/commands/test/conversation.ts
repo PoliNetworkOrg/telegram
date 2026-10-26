@@ -2,7 +2,7 @@ import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 
-export const testconvo = new CommandsCollection<string, CommandAccess>().createCommand({
+export const testconvo = new CommandsCollection<CommandAccess>().createCommand({
   trigger: "test_convo",
   scope: "private",
   description: "Test conversation",
