@@ -14,6 +14,7 @@ import { AutoModerationStack } from "./middlewares/auto-moderation-stack"
 import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
 import { CampaignSpamGuard } from "./middlewares/campaign-spam"
 import { checkUsername } from "./middlewares/check-username"
+import { GroupAdminsSync } from "./middlewares/group-admins-sync"
 import { GroupSpecificActions } from "./middlewares/group-specific-actions"
 import { MentionListener } from "./middlewares/mention-listener"
 import { MessageLink } from "./middlewares/message-link"
@@ -83,6 +84,7 @@ bot.use(async (ctx, next) => {
 bot.use(MenuGenerator.getInstance())
 bot.use(commands)
 bot.use(new BotMembershipHandler())
+bot.use(new GroupAdminsSync())
 bot.use(new CampaignSpamGuard())
 bot.use(new AutoModerationStack())
 bot.use(new GroupSpecificActions())

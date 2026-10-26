@@ -165,6 +165,11 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
       cb(null)
     })
 
+    this.io.on("getGroupAdmins", async ({ chatIds }: { chatIds: number[] }, cb) => {
+      const { groupAdmins } = await import("@/middlewares/group-admins-sync")
+      cb(await groupAdmins.cached(chatIds).catch(() => []))
+    })
+
     this.io.on("leaveChat", async ({ chatId, performer }: { chatId: number; performer: SocketActor }, cb) => {
       const ok = await this.shared.api.leaveChat(chatId).catch(() => false)
 
