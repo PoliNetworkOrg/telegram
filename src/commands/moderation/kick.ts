@@ -5,7 +5,7 @@ import { logger } from "@/logger"
 import { Moderation, moderatorFor } from "@/modules/moderation"
 import { ephemeral } from "@/utils/messages"
 
-export const kick = new CommandsCollection<string, CommandAccess>("Kicking").createCommand({
+export const kick = new CommandsCollection<CommandAccess>("Kicking").createCommand({
   trigger: "kick",
   args: [{ key: "reason", optional: true, description: "Optional reason to kick the user" }],
   description: "Kick a user from a group",

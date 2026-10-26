@@ -27,7 +27,7 @@ export const logReport = async (context: Filter<Context, "message"> | CommandSco
   })
 }
 
-export const report = new CommandsCollection<string, CommandAccess>().createCommand({
+export const report = new CommandsCollection<CommandAccess>().createCommand({
   trigger: ["report", "admin"],
   description: "Report a message to admins",
   scope: "group",

@@ -7,7 +7,7 @@ import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString } from "@/utils/types"
 
-export const role = new CommandsCollection<string, CommandAccess>("Roles").createCommand({
+export const role = new CommandsCollection<CommandAccess>("Roles").createCommand({
   trigger: "getroles",
   scope: "private",
   description: "Get roles of an user",

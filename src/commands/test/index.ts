@@ -5,7 +5,7 @@ import { testconvo } from "./conversation"
 import { testformat } from "./format"
 import { testmenu } from "./menu"
 
-export const test = new CommandsCollection<string, CommandAccess>("Test").withCollection(
+export const test = new CommandsCollection<CommandAccess>("Test").withCollection(
   testargs,
   testformat,
   testmenu,

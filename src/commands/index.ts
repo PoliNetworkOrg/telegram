@@ -26,7 +26,7 @@ const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
 
 type ConversationContext = TelemetryContextFlavor<CommandScopedContext>
 
-export const commands = new ManagedCommands<string, Context, ConversationContext, CommandAccess>({
+export const commands = new ManagedCommands<Context, ConversationContext, CommandAccess>({
   adapter,
   plugins: [
     (ctx, next) => {

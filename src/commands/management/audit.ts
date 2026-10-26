@@ -5,7 +5,7 @@ import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt, fmtDate } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 
-export const audit = new CommandsCollection<string, CommandAccess>("Auditing").createCommand({
+export const audit = new CommandsCollection<CommandAccess>("Auditing").createCommand({
   trigger: "audit",
   scope: "private",
   description: "Get the audit log of a user",

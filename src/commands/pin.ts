@@ -4,7 +4,7 @@ import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 
-export const pin = new CommandsCollection<string, CommandAccess>()
+export const pin = new CommandsCollection<CommandAccess>()
   .createCommand({
     trigger: "pin",
     description: "Pin a message in a group",

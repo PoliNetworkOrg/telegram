@@ -10,7 +10,7 @@ import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString } from "@/utils/types"
 import { getOverloadUser, getUser } from "@/utils/users"
 
-export const mute = new CommandsCollection<string, CommandAccess>("Muting")
+export const mute = new CommandsCollection<CommandAccess>("Muting")
   .createCommand({
     trigger: "tmute",
     args: [

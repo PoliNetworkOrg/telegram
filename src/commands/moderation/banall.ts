@@ -11,7 +11,7 @@ import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 import { numberOrString } from "@/utils/types"
 
-export const banAll = new CommandsCollection<string, CommandAccess>("Ban All")
+export const banAll = new CommandsCollection<CommandAccess>("Ban All")
   .createCommand({
     trigger: "ban_all",
     description: "PERMA BAN a user from all the Network's groups",

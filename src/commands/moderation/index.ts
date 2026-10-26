@@ -6,7 +6,7 @@ import { del } from "./del"
 import { kick } from "./kick"
 import { mute } from "./mute"
 
-export const moderation = new CommandsCollection<string, CommandAccess>("Moderation").withCollection(
+export const moderation = new CommandsCollection<CommandAccess>("Moderation").withCollection(
   ban,
   banAll,
   del,

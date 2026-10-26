@@ -5,7 +5,7 @@ import { logger } from "@/logger"
 import { fmt } from "@/utils/format"
 import { getTelegramId } from "@/utils/telegram-id"
 
-export const userid = new CommandsCollection<string, CommandAccess>("User IDs").createCommand({
+export const userid = new CommandsCollection<CommandAccess>("User IDs").createCommand({
   trigger: "userid",
   scope: "private",
   description: "Gets the ID of a username",

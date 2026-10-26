@@ -19,7 +19,7 @@ export type CommandAccess = {
   authorization: Decision
 }
 
-export const authorizeCommand: Authorize<Context, string, CommandAccess> = async ({ context, command }) => {
+export const authorizeCommand: Authorize<Context, CommandAccess> = async ({ context, command }) => {
   const { permissions } = command
   if (!permissions?.requiredPermissions?.length) return { allowed: true, basis: null }
   const from = context.from

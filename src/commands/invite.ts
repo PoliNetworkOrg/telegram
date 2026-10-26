@@ -4,7 +4,7 @@ import { CommandsCollection } from "@/lib/managed-commands"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 
-export const invite = new CommandsCollection<string, CommandAccess>().createCommand({
+export const invite = new CommandsCollection<CommandAccess>().createCommand({
   trigger: "invite",
   description: "Display the bot's invite link of the group",
   scope: "group",

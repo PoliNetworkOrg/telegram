@@ -1,7 +1,7 @@
 import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 
-export const testargs = new CommandsCollection<string, CommandAccess>().createCommand({
+export const testargs = new CommandsCollection<CommandAccess>().createCommand({
   trigger: "test_args",
   scope: "private",
   description: "Test args",
