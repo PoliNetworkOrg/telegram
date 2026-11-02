@@ -1,5 +1,6 @@
 import { serviceBackend } from "@/backend"
 import { BANNED_DOMAINS, POLINETWORK_DISCORD_GUILD_ID } from "./constants"
+import { containsBannedDomain } from "./hostnames"
 
 /**
  * checks an array of strings for domains which are not allowed in our groups
@@ -10,7 +11,7 @@ import { BANNED_DOMAINS, POLINETWORK_DISCORD_GUILD_ID } from "./constants"
 export async function checkForAllowedLinks(links: string[]): Promise<boolean> {
   for (const url of links) {
     // these websites are simply not allowed
-    if (BANNED_DOMAINS.some((domain) => url.includes(domain))) return false
+    if (containsBannedDomain(url, BANNED_DOMAINS)) return false
 
     // specific discord invites handling
     const discordMatches = url.matchAll(/discord\.gg\/([^/?#]+)/g)
