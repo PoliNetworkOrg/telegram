@@ -15,6 +15,8 @@ const text = [
   'Opposizioni e ricorsi entro il 28/10/2026. <a href="https://github.com/PoliNetworkOrg/legal/releases/tag/rri-v2026.10.08">Release</a>',
 ].join("\n")
 
+const b64 = (bytes: number[] | Uint8Array) => Buffer.from(bytes).toString("base64")
+
 const payload = (overrides: Partial<PostRegulationPayload> = {}): PostRegulationPayload => ({
   chatId: -1001234,
   topicId: 42,
@@ -29,13 +31,14 @@ const payload = (overrides: Partial<PostRegulationPayload> = {}): PostRegulation
     releaseUrl: "https://github.com/PoliNetworkOrg/legal/releases/tag/rri-v2026.10.08",
   },
   files: [
-    { filename: "rri-v2026.10.08.pdf", contentType: "application/pdf", data: new Uint8Array([1, 2, 3]) },
-    { filename: "rri-v2026.10.08-differenze.pdf", contentType: "application/pdf", data: new Uint8Array([4, 5]) },
+    { filename: "rri-v2026.10.08.pdf", contentType: "application/pdf", base64: b64([1, 2, 3]) },
+    { filename: "differenze-rri-v2026.10.08.pdf", contentType: "application/pdf", base64: b64([4, 5]) },
   ],
+  idempotencyKey: "notification-1",
   ...overrides,
 })
 
-const pdf = (data: Uint8Array) => ({ filename: "a.pdf", contentType: "application/pdf", data })
+const pdf = (base64: string) => ({ filename: "a.pdf", contentType: "application/pdf", base64 })
 
 const rateLimited = (method: string, retryAfter: number) =>
   new GrammyError(
@@ -79,7 +82,7 @@ describe("postRegulation", () => {
     expect(media[0]).toEqual({ type: "document", media: expect.any(InputFile) })
     expect((media[0].media as InputFile).filename).toBe("rri-v2026.10.08.pdf")
     expect(media[1]).toMatchObject({ type: "document", caption: text, parse_mode: "HTML" })
-    expect((media[1].media as InputFile).filename).toBe("rri-v2026.10.08-differenze.pdf")
+    expect((media[1].media as InputFile).filename).toBe("differenze-rri-v2026.10.08.pdf")
   })
 
   it("posts outside topics when no topic is given", async () => {
@@ -90,7 +93,7 @@ describe("postRegulation", () => {
 
   it("sends a single document with sendDocument, since a media group needs two", async () => {
     const api = fakeApi()
-    const result = await postRegulation(asApi(api), payload({ files: [pdf(new Uint8Array([1]))] }))
+    const result = await postRegulation(asApi(api), payload({ files: [pdf(b64([1]))] }))
     expect(result).toEqual({ error: null, messageIds: [100] })
     expect(api.sendMediaGroup).not.toHaveBeenCalled()
     expect(api.sendDocument).toHaveBeenCalledWith(-1001234, expect.any(InputFile), {
@@ -100,11 +103,12 @@ describe("postRegulation", () => {
     })
   })
 
-  it("accepts files delivered as ArrayBuffer", async () => {
+  it("uploads the bytes the base64 encodes", async () => {
     const api = fakeApi()
-    const data = new Uint8Array([9, 8, 7]).buffer as unknown as Uint8Array
-    const result = await postRegulation(asApi(api), payload({ files: [pdf(data)] }))
-    expect(result.error).toBeNull()
+    const bytes = Uint8Array.from({ length: 1000 }, (_, i) => (i * 7) % 256)
+    await postRegulation(asApi(api), payload({ files: [pdf(b64(bytes))] }))
+    const file = api.sendDocument.mock.calls[0] as unknown as [number, InputFile]
+    expect(new Uint8Array((await file[1].toRaw()) as Uint8Array)).toEqual(bytes)
   })
 
   it("sends the text as its own message when it does not fit in a caption", async () => {
@@ -159,9 +163,11 @@ describe("postRegulation", () => {
 
   it.each([
     ["no files", { files: [] }],
-    ["more than ten files", { files: Array.from({ length: 11 }, () => pdf(new Uint8Array([1]))) }],
-    ["an empty file", { files: [pdf(new Uint8Array())] }],
-    ["a file over 50 MB", { files: [pdf(new Uint8Array(50 * 1024 * 1024 + 1))] }],
+    ["more than ten files", { files: Array.from({ length: 11 }, () => pdf(b64([1]))) }],
+    ["an empty file", { files: [pdf("")] }],
+    ["a file that is not base64", { files: [pdf("not base64!")] }],
+    ["a file over 50 MB", { files: [pdf(Buffer.alloc(50 * 1024 * 1024 + 1).toString("base64"))] }],
+    ["a missing idempotency key", { idempotencyKey: "" }],
     ["an empty text", { text: "  " }],
     ["a missing topic field", { topicId: undefined as unknown as null }],
   ])("refuses %s without calling Telegram", async (_, overrides) => {

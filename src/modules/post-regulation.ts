@@ -8,10 +8,7 @@ const MAX_FILE_BYTES = 50 * 1024 * 1024
 const MAX_CAPTION_LENGTH = 1024
 const MAX_FILES = 10
 
-/**
- * The backend's `PostRegulation` (`src/websocket/telegram.ts`, PoliNetworkOrg/backend#117), plus `idempotencyKey`,
- * which the backend does not send yet.
- */
+/** The backend's `PostRegulation` (`src/websocket/telegram.ts`, PoliNetworkOrg/backend#117). */
 export type PostRegulationPayload = {
   chatId: number
   /** Forum topic (`message_thread_id`), or null for a chat without topics. */
@@ -28,13 +25,16 @@ export type PostRegulationPayload = {
     tag: string
     releaseUrl: string
   }
-  /** In order: the new official PDF, then the differences PDF. */
-  files: { filename: string; contentType: string; data: Uint8Array }[]
   /**
-   * Same key, same post: a repeated command gets the first one's answer instead of posting again, whatever else it
-   * carries. E.g. the backend's notification key `emanation:<draftId>:telegram`.
+   * In order: the new official PDF, then the differences PDF. Base64 rather than bytes: the backend's Bun engine does
+   * not deliver socket.io binary attachments.
    */
-  idempotencyKey?: string
+  files: { filename: string; contentType: string; base64: string }[]
+  /**
+   * The backend's notification id, the same on every retry. Same key, same post: a repeated command gets the first
+   * one's answer instead of posting again, whatever else it carries.
+   */
+  idempotencyKey: string
 }
 
 /** The `postRegulation` command; to be dropped once a published `@polinetwork/backend` exports it. */
@@ -53,18 +53,20 @@ const payloadSchema = z.object({
   text: z.string().trim().min(1),
   files: z
     .array(
-      z.object({
-        filename: z.string().trim().min(1),
-        // socket.io delivers binary attachments as a Buffer over websocket and as an ArrayBuffer over polling.
-        data: z
-          .union([z.instanceof(Uint8Array), z.instanceof(ArrayBuffer)])
-          .transform((data) => (data instanceof Uint8Array ? data : new Uint8Array(data)))
-          .refine((data) => data.byteLength > 0, "file is empty")
-          .refine((data) => data.byteLength <= MAX_FILE_BYTES, "file exceeds Telegram's 50 MB upload limit"),
-      })
+      z
+        .object({
+          filename: z.string().trim().min(1),
+          base64: z
+            .base64()
+            .transform((base64) => Buffer.from(base64, "base64"))
+            .refine((data) => data.byteLength > 0, "file is empty")
+            .refine((data) => data.byteLength <= MAX_FILE_BYTES, "file exceeds Telegram's 50 MB upload limit"),
+        })
+        .transform(({ filename, base64 }) => ({ filename, data: base64 }))
     )
     .min(1)
     .max(MAX_FILES),
+  idempotencyKey: z.string().min(1),
 })
 
 export type RateLimitRetryOptions = {
