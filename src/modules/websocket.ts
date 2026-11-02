@@ -1,7 +1,7 @@
 import { type TelegramSocket, WS_PATH } from "@polinetwork/backend"
 import * as parser from "@socket.io/devalue-parser"
 import type { User } from "grammy/types"
-import { io } from "socket.io-client"
+import { io, type Socket } from "socket.io-client"
 import { serviceTokens } from "@/backend"
 import { env } from "@/env"
 import { Module } from "@/lib/modules"
@@ -9,6 +9,7 @@ import { logger } from "@/logger"
 import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { duration } from "@/utils/duration"
 import type { ModuleShared } from "@/utils/types"
+import { type PostRegulationEvents, postRegulation } from "./post-regulation"
 import type { TgLogger } from "./tg-logger"
 import type { GrantActor } from "./tg-logger/types"
 import { SocketTokenAuth } from "./websocket-auth"
@@ -46,13 +47,19 @@ type SocketError = {
   type: string
 }
 
+/** The backend's commands, plus the ones the bot handles before `@polinetwork/backend` exports them. */
+type BotSocket =
+  TelegramSocket extends Socket<infer ToClient, infer ToServer>
+    ? Socket<ToClient & PostRegulationEvents, ToServer>
+    : never
+
 /**
  * WebSocket to handle from-backend communication
  *
  * @param bot - The telegram bot instance
  */
 export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }> {
-  private io: TelegramSocket
+  private io: BotSocket
   private lastErrorCode: string | null = null
   private tokenAuth = new SocketTokenAuth(serviceTokens, { logger })
 
@@ -174,6 +181,13 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
           "[WS] leave chat performed"
         )
       cb(ok)
+    })
+
+    this.io.on("postRegulation", async (data, cb) => {
+      const result = await postRegulation(this.shared.api, data)
+      if (result.ok) logger.info({ chatId: result.chatId, messageIds: result.messageIds }, "[WS] regulation posted")
+      else logger.error({ error: result.error, messageIds: result.messageIds }, "[WS] cannot post the regulation")
+      cb(result)
     })
   }
 
