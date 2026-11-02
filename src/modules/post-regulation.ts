@@ -8,7 +8,10 @@ const MAX_FILE_BYTES = 50 * 1024 * 1024
 const MAX_CAPTION_LENGTH = 1024
 const MAX_FILES = 10
 
-/** The `postRegulation` payload, as the backend defines it in `src/websocket/telegram.ts`. */
+/**
+ * The backend's `PostRegulation` (`src/websocket/telegram.ts`, PoliNetworkOrg/backend#117), plus `idempotencyKey`,
+ * which the backend does not send yet.
+ */
 export type PostRegulationPayload = {
   chatId: number
   /** Forum topic (`message_thread_id`), or null for a chat without topics. */
@@ -27,11 +30,14 @@ export type PostRegulationPayload = {
   }
   /** In order: the new official PDF, then the differences PDF. */
   files: { filename: string; contentType: string; data: Uint8Array }[]
-  /** Same key, same post: a repeated command gets the first one's answer instead of posting again. */
+  /**
+   * Same key, same post: a repeated command gets the first one's answer instead of posting again, whatever else it
+   * carries. E.g. the backend's notification key `emanation:<draftId>:telegram`.
+   */
   idempotencyKey?: string
 }
 
-/** The `postRegulation` command; to be dropped once `@polinetwork/backend` exports it. */
+/** The `postRegulation` command; to be dropped once a published `@polinetwork/backend` exports it. */
 export type PostRegulationEvents = {
   postRegulation: (data: PostRegulationPayload, cb: (error: string | null, result?: PostedMessages) => void) => void
 }
