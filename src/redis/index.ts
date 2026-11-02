@@ -3,7 +3,6 @@ import { createClient, SocketClosedUnexpectedlyError } from "redis"
 import { env } from "@/env"
 import { logger } from "@/logger"
 
-let openSuccess: boolean = false
 const client = createClient({
   socket: {
     host: env.REDIS_HOST,
@@ -11,14 +10,11 @@ const client = createClient({
     reconnectStrategy: (retries) => {
       const n = retries + 1
       logger.debug(`[REDIS] reconnect retry #${n}`)
-      if (openSuccess && n < 5) {
-        const jitter = Math.floor(Math.random() * 200)
-        const delay = Math.min(2 ** retries * 50, 2000)
-        return delay + jitter
-      }
-
-      if (n < 3) return 1000
-      return false
+      // A storage outage must not permanently close the shared client. Keep
+      // retrying so the bot and its in-memory adapters recover when Redis does.
+      const jitter = Math.floor(Math.random() * 200)
+      const delay = Math.min(2 ** retries * 50, 2000)
+      return delay + jitter
     },
   },
   username: env.REDIS_USERNAME,
@@ -43,7 +39,6 @@ async function ready(): Promise<boolean> {
 
   try {
     await client.connect()
-    openSuccess = true
     return true
   } catch (_) {
     logger.error("[REDIS] connection failed. Some functions may not work correctly. This should be addressed ASAP.")
