@@ -8,26 +8,43 @@ const MAX_FILE_BYTES = 50 * 1024 * 1024
 const MAX_CAPTION_LENGTH = 1024
 const MAX_FILES = 10
 
-const isoDate = z.iso.date()
+/** The `postRegulation` payload, as the backend defines it in `src/websocket/telegram.ts`. */
+export type PostRegulationPayload = {
+  chatId: number
+  /** Forum topic (`message_thread_id`), or null for a chat without topics. */
+  topicId: number | null
+  /** Telegram HTML, escaped by the backend. */
+  text: string
+  /** The fields behind `text`; the bot posts `text` as is. */
+  regulation: {
+    documentTitle: string
+    draftTitle: string
+    body: string
+    deliberaDate: string
+    oppositionDeadline: string | null
+    tag: string
+    releaseUrl: string
+  }
+  /** In order: the new official PDF, then the differences PDF. */
+  files: { filename: string; contentType: string; data: Uint8Array }[]
+  /** Same key, same post: a repeated command gets the first one's answer instead of posting again. */
+  idempotencyKey?: string
+}
 
+/** The `postRegulation` command; to be dropped once `@polinetwork/backend` exports it. */
+export type PostRegulationEvents = {
+  postRegulation: (data: PostRegulationPayload, cb: (error: string | null, result?: PostedMessages) => void) => void
+}
+
+/** The messages posted; on failure, the ones posted before it (a partial post), possibly none. */
+export type PostedMessages = { messageIds: number[] }
+export type PostRegulationResult = { error: string | null } & PostedMessages
+
+/** Only what the bot uses is checked; `regulation` is the backend's business. */
 const payloadSchema = z.object({
   chatId: z.number().int(),
-  /** The forum topic (`message_thread_id`); null for a chat without topics. */
   topicId: z.number().int().positive().nullable(),
-  regulation: z.object({
-    /** E.g. "Raccolta dei Regolamenti Interni". */
-    title: z.string().trim().min(1),
-    kind: z.enum(["approval", "rectification"]),
-    /** Who approved or rectified: "Consiglio Direttivo", "Assemblea", "Segretario", "Mario Rossi su delega del Segretario". */
-    body: z.string().trim().min(1),
-    /** Date of the delibera, or of the rectification, as YYYY-MM-DD. */
-    date: isoDate,
-    /** Last day to file an opposition or appeal, as YYYY-MM-DD; null when none applies. */
-    oppositionDeadline: isoDate.nullable(),
-    /** The GitHub release with the official PDF. */
-    releaseUrl: z.url({ protocol: /^https$/ }),
-  }),
-  /** The documents to attach, in display order: the new text first, then the differences. */
+  text: z.string().trim().min(1),
   files: z
     .array(
       z.object({
@@ -44,26 +61,13 @@ const payloadSchema = z.object({
     .max(MAX_FILES),
 })
 
-export type PostRegulationPayload = z.input<typeof payloadSchema>
-export type RegulationNotice = z.output<typeof payloadSchema>["regulation"]
-
-/**
- * What the bot answers. `messageIds` lists every message posted, also on failure, since a failure after the
- * text was sent leaves a partial post in the chat.
- */
-export type PostRegulationResult =
-  | { ok: true; chatId: number; topicId: number | null; messageIds: number[]; sentAt: Date }
-  | { ok: false; error: string; messageIds: number[] }
-
-/** The `postRegulation` command the backend sends; to be dropped once `@polinetwork/backend` exports it. */
-export type PostRegulationEvents = {
-  postRegulation: (data: PostRegulationPayload, cb: (result: PostRegulationResult) => void) => void
-}
-
 export type RateLimitRetryOptions = {
   /** Total attempts, the first included. Default 5. */
   maxAttempts?: number
-  /** Give up instead of waiting once the waits would add up to more than this. Default 120 s. */
+  /**
+   * Give up instead of waiting once the waits would add up to more than this. Default 30 s, so that with the uploads
+   * the bot answers within the backend's 60 s ack timeout, after which the backend sends the command again.
+   */
   maxTotalWaitMs?: number
   sleep?: (ms: number) => Promise<void>
 }
@@ -73,7 +77,7 @@ export type RateLimitRetryOptions = {
  * Only 429 is retried: Telegram did not perform the request, so trying again cannot post twice.
  */
 export async function retryOnRateLimit<T>(call: () => Promise<T>, options: RateLimitRetryOptions = {}): Promise<T> {
-  const { maxAttempts = 5, maxTotalWaitMs = 120_000, sleep = wait } = options
+  const { maxAttempts = 5, maxTotalWaitMs = 30_000, sleep = wait } = options
   let waited = 0
   for (let attempt = 1; ; attempt++) {
     try {
@@ -88,42 +92,9 @@ export async function retryOnRateLimit<T>(call: () => Promise<T>, options: RateL
   }
 }
 
-const escapeHtml = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-
-/** YYYY-MM-DD to DD/MM/YYYY, as the documents print it. */
-const italianDate = (date: string) => date.split("-").reverse().join("/")
-
-/** The announcement, in Telegram HTML. */
-export function formatRegulationNotice(notice: RegulationNotice): string {
-  const lines =
-    notice.kind === "approval"
-      ? [
-          `📜 <b>${escapeHtml(notice.title)}</b>`,
-          "È stata emanata una nuova versione.",
-          "",
-          `<b>Approvazione:</b> ${escapeHtml(notice.body)}, delibera del ${italianDate(notice.date)}`,
-        ]
-      : [
-          `📜 <b>${escapeHtml(notice.title)}</b>`,
-          "È stata emanata una rettifica.",
-          "",
-          `<b>Rettifica:</b> ${escapeHtml(notice.body)}, il ${italianDate(notice.date)}`,
-        ]
-  if (notice.oppositionDeadline)
-    lines.push(`<b>Opposizioni e ricorsi:</b> entro il ${italianDate(notice.oppositionDeadline)}`)
-  lines.push("", `<a href="${escapeHtml(notice.releaseUrl).replaceAll('"', "&quot;")}">Versione ufficiale</a>`)
-  return lines.join("\n")
-}
-
 /** The length Telegram checks against its caption limit: the text once the HTML is parsed. */
 function visibleLength(html: string): number {
-  const text = html
-    .replace(/<[^>]*>/g, "")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&amp;", "&")
-  return text.length
+  return html.replace(/<[^>]*>/g, "").replace(/&(lt|gt|quot|amp|#\d+|#x[\da-f]+);/gi, "_").length
 }
 
 function describeError(error: unknown): string {
@@ -135,8 +106,8 @@ function describeError(error: unknown): string {
 type PostApi = Pick<Api, "sendMessage" | "sendDocument" | "sendMediaGroup">
 
 /**
- * Posts a regulation announcement with its documents: one media group (or one document) with the announcement as
- * caption, or the announcement as a message followed by the documents when it does not fit in a caption.
+ * Posts a regulation announcement with its documents: one media group (or one document) with the text as caption,
+ * or the text as a message followed by the documents when it does not fit in a caption.
  */
 export async function postRegulation(
   api: PostApi,
@@ -145,9 +116,8 @@ export async function postRegulation(
 ): Promise<PostRegulationResult> {
   const messageIds: number[] = []
   try {
-    const { chatId, topicId, regulation, files } = payloadSchema.parse(payload)
+    const { chatId, topicId, text, files } = payloadSchema.parse(payload)
     const thread = topicId === null ? {} : { message_thread_id: topicId }
-    const text = formatRegulationNotice(regulation)
     const caption = visibleLength(text) <= MAX_CAPTION_LENGTH ? text : null
     const send = <T>(call: () => Promise<T>) => retryOnRateLimit(call, retry)
     const record = (...messages: Message[]) => messageIds.push(...messages.map((m) => m.message_id))
@@ -171,7 +141,8 @@ export async function postRegulation(
         )
       )
     } else {
-      // In a group of documents each one keeps its own caption: the last one reads as the album's.
+      // In a group of documents each one keeps its own caption, shown under it: on the last one it reads as the
+      // album's, on the first it would sit between the documents.
       const media = documents.map(
         (media, i): InputMediaDocument =>
           i === documents.length - 1 && caption !== null
@@ -181,8 +152,33 @@ export async function postRegulation(
       record(...(await send(() => api.sendMediaGroup(chatId, media, thread))))
     }
 
-    return { ok: true, chatId, topicId, messageIds, sentAt: new Date() }
+    return { error: null, messageIds }
   } catch (error) {
-    return { ok: false, error: describeError(error), messageIds }
+    return { error: describeError(error), messageIds }
+  }
+}
+
+/**
+ * Remembers posts by idempotency key: a command repeated while the first is in flight waits for it, one repeated
+ * after a success gets the same message ids. Failures are forgotten so that the backend's retry posts again.
+ * Kept in memory: a restart of the bot forgets the keys.
+ */
+export class IdempotentPosts {
+  private readonly posts = new Map<string, Promise<PostRegulationResult>>()
+
+  constructor(private readonly ttlMs = 24 * 60 * 60 * 1000) {}
+
+  run(key: string | undefined, post: () => Promise<PostRegulationResult>): Promise<PostRegulationResult> {
+    if (key === undefined) return post()
+    const known = this.posts.get(key)
+    if (known) return known
+
+    const pending = post().then((result) => {
+      if (result.error === null) setTimeout(() => this.posts.delete(key), this.ttlMs).unref()
+      else this.posts.delete(key)
+      return result
+    })
+    this.posts.set(key, pending)
+    return pending
   }
 }

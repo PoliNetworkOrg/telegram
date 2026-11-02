@@ -9,7 +9,7 @@ import { logger } from "@/logger"
 import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { duration } from "@/utils/duration"
 import type { ModuleShared } from "@/utils/types"
-import { type PostRegulationEvents, postRegulation } from "./post-regulation"
+import { IdempotentPosts, type PostRegulationEvents, postRegulation } from "./post-regulation"
 import type { TgLogger } from "./tg-logger"
 import type { GrantActor } from "./tg-logger/types"
 import { SocketTokenAuth } from "./websocket-auth"
@@ -62,6 +62,7 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
   private io: BotSocket
   private lastErrorCode: string | null = null
   private tokenAuth = new SocketTokenAuth(serviceTokens, { logger })
+  private regulationPosts = new IdempotentPosts()
 
   constructor() {
     super()
@@ -184,10 +185,11 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
     })
 
     this.io.on("postRegulation", async (data, cb) => {
-      const result = await postRegulation(this.shared.api, data)
-      if (result.ok) logger.info({ chatId: result.chatId, messageIds: result.messageIds }, "[WS] regulation posted")
-      else logger.error({ error: result.error, messageIds: result.messageIds }, "[WS] cannot post the regulation")
-      cb(result)
+      const key = typeof data?.idempotencyKey === "string" ? data.idempotencyKey : undefined
+      const { error, messageIds } = await this.regulationPosts.run(key, () => postRegulation(this.shared.api, data))
+      if (error === null) logger.info({ chatId: data.chatId, messageIds }, "[WS] regulation posted")
+      else logger.error({ error, messageIds }, "[WS] cannot post the regulation")
+      cb(error, { messageIds })
     })
   }
 

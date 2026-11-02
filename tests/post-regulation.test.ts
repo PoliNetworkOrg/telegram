@@ -1,33 +1,41 @@
 import { GrammyError, InputFile } from "grammy"
 import type { InputMediaDocument } from "grammy/types"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
-  formatRegulationNotice,
+  IdempotentPosts,
   type PostRegulationPayload,
+  type PostRegulationResult,
   postRegulation,
-  type RegulationNotice,
   retryOnRateLimit,
 } from "@/modules/post-regulation"
 
-const notice: RegulationNotice = {
-  title: "Raccolta dei Regolamenti Interni",
-  kind: "approval",
-  body: "Consiglio Direttivo",
-  date: "2026-10-08",
-  oppositionDeadline: "2026-10-18",
-  releaseUrl: "https://github.com/PoliNetworkOrg/legal/releases/tag/rri-v2026.10.08",
-}
+const text = [
+  "📜 <b>Raccolta dei Regolamenti Interni</b>",
+  "Approvata dal Consiglio Direttivo il 08/10/2026.",
+  'Opposizioni e ricorsi entro il 28/10/2026. <a href="https://github.com/PoliNetworkOrg/legal/releases/tag/rri-v2026.10.08">Release</a>',
+].join("\n")
 
 const payload = (overrides: Partial<PostRegulationPayload> = {}): PostRegulationPayload => ({
   chatId: -1001234,
   topicId: 42,
-  regulation: notice,
+  text,
+  regulation: {
+    documentTitle: "Raccolta dei Regolamenti Interni",
+    draftTitle: "Riforma dei gruppi",
+    body: "Consiglio Direttivo",
+    deliberaDate: "2026-10-08",
+    oppositionDeadline: "2026-10-28",
+    tag: "rri-v2026.10.08",
+    releaseUrl: "https://github.com/PoliNetworkOrg/legal/releases/tag/rri-v2026.10.08",
+  },
   files: [
-    { filename: "rri-v2026.10.08.pdf", data: new Uint8Array([1, 2, 3]) },
-    { filename: "rri-v2026.10.08-differenze.pdf", data: new Uint8Array([4, 5]) },
+    { filename: "rri-v2026.10.08.pdf", contentType: "application/pdf", data: new Uint8Array([1, 2, 3]) },
+    { filename: "rri-v2026.10.08-differenze.pdf", contentType: "application/pdf", data: new Uint8Array([4, 5]) },
   ],
   ...overrides,
 })
+
+const pdf = (data: Uint8Array) => ({ filename: "a.pdf", contentType: "application/pdf", data })
 
 const rateLimited = (method: string, retryAfter: number) =>
   new GrammyError(
@@ -56,52 +64,12 @@ function fakeApi() {
 /** The fake only returns the message ids the code reads. */
 const asApi = (api: ReturnType<typeof fakeApi>) => api as unknown as Parameters<typeof postRegulation>[0]
 
-describe("formatRegulationNotice", () => {
-  it("lists title, body, delibera date, opposition deadline and release link in Italian", () => {
-    expect(formatRegulationNotice(notice)).toBe(
-      [
-        "📜 <b>Raccolta dei Regolamenti Interni</b>",
-        "È stata emanata una nuova versione.",
-        "",
-        "<b>Approvazione:</b> Consiglio Direttivo, delibera del 08/10/2026",
-        "<b>Opposizioni e ricorsi:</b> entro il 18/10/2026",
-        "",
-        '<a href="https://github.com/PoliNetworkOrg/legal/releases/tag/rri-v2026.10.08">Versione ufficiale</a>',
-      ].join("\n")
-    )
-  })
-
-  it("words a rectification as such and omits a missing deadline", () => {
-    const text = formatRegulationNotice({
-      ...notice,
-      kind: "rectification",
-      body: "Mario Rossi su delega del Segretario",
-      oppositionDeadline: null,
-    })
-    expect(text).toContain("È stata emanata una rettifica.")
-    expect(text).toContain("<b>Rettifica:</b> Mario Rossi su delega del Segretario, il 08/10/2026")
-    expect(text).not.toContain("Opposizioni")
-  })
-
-  it("escapes HTML in every field it is given", () => {
-    const text = formatRegulationNotice({
-      ...notice,
-      title: "A <b> & B",
-      body: "<script>",
-      releaseUrl: 'https://example.org/?a=1&b="x"',
-    })
-    expect(text).toContain("<b>A &lt;b&gt; &amp; B</b>")
-    expect(text).toContain("&lt;script&gt;")
-    expect(text).toContain('href="https://example.org/?a=1&amp;b=&quot;x&quot;"')
-  })
-})
-
 describe("postRegulation", () => {
-  it("posts the documents as one media group in the topic, captioned on the last document", async () => {
+  it("posts the documents as one media group in the topic, the text as caption of the last one", async () => {
     const api = fakeApi()
     const result = await postRegulation(asApi(api), payload())
 
-    expect(result).toMatchObject({ ok: true, chatId: -1001234, topicId: 42, messageIds: [100, 101] })
+    expect(result).toEqual({ error: null, messageIds: [100, 101] })
     expect(api.sendMessage).not.toHaveBeenCalled()
     expect(api.sendMediaGroup).toHaveBeenCalledOnce()
     const [chatId, media, other] = api.sendMediaGroup.mock.calls[0] as unknown as [number, InputMediaDocument[], object]
@@ -110,11 +78,7 @@ describe("postRegulation", () => {
     expect(media).toHaveLength(2)
     expect(media[0]).toEqual({ type: "document", media: expect.any(InputFile) })
     expect((media[0].media as InputFile).filename).toBe("rri-v2026.10.08.pdf")
-    expect(media[1]).toMatchObject({
-      type: "document",
-      caption: formatRegulationNotice(notice),
-      parse_mode: "HTML",
-    })
+    expect(media[1]).toMatchObject({ type: "document", caption: text, parse_mode: "HTML" })
     expect((media[1].media as InputFile).filename).toBe("rri-v2026.10.08-differenze.pdf")
   })
 
@@ -126,32 +90,30 @@ describe("postRegulation", () => {
 
   it("sends a single document with sendDocument, since a media group needs two", async () => {
     const api = fakeApi()
-    const result = await postRegulation(
-      asApi(api),
-      payload({ files: [{ filename: "a.pdf", data: new Uint8Array([1]) }] })
-    )
-    expect(result).toMatchObject({ ok: true, messageIds: [100] })
+    const result = await postRegulation(asApi(api), payload({ files: [pdf(new Uint8Array([1]))] }))
+    expect(result).toEqual({ error: null, messageIds: [100] })
     expect(api.sendMediaGroup).not.toHaveBeenCalled()
     expect(api.sendDocument).toHaveBeenCalledWith(-1001234, expect.any(InputFile), {
       message_thread_id: 42,
-      caption: formatRegulationNotice(notice),
+      caption: text,
       parse_mode: "HTML",
     })
   })
 
   it("accepts files delivered as ArrayBuffer", async () => {
     const api = fakeApi()
-    const data = new Uint8Array([9, 8, 7]).buffer
-    const result = await postRegulation(asApi(api), payload({ files: [{ filename: "a.pdf", data }] }))
-    expect(result.ok).toBe(true)
+    const data = new Uint8Array([9, 8, 7]).buffer as unknown as Uint8Array
+    const result = await postRegulation(asApi(api), payload({ files: [pdf(data)] }))
+    expect(result.error).toBeNull()
   })
 
   it("sends the text as its own message when it does not fit in a caption", async () => {
     const api = fakeApi()
-    const result = await postRegulation(asApi(api), payload({ regulation: { ...notice, title: "x".repeat(1100) } }))
+    const long = `<b>${"x".repeat(1100)}</b>`
+    const result = await postRegulation(asApi(api), payload({ text: long }))
 
-    expect(result).toMatchObject({ ok: true, messageIds: [100, 101, 102] })
-    expect(api.sendMessage).toHaveBeenCalledWith(-1001234, expect.stringContaining("x".repeat(1100)), {
+    expect(result).toEqual({ error: null, messageIds: [100, 101, 102] })
+    expect(api.sendMessage).toHaveBeenCalledWith(-1001234, long, {
       message_thread_id: 42,
       parse_mode: "HTML",
       link_preview_options: { is_disabled: true },
@@ -162,8 +124,8 @@ describe("postRegulation", () => {
 
   it("counts the caption limit on the visible text, not the HTML", async () => {
     const api = fakeApi()
-    // The HTML is longer than 1024 characters, the text Telegram counts is not.
-    await postRegulation(asApi(api), payload({ regulation: { ...notice, title: "&".repeat(800) } }))
+    // 800 entities are 4000 characters of HTML but 800 of text.
+    await postRegulation(asApi(api), payload({ text: `<b>${"&amp;".repeat(800)}</b>` }))
     expect(api.sendMessage).not.toHaveBeenCalled()
   })
 
@@ -174,7 +136,7 @@ describe("postRegulation", () => {
 
     const result = await postRegulation(asApi(api), payload(), { sleep })
 
-    expect(result).toMatchObject({ ok: true, messageIds: [100, 101] })
+    expect(result).toEqual({ error: null, messageIds: [100, 101] })
     expect(sleep).toHaveBeenCalledWith(7000)
     expect(api.sendMediaGroup).toHaveBeenCalledTimes(2)
   })
@@ -190,32 +152,24 @@ describe("postRegulation", () => {
       )
     )
 
-    const result = await postRegulation(asApi(api), payload({ regulation: { ...notice, title: "x".repeat(1100) } }))
+    const result = await postRegulation(asApi(api), payload({ text: "x".repeat(1100) }))
 
-    expect(result).toEqual({
-      ok: false,
-      error: "sendMediaGroup: 400 Bad Request: file too big",
-      messageIds: [100],
-    })
+    expect(result).toEqual({ error: "sendMediaGroup: 400 Bad Request: file too big", messageIds: [100] })
   })
 
   it.each([
     ["no files", { files: [] }],
-    [
-      "more than ten files",
-      { files: Array.from({ length: 11 }, () => ({ filename: "a.pdf", data: new Uint8Array([1]) })) },
-    ],
-    ["an empty file", { files: [{ filename: "a.pdf", data: new Uint8Array() }] }],
-    ["a file over 50 MB", { files: [{ filename: "a.pdf", data: new Uint8Array(50 * 1024 * 1024 + 1) }] }],
-    ["a malformed date", { regulation: { ...notice, date: "08/10/2026" } }],
-    ["a non-https release link", { regulation: { ...notice, releaseUrl: "javascript:alert(1)" } }],
+    ["more than ten files", { files: Array.from({ length: 11 }, () => pdf(new Uint8Array([1]))) }],
+    ["an empty file", { files: [pdf(new Uint8Array())] }],
+    ["a file over 50 MB", { files: [pdf(new Uint8Array(50 * 1024 * 1024 + 1))] }],
+    ["an empty text", { text: "  " }],
     ["a missing topic field", { topicId: undefined as unknown as null }],
   ])("refuses %s without calling Telegram", async (_, overrides) => {
     const api = fakeApi()
     const result = await postRegulation(asApi(api), payload(overrides as Partial<PostRegulationPayload>))
 
-    expect(result).toMatchObject({ ok: false, messageIds: [] })
-    expect(result.ok || result.error).toMatch(/^invalid payload/)
+    expect(result.messageIds).toEqual([])
+    expect(result.error).toMatch(/^invalid payload/)
     expect(api.sendMessage).not.toHaveBeenCalled()
     expect(api.sendDocument).not.toHaveBeenCalled()
     expect(api.sendMediaGroup).not.toHaveBeenCalled()
@@ -237,14 +191,76 @@ describe("retryOnRateLimit", () => {
     expect(sleep).toHaveBeenCalledTimes(2)
   })
 
-  it("does not wait past the total budget", async () => {
+  it("does not wait past 30 s in total by default, inside the backend's 60 s ack timeout", async () => {
     const call = vi
       .fn()
-      .mockRejectedValueOnce(rateLimited("sendMessage", 60))
-      .mockRejectedValue(rateLimited("sendMessage", 61))
+      .mockRejectedValueOnce(rateLimited("sendMessage", 20))
+      .mockRejectedValue(rateLimited("sendMessage", 11))
     const sleep = vi.fn(async () => {})
-    await expect(retryOnRateLimit(call, { maxTotalWaitMs: 120_000, sleep })).rejects.toBeInstanceOf(GrammyError)
+    await expect(retryOnRateLimit(call, { sleep })).rejects.toBeInstanceOf(GrammyError)
     expect(sleep).toHaveBeenCalledOnce()
     expect(call).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("IdempotentPosts", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const ok: PostRegulationResult = { error: null, messageIds: [1, 2] }
+  const failed: PostRegulationResult = { error: "boom", messageIds: [] }
+
+  it("lets a command repeated while the first is in flight wait for it", async () => {
+    const posts = new IdempotentPosts()
+    let finish: (r: PostRegulationResult) => void = () => {}
+    const post = vi.fn(
+      () =>
+        new Promise<PostRegulationResult>((r) => {
+          finish = r
+        })
+    )
+
+    const first = posts.run("k", post)
+    const second = posts.run("k", post)
+    finish(ok)
+
+    expect(await first).toEqual(ok)
+    expect(await second).toEqual(ok)
+    expect(post).toHaveBeenCalledOnce()
+  })
+
+  it("answers a repeat after a success with the same messages, until the TTL", async () => {
+    vi.useFakeTimers()
+    const posts = new IdempotentPosts(1000)
+    const post = vi.fn(async () => ok)
+
+    await posts.run("k", post)
+    expect(await posts.run("k", post)).toEqual(ok)
+    expect(post).toHaveBeenCalledOnce()
+
+    vi.advanceTimersByTime(1000)
+    await posts.run("k", post)
+    expect(post).toHaveBeenCalledTimes(2)
+  })
+
+  it("forgets failures so that a retry posts again", async () => {
+    const posts = new IdempotentPosts()
+    const post = vi.fn().mockResolvedValueOnce(failed).mockResolvedValueOnce(ok)
+
+    expect(await posts.run("k", post)).toEqual(failed)
+    expect(await posts.run("k", post)).toEqual(ok)
+    expect(post).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not dedupe without a key or across keys", async () => {
+    const posts = new IdempotentPosts()
+    const post = vi.fn(async () => ok)
+
+    await posts.run(undefined, post)
+    await posts.run(undefined, post)
+    await posts.run("a", post)
+    await posts.run("b", post)
+    expect(post).toHaveBeenCalledTimes(4)
   })
 })
