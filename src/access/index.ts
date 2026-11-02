@@ -34,10 +34,12 @@ export async function authorizeAction(options: {
   required: readonly Permission[]
   /** Set only where the chat's native admins may act too (RFC v3 §4 decision 2). */
   isChatAdmin?: () => Promise<boolean>
+  /** The person's access, if already looked up; otherwise it is resolved through `backend`. */
+  actor?: () => Promise<AccessEntry>
 }): Promise<Decision> {
   return idpDecision({
     required: options.required,
-    actor: () => resolveOne(options.backend, options.actorId),
+    actor: options.actor ?? (() => resolveOne(options.backend, options.actorId)),
     isChatAdmin: options.isChatAdmin,
   }).catch((error: unknown) => {
     const { check, actorId, chatId } = options

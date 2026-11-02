@@ -220,7 +220,21 @@ export function isAllowedInGroups<
 }
 
 /**
- * Type guard to check if a command is allowed in private chats.
+ * Type guard to check if a command is allowed in private chats (scope "private" or "both").
+ * @param cmd The command to check
+ * @returns A boolean indicating if the command is allowed in private chats.
+ */
+export function isAllowedInPrivate<
+  A extends CommandArgs,
+  R extends CommandReplyTo,
+  C extends Context = Context,
+  TAccess extends AccessControl = DefaultAccessControl,
+>(cmd: Command<A, R, CommandScope, C, TAccess>): cmd is Command<A, R, "private" | "both", C, TAccess> {
+  return cmd.scope !== "group"
+}
+
+/**
+ * Type guard to check if a command is allowed only in private chats.
  * @param cmd The command to check
  * @returns A boolean indicating if the command is allowed in private chats.
  *
@@ -244,4 +258,11 @@ export function isAllowedInPrivateOnly<
   TAccess extends AccessControl = DefaultAccessControl,
 >(cmd: Command<A, R, CommandScope, C, TAccess>): cmd is Command<A, R, "private", C, TAccess> {
   return cmd.scope === "private"
+}
+
+/**
+ * All the triggers of a command, including its aliases
+ */
+export function commandTriggers<TAccess extends AccessControl>(cmd: AnyCommand<Context, TAccess>): string[] {
+  return Array.isArray(cmd.trigger) ? [...cmd.trigger] : [cmd.trigger]
 }

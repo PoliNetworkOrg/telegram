@@ -1,6 +1,6 @@
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 import { Point } from "@influxdata/influxdb-client"
-import { type CommandScopedContext, ManagedCommands } from "@/lib/managed-commands"
+import { type CommandScopedContext, ManagedCommands, type StoredCommandsMenu } from "@/lib/managed-commands"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
@@ -24,10 +24,23 @@ const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
   logger,
 })
 
+const menuStorage = new RedisFallbackAdapter<StoredCommandsMenu>({
+  redis,
+  prefix: "managed-commands:menus",
+  // a missing entry is taken as the default menu, keep entries long after they are refreshed
+  ttl: 60 * 60 * 24 * 30,
+  logger,
+})
+
 type ConversationContext = TelemetryContextFlavor<CommandScopedContext>
 
 export const commands = new ManagedCommands<Context, ConversationContext, CommandAccess>({
   adapter,
+  menus: {
+    storage: menuStorage,
+    refreshAfterMs: 60 * 60 * 1000,
+    onError: (error) => logger.warn({ error }, "[ManagedCommands] could not update the commands menu"),
+  },
   plugins: [
     (ctx, next) => {
       ctx.point = new Point("command_execution")
