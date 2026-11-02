@@ -1,6 +1,6 @@
 import { InlineKeyboard } from "grammy"
 import type { User } from "grammy/types"
-import { api } from "@/backend"
+import { serviceBackend } from "@/backend"
 import { logger } from "@/logger"
 import { TrackedMiddleware } from "@/modules/telemetry"
 import { padChatId } from "@/utils/chat"
@@ -21,7 +21,7 @@ export async function parseTelegramMessageLink(link: string): Promise<{
 
   const chatHandle = match[2]
   const chatId = chatHandle
-    ? await api.tg.groups.getByTag
+    ? await serviceBackend.tg.groups.getByTag
         .query({ tag: chatHandle })
         .then((r) => (r?.telegramId ? padChatId(r.telegramId) : null))
         .catch(() => null)
@@ -120,7 +120,7 @@ async function makeResponse(
     }
   }
 
-  const dbGroup = await api.tg.groups.getById.query({ telegramId: chat.id })
+  const dbGroup = await serviceBackend.tg.groups.getById.query({ telegramId: chat.id })
   const inviteLink = chat.invite_link ?? dbGroup?.link ?? undefined
 
   const message = await MessageUserStorage.getInstance().get(chatId, messageId)

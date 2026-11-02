@@ -4,18 +4,26 @@ import { Module } from "@/lib/modules"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { redis } from "@/redis"
+import { AUTOMATIC_LOG_INTERVAL_MS, IntervalGate } from "@/utils/bot-resilience"
 import { groupMessagesByChat, stripChatId } from "@/utils/chat"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import type { ModuleShared } from "@/utils/types"
 import { after } from "@/utils/wait"
 import { modules } from ".."
-import type { ModerationAction, PreDeleteResult } from "../moderation/types"
+import { BanAllQueueCapacityError } from "../moderation/ban-all-flow"
+import { type BanAllEntryPoint, isBanAllImmune } from "../moderation/ban-all-immunity"
+import type { ModerationAction, Moderator, PreDeleteResult } from "../moderation/types"
 import { type BanAll, getBanAllText } from "./ban-all"
 import { grantCreatedMenu, grantMessageMenu } from "./grants"
 import { getReportText, type Report, reportMenu } from "./report"
 import type * as Types from "./types"
 
 type REPORT_RESULT = "SENT" | "ALREADY_SENT" | "ERROR"
+
+export type BanAllStartResult = {
+  started: boolean
+  message: string
+}
 
 type Topics = {
   actionRequired: number
@@ -26,6 +34,13 @@ type Topics = {
   exceptions: number
   groupManagement: number
   grants: number
+}
+
+function fmtGrantActor(actor: Types.GrantActor): string {
+  if ("id" in actor) return fmtUser(actor)
+  return actor.telegramId === null
+    ? fmt(({ n }) => n`${actor.displayName}`)
+    : fmtUser({ id: actor.telegramId, first_name: actor.displayName })
 }
 
 const MOD_ACTION_TITLE = (props: ModerationAction) =>
@@ -40,6 +55,7 @@ const MOD_ACTION_TITLE = (props: ModerationAction) =>
   })[props.action]
 
 export class TgLogger extends Module<ModuleShared> {
+  private automaticLogGate = new IntervalGate(AUTOMATIC_LOG_INTERVAL_MS)
   private reportStorage = new RedisFallbackAdapter<boolean>({
     redis,
     logger,
@@ -127,6 +143,19 @@ export class TgLogger extends Module<ModuleShared> {
     return "SENT"
   }
 
+  /** Sends an actionable moderation item and forwards its source message when available. */
+  public async actionRequired(text: string, replyMarkup: InlineKeyboard, sourceMessage?: Message): Promise<boolean> {
+    const sent = await this.log(this.topics.actionRequired, text, {
+      reply_markup: replyMarkup,
+      disable_notification: false,
+    })
+    if (!sent) return false
+    if (sourceMessage) {
+      await this.forward(this.topics.actionRequired, sourceMessage.chat.id, [sourceMessage.message_id])
+    }
+    return true
+  }
+
   // NOTE: this does not delete the messages
   // TODO: better return type
   async preDelete(
@@ -136,6 +165,10 @@ export class TgLogger extends Module<ModuleShared> {
   ): Promise<PreDeleteResult | null> {
     if (!messages.length) return null
     const sender = messages[0].from
+    const isAutomatic = deleter.id === this.shared.botInfo.id
+    const unloggedResult: PreDeleteResult = { count: messages.length, logMessageIds: [] }
+
+    if (isAutomatic && !this.automaticLogGate.tryEnter()) return unloggedResult
 
     const sent = await this.log(
       this.topics.deletedMessages,
@@ -150,7 +183,7 @@ export class TgLogger extends Module<ModuleShared> {
         { sep: "\n" }
       )
     )
-    if (!sent) return null
+    if (!sent) return isAutomatic ? unloggedResult : null
 
     const forwardedIds: number[] = []
     for (const [chatId, mIds] of groupMessagesByChat(messages)) {
@@ -162,7 +195,7 @@ export class TgLogger extends Module<ModuleShared> {
 
     if (forwardedIds.length === 0) {
       void this.shared.api.deleteMessage(this.groupId, sent.message_id).catch(() => {})
-      return null
+      return isAutomatic ? unloggedResult : null
     }
 
     return {
@@ -172,15 +205,36 @@ export class TgLogger extends Module<ModuleShared> {
     }
   }
 
+  /**
+   * Starts a network-wide ban or unban. The authorization of `reporter` is checked by the caller;
+   * the target's immunity is checked here, once, for every entry point (RFC v3 §10.3).
+   */
   public async banAll(
     target: User | number,
-    reporter: User,
+    reporter: Moderator,
     type: "BAN" | "UNBAN",
-    reason?: string
-  ): Promise<string | null> {
+    entryPoint: BanAllEntryPoint,
+    reason?: string,
+    idempotencyKey?: string
+  ): Promise<BanAllStartResult> {
+    if (type === "BAN") {
+      const targetId = typeof target === "number" ? target : target.id
+      const immune = await isBanAllImmune(targetId).catch((error: unknown) => {
+        logger.error({ error, targetId, entryPoint }, "[banall] Cannot check the target's immunity")
+        return null
+      })
+      if (immune === null)
+        return {
+          started: false,
+          message: fmt(({ n }) => n`Cannot check whether this user is immune, try again later.`),
+        }
+      if (immune)
+        return { started: false, message: fmt(({ n }) => n`This user has special roles so cannot be banned.`) }
+    }
+
     const banAll: BanAll = {
       type,
-      reporter: reporter,
+      reporter: reporter.user,
       reason,
       target,
       state: {
@@ -194,26 +248,60 @@ export class TgLogger extends Module<ModuleShared> {
 
     if (!msg?.message_id) {
       logger.error("[banall] There was an error when initiating banall, no msg.msgId")
-      return fmt(
-        ({ n, b }) => [
-          b`${type} All ERROR!`,
-          n`Cannot log the message in tgLogger, therefore cannot start the procedure`,
-          n`This should be inspected as it should not never happen`,
-        ],
-        { sep: "\n" }
-      )
+      return {
+        started: false,
+        message: fmt(({ n, b }) => [b`${type} All ERROR!`, n`Could not create the moderation log.`], {
+          sep: "\n",
+        }),
+      }
     }
 
-    await modules.get("banAll").initiateBanAll(banAll, msg.message_id)
-    return fmt(
-      ({ n, b, link }) => [
-        b`${type} All started!`,
-        msg
-          ? n`Check ${link("here", `https://t.me/c/${this.groupId}/${this.topics.banAll}/${msg.message_id}`)}`
-          : undefined,
-      ],
-      { sep: "\n" }
-    )
+    try {
+      const start = await modules.get("banAll").initiateBanAll(banAll, msg.message_id, reporter.basis, idempotencyKey)
+      if (start.alreadyExisted) {
+        await this.shared.api
+          .editMessageText(
+            this.groupId,
+            msg.message_id,
+            fmt(({ n, b }) => [b`${type} All already started`, n`The existing network operation was reused.`], {
+              sep: "\n",
+            }),
+            { reply_markup: undefined, link_preview_options: { is_disabled: true } }
+          )
+          .catch((error) => logger.warn({ error }, "[banall] Failed to mark duplicate BanAll request"))
+        return {
+          started: true,
+          message: fmt(({ b }) => b`${type} All was already started.`),
+        }
+      }
+    } catch (error) {
+      const reason =
+        error instanceof BanAllQueueCapacityError
+          ? `The BanAll queue already has ${error.outstandingJobs} jobs. Try again after the current operations finish.`
+          : "The jobs could not be added to the BanAll queue."
+      if (error instanceof BanAllQueueCapacityError) logger.warn({ error }, "[banall] BanAll queue is full")
+      else logger.error({ error }, "[banall] Failed to enqueue BanAll")
+      await this.shared.api
+        .editMessageText(
+          this.groupId,
+          msg.message_id,
+          fmt(({ n, b }) => [b`${type} All not started`, n`${reason}`], { sep: "\n" }),
+          { reply_markup: undefined, link_preview_options: { is_disabled: true } }
+        )
+        .catch((editError) => logger.error({ error: editError }, "[banall] Failed to mark BanAll as rejected"))
+      return { started: false, message: reason }
+    }
+
+    return {
+      started: true,
+      message: fmt(
+        ({ n, b, link }) => [
+          b`${type} All started!`,
+          n`Check ${link("here", `https://t.me/c/${stripChatId(this.groupId)}/${this.topics.banAll}/${msg.message_id}`)}`,
+        ],
+        { sep: "\n" }
+      ),
+    }
   }
 
   public async banAllProgress(banAll: BanAll, messageId: number): Promise<void> {
@@ -225,16 +313,22 @@ export class TgLogger extends Module<ModuleShared> {
 
   public async moderationAction(props: ModerationAction): Promise<string> {
     const isAutoModeration = props.from.id === this.shared.botInfo.id
+    const shouldLog = !isAutoModeration || this.automaticLogGate.tryEnter()
 
     const others: string[] = []
-    const { invite_link } = await this.shared.api.getChat(props.chat.id)
+    const inviteLink = shouldLog ? (await this.shared.api.getChat(props.chat.id)).invite_link : undefined
 
     if (props.action === "MULTI_CHAT_SPAM") {
       const groupByChat = groupMessagesByChat(props.messages)
       others.push(fmt(({ b }) => b`\nChats involved:`))
       for (const [chatId, mIds] of groupByChat) {
-        const chat = await this.shared.api.getChat(chatId)
-        others.push(fmt(({ n, i }) => n`${fmtChat(chat, chat.invite_link)} \n${i`Messages: ${mIds.length}`}`))
+        const messageChat = props.messages.find((message) => message.chat.id === chatId)?.chat
+        const chat = shouldLog ? await this.shared.api.getChat(chatId) : messageChat
+        if (chat) {
+          const chatInviteLink =
+            shouldLog && "invite_link" in chat && typeof chat.invite_link === "string" ? chat.invite_link : undefined
+          others.push(fmt(({ n, i }) => n`${fmtChat(chat, chatInviteLink)} \n${i`Messages: ${mIds.length}`}`))
+        }
       }
     }
 
@@ -246,7 +340,7 @@ export class TgLogger extends Module<ModuleShared> {
         !isAutoModeration ? n`${b`Moderator:`} ${fmtUser(props.from)}` : undefined,
 
         // for MULTI_CHAT we have specific per-chat info
-        props.action !== "MULTI_CHAT_SPAM" ? `${b`Group:`} ${fmtChat(props.chat, invite_link)}` : undefined,
+        props.action !== "MULTI_CHAT_SPAM" ? `${b`Group:`} ${fmtChat(props.chat, inviteLink)}` : undefined,
 
         "duration" in props && props.duration
           ? n`${b`Duration:`} ${props.duration.raw} (until ${props.duration.dateStr})`
@@ -260,15 +354,16 @@ export class TgLogger extends Module<ModuleShared> {
       { sep: "\n" }
     )
 
-    const reply_markup = props.preDeleteRes
+    const reply_markup = props.preDeleteRes?.link
       ? new InlineKeyboard().url("See Deleted Message", props.preDeleteRes.link)
       : undefined
+    if (!shouldLog) return mainMsg
     await this.log(isAutoModeration ? this.topics.autoModeration : this.topics.adminActions, mainMsg, { reply_markup })
     if (!isAutoModeration) void this.logModActionInChat(props)
     return mainMsg
   }
 
-  public async groupManagement(props: Types.GroupManagement): Promise<string> {
+  public async groupManagement(props: Types.GroupManagement): Promise<string | null> {
     let msg: string
     let reply_markup: InlineKeyboard | undefined
     switch (props.type) {
@@ -335,10 +430,57 @@ export class TgLogger extends Module<ModuleShared> {
         )
         if (props.inviteLink) reply_markup = new InlineKeyboard().url("Join Group", props.inviteLink)
         break
+
+      case "REGENERATE_LINKS_START":
+        msg = fmt(
+          ({ b, n }) => [
+            b`🔄 Group link regeneration started`,
+            n`${b`Requested by:`} ${fmtUser(props.requestedBy)}`,
+            n`Every stored group primary invite link will be revoked and replaced.`,
+          ],
+          { sep: "\n" }
+        )
+        break
+
+      case "REGENERATE_LINKS_COMPLETE": {
+        const displayedFailures = props.failures.slice(0, 10)
+        msg = fmt(
+          ({ b, n, code }) => [
+            props.failures.length === 0
+              ? b`✅ Group link regeneration completed`
+              : b`⚠️ Group link regeneration completed with errors`,
+            n`${b`Requested by:`} ${fmtUser(props.requestedBy)}`,
+            n`${b`Groups found:`} ${code`${props.total}`}`,
+            n`${b`Links regenerated by Telegram:`} ${code`${props.regenerated}`}`,
+            n`${b`Links synchronized to the backend:`} ${code`${props.synchronized}`}`,
+            n`${b`Failures:`} ${code`${props.failures.length}`}`,
+            ...displayedFailures.map(
+              (failure) =>
+                n`- ${failure.title} [${code`${failure.telegramId}`}] (${failure.stage.toLowerCase()}): ${failure.reason}`
+            ),
+            props.failures.length > displayedFailures.length
+              ? n`...and ${props.failures.length - displayedFailures.length} more failures. Check application logs for details.`
+              : undefined,
+          ],
+          { sep: "\n" }
+        )
+        break
+      }
+
+      case "REGENERATE_LINKS_ABORTED":
+        msg = fmt(
+          ({ b, n }) => [
+            b`❌ Group link regeneration aborted`,
+            n`${b`Requested by:`} ${fmtUser(props.requestedBy)}`,
+            n`${b`Reason:`} ${props.reason}`,
+          ],
+          { sep: "\n" }
+        )
+        break
     }
 
-    await this.log(this.topics.groupManagement, msg, { reply_markup })
-    return msg
+    const deliveredLog = await this.log(this.topics.groupManagement, msg, { reply_markup })
+    return deliveredLog ? msg : null
   }
 
   public async grants(props: Types.GrantLog): Promise<string> {
@@ -371,7 +513,7 @@ export class TgLogger extends Module<ModuleShared> {
           ({ n, b }) => [
             b`✳ New Grant`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`By:`} ${fmtUser(props.by)}`,
+            n`${b`By:`} ${fmtGrantActor(props.by)}`,
             props.reason ? n`${b`Reason:`} ${props.reason}` : undefined,
             n`\n${b`Valid since:`} ${fmtDate(props.since)}`,
             n`${b`Valid until:`} ${fmtDate(props.until)}`,
@@ -389,7 +531,7 @@ export class TgLogger extends Module<ModuleShared> {
           ({ n, b }) => [
             b`🛑 Grant Interruption`,
             n`${b`Target:`} ${fmtUser(props.target)}`,
-            n`${b`By:`} ${fmtUser(props.by)}`,
+            n`${b`By:`} ${fmtGrantActor(props.by)}`,
           ],
           { sep: "\n" }
         )

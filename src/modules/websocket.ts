@@ -1,6 +1,8 @@
 import { type TelegramSocket, WS_PATH } from "@polinetwork/backend"
 import * as parser from "@socket.io/devalue-parser"
+import type { User } from "grammy/types"
 import { io } from "socket.io-client"
+import { serviceTokens } from "@/backend"
 import { env } from "@/env"
 import { Module } from "@/lib/modules"
 import { logger } from "@/logger"
@@ -8,6 +10,21 @@ import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { duration } from "@/utils/duration"
 import type { ModuleShared } from "@/utils/types"
 import type { TgLogger } from "./tg-logger"
+import type { GrantActor } from "./tg-logger/types"
+import { SocketTokenAuth } from "./websocket-auth"
+
+/** Who acted, as the backend sends it since RFC v3 §8.3. */
+type SocketActor = { sub: string | null; telegramId: string | null; displayName: string }
+
+/**
+ * The author of a grant for the log: their stored Telegram user when there is one, else the name
+ * the backend sent.
+ */
+async function grantActor({ actor }: { actor: SocketActor }): Promise<GrantActor> {
+  const telegramId = actor.telegramId === null ? null : Number(actor.telegramId)
+  const stored: User | null = telegramId ? await MessageUserStorage.getInstance().getStoredUser(telegramId) : null
+  return stored ?? { displayName: actor.displayName, telegramId }
+}
 
 type SocketError = {
   name: string
@@ -37,15 +54,18 @@ type SocketError = {
 export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }> {
   private io: TelegramSocket
   private lastErrorCode: string | null = null
+  private tokenAuth = new SocketTokenAuth(serviceTokens, { logger })
 
   constructor() {
     super()
     this.io = io(`http://${env.BACKEND_URL}`, {
       path: WS_PATH,
-      query: { type: "telegram" },
+      // The bot is identified by its token (RFC v3 §8.3).
+      auth: this.tokenAuth.auth,
       autoConnect: false,
       parser,
     })
+    this.tokenAuth.attach(this.io)
     this.io.on("connect", () => {
       logger.info("[WS] connected")
       this.lastErrorCode = null
@@ -87,12 +107,13 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
       }
     })
 
-    this.io.on("logGrantCreate", async ({ userId, adminId, validSince, validUntil, reason }, cb) => {
+    this.io.on("logGrantCreate", async (data, cb) => {
+      const { userId, validSince, validUntil, reason } = data
       const target = await MessageUserStorage.getInstance().getStoredUser(userId)
-      const admin = await MessageUserStorage.getInstance().getStoredUser(adminId)
-      if (!target || !admin) {
-        logger.error("[WS] grant create log ERROR -- cannot retrieve users")
-        cb("Cannot retrieve the users")
+      const admin = await grantActor(data)
+      if (!target) {
+        logger.error("[WS] grant create log ERROR -- cannot retrieve the target user")
+        cb("Cannot retrieve the target user")
         return
       }
 
@@ -117,12 +138,12 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
       cb(null)
     })
 
-    this.io.on("logGrantInterrupt", async ({ userId, adminId }, cb) => {
-      const target = await MessageUserStorage.getInstance().getStoredUser(userId)
-      const admin = await MessageUserStorage.getInstance().getStoredUser(adminId)
-      if (!target || !admin) {
-        logger.error("[WS] grant interrupt log ERROR -- cannot retrieve users")
-        cb("Cannot retrieve the users")
+    this.io.on("logGrantInterrupt", async (data, cb) => {
+      const target = await MessageUserStorage.getInstance().getStoredUser(data.userId)
+      const admin = await grantActor(data)
+      if (!target) {
+        logger.error("[WS] grant interrupt log ERROR -- cannot retrieve the target user")
+        cb("Cannot retrieve the target user")
         return
       }
 
@@ -144,10 +165,14 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
       cb(null)
     })
 
-    this.io.on("leaveChat", async ({ chatId, performerId }, cb) => {
+    this.io.on("leaveChat", async ({ chatId, performer }: { chatId: number; performer: SocketActor }, cb) => {
       const ok = await this.shared.api.leaveChat(chatId).catch(() => false)
 
-      if (ok) logger.info({ chatId, performerId }, "[WS] leave chat performed")
+      if (ok)
+        logger.info(
+          { chatId, performerTelegramId: performer.telegramId, performerSub: performer.sub },
+          "[WS] leave chat performed"
+        )
       cb(ok)
     })
   }
@@ -157,6 +182,7 @@ export class WebSocketClient extends Module<ModuleShared, { tgLogger: TgLogger }
   }
 
   override async stop() {
+    this.tokenAuth.stop()
     this.io.disconnect()
   }
 

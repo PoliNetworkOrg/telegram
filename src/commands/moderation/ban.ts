@@ -1,14 +1,16 @@
+import { PERMISSION } from "@/access/catalog"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
-import { Moderation } from "@/modules/moderation"
+import { Moderation, moderatorFor } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import { getTelegramId } from "@/utils/telegram-id"
-import { numberOrString, type Role } from "@/utils/types"
+import { numberOrString } from "@/utils/types"
 import { getOverloadUser, getUser } from "@/utils/users"
 
-export const ban = new CommandsCollection<Role>("Banning")
+export const ban = new CommandsCollection<CommandAccess>("Banning")
   .createCommand({
     trigger: "ban",
     args: [
@@ -25,20 +27,15 @@ export const ban = new CommandsCollection<Role>("Banning")
     scope: "group",
     reply: "optional",
     permissions: {
-      allowedRoles: ["owner", "direttivo"],
-      excludedRoles: ["creator"],
-      allowGroupAdmins: true,
+      requiredPermissions: [PERMISSION.moderate],
+      allowTelegramChatAdmins: true,
     },
-    handler: async ({ args, context, repliedTo }) => {
+    handler: async ({ args, context, repliedTo, authorization }) => {
       const userOverload = await getOverloadUser(context, repliedTo, args.reasonOrUser, args.reason)
       if (userOverload.isErr()) {
-        void ephemeral(
-          context.reply(
-            repliedTo
-              ? fmt(({ n }) => n`There was an error`)
-              : fmt(({ n }) => n`Target user not found, please try replying to their message`)
-          )
-        )
+        const text = repliedTo ? "There was an error" : "Target user not found, please try replying to their message"
+        void ephemeral(context, text)
+
         logger.error({ args, repliedTo }, `BAN: ${userOverload.error}`)
         return
       }
@@ -48,12 +45,13 @@ export const ban = new CommandsCollection<Role>("Banning")
       const res = await Moderation.ban(
         user,
         context.chat,
-        context.from,
+        moderatorFor(context.from, authorization),
         null,
         repliedTo ? [repliedTo] : undefined,
         reason
       )
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+
+      if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })
   .createCommand({
@@ -71,11 +69,10 @@ export const ban = new CommandsCollection<Role>("Banning")
     scope: "group",
     reply: "required",
     permissions: {
-      allowedRoles: ["owner", "direttivo"],
-      excludedRoles: ["creator"],
-      allowGroupAdmins: true,
+      requiredPermissions: [PERMISSION.moderate],
+      allowTelegramChatAdmins: true,
     },
-    handler: async ({ args, context, repliedTo }) => {
+    handler: async ({ args, context, repliedTo, authorization }) => {
       if (!repliedTo.from) {
         logger.error("ban: no repliedTo.from field (the msg was sent in a channel)")
         return
@@ -84,12 +81,12 @@ export const ban = new CommandsCollection<Role>("Banning")
       const res = await Moderation.ban(
         repliedTo.from,
         context.chat,
-        context.from,
+        moderatorFor(context.from, authorization),
         args.duration,
         [repliedTo],
         args.reason
       )
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })
   .createCommand({
@@ -98,26 +95,31 @@ export const ban = new CommandsCollection<Role>("Banning")
     description: "Unban a user from a group",
     scope: "group",
     permissions: {
-      allowedRoles: ["owner", "direttivo"],
-      excludedRoles: ["creator"],
-      allowGroupAdmins: true,
+      requiredPermissions: [PERMISSION.moderate],
+      allowTelegramChatAdmins: true,
     },
-    handler: async ({ args, context }) => {
+    handler: async ({ args, context, authorization }) => {
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
 
       if (!userId) {
         logger.debug(`unban: no userId for username ${args.username}`)
-        return void ephemeral(context.reply(fmt(({ b }) => b`@${context.from.username} user not found`)))
+        return void ephemeral(
+          context,
+          fmt(({ b }) => b`@${context.from.username} user not found`)
+        )
       }
 
       const user = await getUser(userId, context)
       if (!user) {
         logger.error({ userId }, "UNBAN: cannot retrieve the user")
-        return void ephemeral(context.reply(fmt(({ n }) => [n`Error: cannot find this user`])))
+        return void ephemeral(
+          context,
+          fmt(({ n }) => [n`Error: cannot find this user`])
+        )
       }
 
-      const res = await Moderation.unban(user, context.chat, context.from)
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      const res = await Moderation.unban(user, context.chat, moderatorFor(context.from, authorization))
+      if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })

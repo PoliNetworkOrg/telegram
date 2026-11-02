@@ -1,14 +1,19 @@
 import type { Chat, Message, User } from "grammy/types"
+import type { AuditBasis } from "@/modules/audit"
 import type { Duration } from "@/utils/duration"
+
+/** Who performs an action and why they may: the audit `basis` (RFC v3 §10.2). */
+export type Moderator = { user: User; basis: AuditBasis }
 
 export type PreDeleteResult = {
   count: number
   logMessageIds: number[]
-  link: string
+  link?: string
 }
 
 export type ModerationAction = {
   from: User
+  basis: AuditBasis
   target: User
   chat: Chat
   preDeleteRes?: PreDeleteResult | null

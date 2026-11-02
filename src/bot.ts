@@ -5,13 +5,14 @@ import { run, sequentialize } from "@grammyjs/runner"
 import { Point } from "@influxdata/influxdb-client"
 import { Bot, GrammyError, HttpError } from "grammy"
 import type { Update } from "grammy/types"
-import { apiTestQuery } from "./backend"
+import { backendFor, backendHealthCheck } from "./backend"
 import { commands } from "./commands"
 import { env } from "./env"
 import { MenuGenerator } from "./lib/menu"
 import { logger } from "./logger"
 import { AutoModerationStack } from "./middlewares/auto-moderation-stack"
 import { BotMembershipHandler } from "./middlewares/bot-membership-handler"
+import { CampaignSpamGuard } from "./middlewares/campaign-spam"
 import { checkUsername } from "./middlewares/check-username"
 import { GroupSpecificActions } from "./middlewares/group-specific-actions"
 import { MentionListener } from "./middlewares/mention-listener"
@@ -23,6 +24,7 @@ import { telemetry } from "./modules/telemetry/middleware"
 import { tgApiTelemetry } from "./modules/telemetry/transformer"
 import type { ExceptionLog } from "./modules/tg-logger/types"
 import { redis } from "./redis"
+import { getUpdateConcurrencyKeys, TELEGRAM_API_RETRY_OPTIONS } from "./utils/bot-resilience"
 import { once } from "./utils/once"
 import { setTelegramId } from "./utils/telegram-id"
 import type { Context, ModuleShared } from "./utils/types"
@@ -40,6 +42,7 @@ const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
   "poll_answer",
   "my_chat_member",
   "chat_member",
+  "chat_join_request",
   // "channel_post",
   // "edited_channel_post",
   // "business_connection",
@@ -49,25 +52,18 @@ const ALLOWED_UPDATES: ReadonlyArray<Exclude<keyof Update, "update_id">> = [
   // "shipping_query",
   // "pre_checkout_query",
   // "purchased_paid_media",
-  // "chat_join_request",
   // "chat_boost",
   // "removed_chat_boost",
 ]
-
-await apiTestQuery()
 
 const bot = new Bot<Context>(env.BOT_TOKEN)
 bot.use(hydrate())
 bot.use(hydrateReply)
 
-bot.api.config.use(autoRetry())
+bot.api.config.use(autoRetry(TELEGRAM_API_RETRY_OPTIONS))
 bot.api.config.use(parseMode("MarkdownV2"))
 bot.api.config.use(tgApiTelemetry())
-bot.use(
-  sequentialize((ctx) => {
-    return [ctx.chat?.id, ctx.from?.id].filter((e) => e !== undefined).map((e) => e.toString())
-  })
-)
+bot.use(sequentialize(getUpdateConcurrencyKeys))
 bot.use(telemetry())
 
 bot.init().then(() => {
@@ -76,11 +72,18 @@ bot.init().then(() => {
     botInfo: bot.botInfo,
   }
   sharedDataInit.resolve(sharedData)
+  void backendHealthCheck(bot.botInfo.id)
 })
 
+// One backend client per update, acting for its sender (RFC v3 §10.1). Not to be confused with ctx.api (Telegram).
+bot.use(async (ctx, next) => {
+  ctx.backend = backendFor(ctx.from)
+  await next()
+})
 bot.use(MenuGenerator.getInstance())
 bot.use(commands)
 bot.use(new BotMembershipHandler())
+bot.use(new CampaignSpamGuard())
 bot.use(new AutoModerationStack())
 bot.use(new GroupSpecificActions())
 bot.use(Moderation)
@@ -138,12 +141,10 @@ const runner = run(bot, {
 
 const terminate = once(async (signal: NodeJS.Signals) => {
   logger.warn(`Received ${signal}, shutting down...`)
-  await Promise.allSettled([
-    MessageUserStorage.getInstance().sync(),
-    redis.quit(),
-    runner.isRunning() && runner.stop(),
-    modules.stop(),
-  ])
+  if (runner.isRunning()) await runner.stop()
+  // Keep Redis available until buffered storage and the audit worker have stopped.
+  await Promise.allSettled([MessageUserStorage.getInstance().sync(), modules.stop()])
+  await redis.quit().catch((error: unknown) => logger.warn({ error }, "[REDIS] shutdown failed"))
   logger.info("Bot stopped!")
   process.exit(0)
 })

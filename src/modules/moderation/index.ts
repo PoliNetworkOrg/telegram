@@ -1,14 +1,27 @@
 import { Composer, type Context, type MiddlewareObj } from "grammy"
 import type { Chat, ChatMember, Message, User } from "grammy/types"
 import { err, ok, type Result } from "neverthrow"
-import { type ApiInput, api } from "@/backend"
+import type { Decision } from "@/access/decision"
+import { serviceBackend } from "@/backend"
 import { logger } from "@/logger"
 import { MessageUserStorage } from "@/middlewares/message-user-storage"
 import { groupMessagesByChat, RestrictPermissions } from "@/utils/chat"
 import { type Duration, duration } from "@/utils/duration"
 import { fmt, fmtUser } from "@/utils/format"
 import { modules } from ".."
-import type { ModerationAction, ModerationError, ModerationErrorCode, PreDeleteResult } from "./types"
+import type { AuditType } from "../audit"
+import type { ModerationAction, ModerationError, ModerationErrorCode, Moderator, PreDeleteResult } from "./types"
+
+/** A person moderating through a command or menu that `decision` allowed. */
+export function moderatorFor(user: User, decision: Decision): Moderator {
+  // Moderation commands always declare permissions, so a pass always has a basis.
+  return { user, basis: decision.basis ?? "idp_permission" }
+}
+
+/** The bot moderating on its own (RFC v3 §10.2). */
+export function automaticModerator(bot: User): Moderator {
+  return { user: bot, basis: "automatic" }
+}
 
 function deduceModerationAction(oldMember: ChatMember, newMember: ChatMember): ModerationAction["action"] | null {
   const prev = oldMember.status
@@ -35,7 +48,7 @@ function deduceModerationAction(oldMember: ChatMember, newMember: ChatMember): M
 
 const MAP_ACTIONS: Record<
   Exclude<ModerationAction["action"], "SILENT" | "MULTI_CHAT_SPAM"> | "BAN_ALL" | "UNBAN_ALL",
-  ApiInput["tg"]["auditLog"]["create"]["type"]
+  AuditType
 > = {
   MUTE: "mute",
   BAN: "ban",
@@ -71,6 +84,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
       const moderationAction = {
         action: actionType,
         from: admin,
+        basis: "telegram_ui",
         target: new_chat_member.user,
         chat,
         reason: "Manual action via Telegram UI",
@@ -133,13 +147,14 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
   private async audit(p: ModerationAction) {
     if (p.action === "SILENT" || p.action === "MULTI_CHAT_SPAM") return
 
-    await api.tg.auditLog.create.mutate({
-      adminId: p.from.id,
-      groupId: p.chat.id,
-      targetId: p.target.id,
+    await modules.get("audit").record({
       type: MAP_ACTIONS[p.action],
+      targetId: p.target.id,
+      groupId: p.chat.id,
       until: "duration" in p && p.duration ? p.duration.date : null,
       reason: "reason" in p ? p.reason : undefined,
+      basis: p.basis,
+      actorId: p.from.id,
     })
   }
 
@@ -148,28 +163,48 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
    *
    * Used when banning a user to delete all their messages in the chat
    */
-  public async deleteAllLastMessages(userId: number, chatId: number): Promise<void> {
-    await MessageUserStorage.getInstance()
-      .sync()
-      .catch(() => {})
+  public async deleteAllLastMessages(
+    userId: number,
+    chatId: number,
+    options: { requireSuccess?: boolean } = {}
+  ): Promise<void> {
+    const fail = (error: unknown, message: string, messagesCount?: number) => {
+      logger.warn({ error, userId, chatId, messagesCount }, message)
+      if (options.requireSuccess) throw error
+    }
+
+    try {
+      await MessageUserStorage.getInstance().syncMessages()
+    } catch (error) {
+      fail(error, "[Moderation:deleteAllLastMessages] failed to flush stored messages")
+      return
+    }
 
     // both the limit of tRPC endpoint and Telegram API hard limit: https://core.telegram.org/bots/api#deletemessages
-    const messages = await api.tg.messages.getLastByUser
-      .query({ userId, chatId, limit: 100 })
-      .then((res) => res.messages ?? [])
-      .catch(() => [])
+    let response: Awaited<ReturnType<typeof serviceBackend.tg.messages.getLastByUser.query>>
+    try {
+      response = await serviceBackend.tg.messages.getLastByUser.query({ userId, chatId, limit: 100 })
+    } catch (error) {
+      fail(error, "[Moderation:deleteAllLastMessages] failed to load stored messages")
+      return
+    }
 
-    const success = await modules.shared.api
-      .deleteMessages(
-        chatId,
-        messages.map((m) => m.messageId)
-      )
-      .catch(() => {})
+    if (response.error) {
+      if (response.error === "NOT_FOUND") return
 
-    logger.debug(
-      { userId, chatId, messagesCount: messages.length, success },
-      "[Moderation:deleteAllLastMessages] deleted last messages of the user in the chat"
-    )
+      const error = new Error(`Backend returned ${response.error}`)
+      fail(error, "[Moderation:deleteAllLastMessages] failed to load stored messages")
+      return
+    }
+
+    const messageIds = response.messages.map((message) => message.messageId)
+    if (messageIds.length === 0) return
+
+    try {
+      await modules.shared.api.deleteMessages(chatId, messageIds)
+    } catch (error) {
+      fail(error, "[Moderation:deleteAllLastMessages] failed to delete stored messages", messageIds.length)
+    }
   }
 
   private async perform(p: ModerationAction) {
@@ -253,7 +288,8 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
         { initialMessages: messages, executor, forwardedCount: preRes.count, deletedCount: 0 },
         "[Moderation:deleteMessages] no message(s) could be deleted"
       )
-      void modules.shared.api.deleteMessages(tgLogger.groupId, preRes.logMessageIds)
+      if (preRes.logMessageIds.length > 0)
+        void modules.shared.api.deleteMessages(tgLogger.groupId, preRes.logMessageIds)
       return err("DELETE_ERROR")
     }
 
@@ -296,47 +332,66 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
   public async ban(
     target: User,
     chat: Chat,
-    moderator: User,
+    moderator: Moderator,
     duration: Duration | null,
     messagesToDelete?: Message[],
     reason?: string
   ): Promise<Result<void, ModerationError>> {
     return await this.moderate(
-      { action: "BAN", from: moderator, target, chat, duration: duration ?? undefined, reason },
+      {
+        action: "BAN",
+        from: moderator.user,
+        basis: moderator.basis,
+        target,
+        chat,
+        duration: duration ?? undefined,
+        reason,
+      },
       messagesToDelete
     )
   }
 
-  public async unban(target: User, chat: Chat, moderator: User): Promise<Result<void, ModerationError>> {
-    return await this.moderate({ action: "UNBAN", from: moderator, target, chat })
+  public async unban(target: User, chat: Chat, moderator: Moderator): Promise<Result<void, ModerationError>> {
+    return await this.moderate({ action: "UNBAN", from: moderator.user, basis: moderator.basis, target, chat })
   }
 
   public async mute(
     target: User,
     chat: Chat,
-    moderator: User,
+    moderator: Moderator,
     duration: Duration | null,
     messagesToDelete?: Message[],
     reason?: string
   ): Promise<Result<void, ModerationError>> {
     return await this.moderate(
-      { action: "MUTE", from: moderator, target, chat, duration: duration ?? undefined, reason },
+      {
+        action: "MUTE",
+        from: moderator.user,
+        basis: moderator.basis,
+        target,
+        chat,
+        duration: duration ?? undefined,
+        reason,
+      },
       messagesToDelete
     )
   }
 
-  public async unmute(target: User, chat: Chat, moderator: User): Promise<Result<void, ModerationError>> {
-    return await this.moderate({ action: "UNMUTE", from: moderator, target, chat })
+  public async unmute(target: User, chat: Chat, moderator: Moderator): Promise<Result<void, ModerationError>> {
+    return await this.moderate({ action: "UNMUTE", from: moderator.user, basis: moderator.basis, target, chat })
   }
 
   public async kick(
     target: User,
     chat: Chat,
-    moderator: User,
+    moderator: Moderator,
     messagesToDelete?: Message[],
     reason?: string
   ): Promise<Result<void, ModerationError>> {
-    return await this.moderate({ action: "KICK", from: moderator, target, chat, reason }, messagesToDelete)
+    return await this.moderate(
+      { action: "KICK", from: moderator.user, basis: moderator.basis, target, chat, reason },
+      messagesToDelete
+    )
   }
 
   public async multiChatSpam(
@@ -351,6 +406,7 @@ class ModerationClass<C extends Context> implements MiddlewareObj<C> {
       {
         action: "MULTI_CHAT_SPAM",
         from: modules.shared.botInfo,
+        basis: "automatic",
         target,
         messages: messagesToDelete,
         duration,

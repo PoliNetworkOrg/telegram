@@ -1,6 +1,5 @@
 import { createEnv } from "@t3-oss/env-core"
 import { z } from "zod/v4"
-
 // coerce is needed for non-string values, because k8s supports only string env
 export const env = createEnv({
   server: {
@@ -14,6 +13,15 @@ export const env = createEnv({
     OPENAI_API_KEY: z.string().optional(),
     INFLUXDB_TOKEN: z.string().optional(),
     INFLUXDB_URL: z.string().default("http://localhost:8086"),
+
+    // PoliNetwork IdP (RFC v3 §10.1, §12). The bot calls the backend only with its service token.
+    IDP_PUBLIC_URL: z.url(),
+    /** In-cluster address for requests; identifiers always come from IDP_PUBLIC_URL. */
+    IDP_INTERNAL_URL: z.url().optional(),
+    OAUTH_BACKEND_RESOURCE_URI: z.url(),
+    OAUTH_BOT_CLIENT_ID: z.string().min(1),
+    /** The bot client's private signing key as a JWK (JSON), with `kid` and `alg`. */
+    OAUTH_BOT_PRIVATE_JWK: z.string().min(1),
   },
 
   runtimeEnv: process.env,

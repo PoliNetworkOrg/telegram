@@ -1,14 +1,16 @@
+import { PERMISSION } from "@/access/catalog"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
-import { Moderation } from "@/modules/moderation"
+import { Moderation, moderatorFor } from "@/modules/moderation"
 import { duration } from "@/utils/duration"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import { getTelegramId } from "@/utils/telegram-id"
-import { numberOrString, type Role } from "@/utils/types"
+import { numberOrString } from "@/utils/types"
 import { getOverloadUser, getUser } from "@/utils/users"
 
-export const mute = new CommandsCollection<Role>("Muting")
+export const mute = new CommandsCollection<CommandAccess>("Muting")
   .createCommand({
     trigger: "tmute",
     args: [
@@ -24,11 +26,10 @@ export const mute = new CommandsCollection<Role>("Muting")
     scope: "group",
     reply: "required",
     permissions: {
-      allowedRoles: ["owner", "direttivo"],
-      excludedRoles: ["creator"],
-      allowGroupAdmins: true,
+      requiredPermissions: [PERMISSION.moderate],
+      allowTelegramChatAdmins: true,
     },
-    handler: async ({ args, context, repliedTo }) => {
+    handler: async ({ args, context, repliedTo, authorization }) => {
       if (!repliedTo.from) {
         logger.error("tmute: no repliedTo.from field (the msg was sent in a channel)")
         return
@@ -37,12 +38,12 @@ export const mute = new CommandsCollection<Role>("Muting")
       const res = await Moderation.mute(
         repliedTo.from,
         context.chat,
-        context.from,
+        moderatorFor(context.from, authorization),
         args.duration,
         [repliedTo],
         args.reason
       )
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })
   .createCommand({
@@ -61,19 +62,17 @@ export const mute = new CommandsCollection<Role>("Muting")
     scope: "group",
     reply: "optional",
     permissions: {
-      allowedRoles: ["owner", "direttivo"],
-      excludedRoles: ["creator"],
-      allowGroupAdmins: true,
+      requiredPermissions: [PERMISSION.moderate],
+      allowTelegramChatAdmins: true,
     },
-    handler: async ({ args, context, repliedTo }) => {
+    handler: async ({ args, context, repliedTo, authorization }) => {
       const userOverload = await getOverloadUser(context, repliedTo, args.reasonOrUser, args.reason)
       if (userOverload.isErr()) {
         void ephemeral(
-          context.reply(
-            repliedTo
-              ? fmt(({ n }) => n`There was an error`)
-              : fmt(({ n }) => n`Target user not found, please try replying to their message`)
-          )
+          context,
+          repliedTo
+            ? fmt(({ n }) => n`There was an error`)
+            : fmt(({ n }) => n`Target user not found, please try replying to their message`)
         )
         logger.error({ args, repliedTo }, `MUTE: ${userOverload.error}`)
         return
@@ -84,12 +83,12 @@ export const mute = new CommandsCollection<Role>("Muting")
       const res = await Moderation.mute(
         user,
         context.chat,
-        context.from,
+        moderatorFor(context.from, authorization),
         null,
         repliedTo ? [repliedTo] : undefined,
         reason
       )
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })
   .createCommand({
@@ -98,27 +97,32 @@ export const mute = new CommandsCollection<Role>("Muting")
     description: "Unmute a user from a group",
     scope: "group",
     permissions: {
-      allowedRoles: ["owner", "direttivo"],
-      excludedRoles: ["creator"],
-      allowGroupAdmins: true,
+      requiredPermissions: [PERMISSION.moderate],
+      allowTelegramChatAdmins: true,
     },
-    handler: async ({ args, context }) => {
+    handler: async ({ args, context, authorization }) => {
       const userId: number | null =
         typeof args.username === "string" ? await getTelegramId(args.username.replaceAll("@", "")) : args.username
       if (!userId) {
         logger.debug(`unmute: no userId for username ${args.username}`)
-        const msg = await context.reply(fmt(({ b }) => b`@${context.from.username} user not found`))
-        return void ephemeral(msg)
+        await ephemeral(
+          context,
+          fmt(({ b }) => b`@${context.from.username} user not found`)
+        )
+        return
       }
 
       const user = await getUser(userId, context)
       if (!user) {
-        const msg = await context.reply(fmt(({ n }) => n`Error: cannot find this user`))
+        void ephemeral(
+          context,
+          fmt(({ n }) => n`Error: cannot find this user`)
+        )
         logger.error({ userId }, "UNMUTE: cannot retrieve the user")
-        return void ephemeral(msg)
+        return
       }
 
-      const res = await Moderation.unmute(user, context.chat, context.from)
-      if (res.isErr()) void ephemeral(context.reply(res.error.fmtError))
+      const res = await Moderation.unmute(user, context.chat, moderatorFor(context.from, authorization))
+      if (res.isErr()) void ephemeral(context, res.error.fmtError)
     },
   })

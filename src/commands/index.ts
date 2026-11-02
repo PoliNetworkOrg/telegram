@@ -1,37 +1,22 @@
 import type { ConversationData, VersionedState } from "@grammyjs/conversations"
 import { Point } from "@influxdata/influxdb-client"
-import { api } from "@/backend"
 import { type CommandScopedContext, ManagedCommands } from "@/lib/managed-commands"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
 import { modules } from "@/modules"
 import type { TelemetryContextFlavor } from "@/modules/telemetry"
 import { redis } from "@/redis"
-import { RedisSet } from "@/redis/set"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
-import type { Context, Role } from "@/utils/types"
+import type { Context } from "@/utils/types"
 import { printCtxFrom } from "@/utils/users"
+import { authorizeCommand, type CommandAccess } from "./access"
 import { invite } from "./invite"
-import { linkAdminDashboard } from "./link-admin-dashboard"
 import { management } from "./management"
 import { moderation } from "./moderation"
 import { pin } from "./pin"
 import { report } from "./report"
 import { search } from "./search"
-
-const userSet = new RedisSet({
-  redis,
-  prefix: "managed-commands:cached-users",
-  ttl: 60 * 60 * 24, // 24h, we can afford some staleness here and it helps reduce the number of Redis calls significantly
-})
-
-const userRolesCache = new RedisFallbackAdapter<Role[]>({
-  redis,
-  prefix: "managed-commands:user-roles",
-  ttl: 60 * 5,
-  logger,
-})
 
 const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
   redis,
@@ -39,7 +24,9 @@ const adapter = new RedisFallbackAdapter<VersionedState<ConversationData>>({
   logger,
 })
 
-export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavor<CommandScopedContext>>({
+type ConversationContext = TelemetryContextFlavor<CommandScopedContext>
+
+export const commands = new ManagedCommands<Context, ConversationContext, CommandAccess>({
   adapter,
   plugins: [
     (ctx, next) => {
@@ -48,25 +35,16 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
     },
   ],
   hooks: {
-    cachedUserSetCommands: async (userId, chatId) => {
-      const key = `${userId}:${chatId}`
-      if (await userSet.has(key)) {
-        return true
-      }
-      await userSet.add(key)
-      return false
-    },
     wrongScope: async ({ context, command }) => {
       await context.deleteMessage().catch(() => {})
       logger.info(
         `[ManagedCommands] Command '/${command.trigger}' with scope '${command.scope}' invoked by ${printCtxFrom(context)} in a '${context.chat.type}' chat`
       )
       void ephemeral(
-        context.reply(
-          fmt(
-            ({ n }) =>
-              n`This command must be run in ${command.scope === "private" ? "private chat with the bot" : "groups"}.`
-          )
+        context,
+        fmt(
+          ({ n }) =>
+            n`This command must be run in ${command.scope === "private" ? "private chat with the bot" : "groups"}.`
         )
       )
     },
@@ -77,7 +55,11 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
         `[ManagedCommands] Command '/${command.trigger}' invoked by ${printCtxFrom(context)} without permissions`
       )
       // Inform the user of restricted access
-      void ephemeral(context.reply(fmt(({ n }) => n`You are not allowed to execute this command`)))
+
+      void ephemeral(
+        context,
+        fmt(({ n }) => n`You are not allowed to execute this command`)
+      )
     },
     conversationBegin: async ({ context, command, conversation }) => {
       const now = await conversation.now()
@@ -110,12 +92,6 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       context.point.intField("duration", (await conversation.now()) - context.stackTimes.managedCommands)
       modules.get("influx").writePoint(context.point)
     },
-    overrideGroupAdminCheck: async (userId, groupId, ctx) => {
-      const { status: groupRole } = await ctx.getChatMember(userId)
-      if (groupRole === "administrator" || groupRole === "creator") return true
-      const isDbAdmin = await api.tg.permissions.checkGroup.query({ userId, groupId })
-      return isDbAdmin
-    },
     commandMiddlewareStart: async ({ context, command }) => {
       context.stackTimes = { managedCommands: Date.now() }
       context.point.tag("command", ManagedCommands.commandID(command)).tag("chat_type", context.chat.type)
@@ -125,16 +101,16 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       context.point.intField("managed_commands_duration", Date.now() - context.stackTimes.managedCommands)
     },
   },
-  getUserRoles: async (userId) => {
-    const cached = await userRolesCache.read(String(userId))
-    if (cached) return cached
-
-    const res = await api.tg.permissions.getRoles.query({ userId })
-    const roles = res.roles ?? []
-    await userRolesCache.write(String(userId), roles)
-    return roles
-  },
+  authorize: authorizeCommand,
 })
+  .createCommand({
+    trigger: "ping",
+    scope: "private",
+    description: "Replies with pong",
+    handler: async ({ context }) => {
+      await context.reply("pong")
+    },
+  })
   .createCommand({
     trigger: "start",
     scope: "private",
@@ -156,12 +132,4 @@ export const commands = new ManagedCommands<Role, Context, TelemetryContextFlavo
       )
     },
   })
-  .createCommand({
-    trigger: "ping",
-    scope: "private",
-    description: "Replies with pong",
-    handler: async ({ context }) => {
-      await context.reply("pong")
-    },
-  })
-  .withCollection(linkAdminDashboard, report, search, management, moderation, pin, invite)
+  .withCollection(report, search, management, moderation, pin, invite)

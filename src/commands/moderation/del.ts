@@ -1,16 +1,17 @@
+import { PERMISSION } from "@/access/catalog"
+import type { CommandAccess } from "@/commands/access"
 import { CommandsCollection } from "@/lib/managed-commands"
 import { logger } from "@/logger"
 import { Moderation } from "@/modules/moderation"
 import { fmt } from "@/utils/format"
 import { ephemeral, getText } from "@/utils/messages"
-import type { Role } from "@/utils/types"
 
-export const del = new CommandsCollection<Role>("Deletion").createCommand({
+export const del = new CommandsCollection<CommandAccess>("Deletion").createCommand({
   trigger: "del",
   scope: "group",
   permissions: {
-    allowedRoles: ["admin", "owner", "direttivo"],
-    allowGroupAdmins: true,
+    requiredPermissions: [PERMISSION.messagesDelete],
+    allowTelegramChatAdmins: true,
   },
   description: "Deletes the replied to message",
   reply: "required",
@@ -24,6 +25,10 @@ export const del = new CommandsCollection<Role>("Deletion").createCommand({
     })
 
     const res = await Moderation.deleteMessages([repliedTo], context.from, "Command /del")
-    if (res.isErr()) void ephemeral(context.reply(fmt(({ n }) => n`Cannot delete the message`)))
+    if (res.isErr())
+      void ephemeral(
+        context,
+        fmt(({ n }) => n`Cannot delete the message`)
+      )
   },
 })

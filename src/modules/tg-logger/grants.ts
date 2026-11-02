@@ -1,6 +1,8 @@
+import { TRPCClientError } from "@trpc/client"
 import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
-import { type ApiOutput, api } from "@/backend"
+import { authorizeAction, PERMISSION } from "@/access"
+import { type ApiOutput, backendAs, backendFor } from "@/backend"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { logger } from "@/logger"
 import { modules } from ".."
@@ -14,8 +16,24 @@ type GrantedMessage = {
   interrupted: boolean
 }
 
+type InterruptResult = ApiOutput["tg"]["grants"]["interrupt"]
+
+/**
+ * Interrupting is checked by the backend (RFC v3 §10.2): it acts for the user, who needs
+ * `tg:grants:manage`.
+ */
+async function interruptGrant(from: User, target: User): Promise<InterruptResult> {
+  return backendAs(from.id)
+    .tg.grants.interrupt.mutate({ userId: target.id })
+    .catch((error: unknown) => {
+      if (error instanceof TRPCClientError && error.data?.code === "FORBIDDEN")
+        return { success: false, error: "UNAUTHORIZED" } as const
+      throw error
+    })
+}
+
 async function handleInterrupt(ctx: CallbackCtx<Context>, target: User) {
-  const res = await api.tg.grants.interrupt.mutate({ interruptedById: ctx.from.id, userId: target.id })
+  const res = await interruptGrant(ctx.from, target)
   logger.debug({ res }, "handleInterrupt function in grants menu")
   if (!res.success) {
     return { error: res.error }
@@ -44,8 +62,13 @@ const getFeedback = (error: Error): string | null => {
 }
 
 async function handleDelete(ctx: CallbackCtx<Context>, data: GrantedMessage): Promise<{ error: Error }> {
-  const { roles } = await api.tg.permissions.getRoles.query({ userId: ctx.from.id })
-  if (!roles?.includes("direttivo")) return { error: "UNAUTHORIZED" }
+  const authorization = await authorizeAction({
+    check: "grants_menu:delete",
+    actorId: ctx.from.id,
+    backend: backendFor(ctx.from),
+    required: [PERMISSION.grantsManage],
+  })
+  if (!authorization.allowed) return { error: "UNAUTHORIZED" }
 
   const res = await Moderation.deleteMessages(
     [data.message],

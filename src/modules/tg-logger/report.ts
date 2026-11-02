@@ -1,9 +1,11 @@
 import type { Context } from "grammy"
 import type { Message, User } from "grammy/types"
+import { authorizeAction, type Decision, PERMISSION, type Permission } from "@/access"
+import { backendFor } from "@/backend"
 import { type CallbackCtx, MenuGenerator } from "@/lib/menu"
 import { fmt, fmtChat, fmtDate, fmtUser } from "@/utils/format"
 import { modules } from ".."
-import { Moderation } from "../moderation"
+import { Moderation, moderatorFor } from "../moderation"
 
 export type Report = {
   message: Message & { from: User }
@@ -61,6 +63,18 @@ async function editReportMessage<C extends Context>(report: Report, ctx: Callbac
   )
 }
 
+const NOT_ALLOWED = { feedback: "❌ You don't have enough permissions" }
+
+/** RFC v3 §10.2: each report-menu action needs its own permission. */
+function authorizeReportAction(ctx: CallbackCtx<Context>, button: string, permission: Permission): Promise<Decision> {
+  return authorizeAction({
+    check: `report_menu:${button}`,
+    actorId: ctx.from.id,
+    backend: backendFor(ctx.from),
+    required: [permission],
+  })
+}
+
 /**
  * Interactive menu for handling user reports.
  *
@@ -81,6 +95,7 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "🗑 Del",
       cb: async ({ data, ctx }) => {
+        if (!(await authorizeReportAction(ctx, "del", PERMISSION.messagesDelete)).allowed) return NOT_ALLOWED
         const res = await Moderation.deleteMessages([data.message], ctx.from, "[REPORT] resolved with delete")
         if (res.isErr())
           return {
@@ -99,10 +114,12 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "👢 Kick",
       cb: async ({ data, ctx }) => {
+        const authorization = await authorizeReportAction(ctx, "kick", PERMISSION.moderate)
+        if (!authorization.allowed) return NOT_ALLOWED
         const res = await Moderation.kick(
           data.message.from,
           data.message.chat,
-          ctx.from,
+          moderatorFor(ctx.from, authorization),
           [data.message],
           "[REPORT] resolved with kick"
         )
@@ -118,10 +135,12 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "🚫 Ban",
       cb: async ({ data, ctx }) => {
+        const authorization = await authorizeReportAction(ctx, "ban", PERMISSION.moderate)
+        if (!authorization.allowed) return NOT_ALLOWED
         const res = await Moderation.ban(
           data.message.from,
           data.message.chat,
-          ctx.from,
+          moderatorFor(ctx.from, authorization),
           null,
           [data.message],
           "[REPORT] resolved with ban"
@@ -140,15 +159,19 @@ export const reportMenu = MenuGenerator.getInstance<Context>().create<Report>("r
     {
       text: "🚨 Start BAN ALL 🚨",
       cb: async ({ data, ctx }) => {
+        const authorization = await authorizeReportAction(ctx, "ban_all", PERMISSION.moderateGlobal)
+        if (!authorization.allowed) return NOT_ALLOWED
         await ctx.api.deleteMessage(data.message.chat.id, data.message.message_id).catch(() => {})
-        modules
+        const result = await modules
           .get("tgLogger")
           .banAll(
             data.message.from,
-            ctx.from,
+            moderatorFor(ctx.from, authorization),
             "BAN",
+            "report_menu",
             `Started after report by ${data.reporter.username ?? data.reporter.id}`
           )
+        if (!result.started) return { feedback: `❌ ${result.message}` }
         await editReportMessage(data, ctx, "🚨 Start BAN ALL")
         return null
       },

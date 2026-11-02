@@ -1,6 +1,6 @@
 import type { Filter } from "grammy"
 import type { Chat } from "grammy/types"
-import { api } from "@/backend"
+import { serviceBackend } from "@/backend"
 import { GroupManagement } from "@/lib/group-management"
 import { RedisFallbackAdapter } from "@/lib/redis-fallback-adapter"
 import { logger } from "@/logger"
@@ -77,7 +77,8 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
       if (BotMembershipHandler.isJoin(ctx)) {
         // joined event
         // go next, if adder has no permission
-        if (!(await GroupManagement.checkAdderPermission(ctx.myChatMember.chat, ctx.myChatMember.from))) return next()
+        if (!(await GroupManagement.checkAdderPermission(ctx.myChatMember.chat, ctx.myChatMember.from, ctx.backend)))
+          return next()
       }
 
       if (newStatus === "administrator") {
@@ -93,7 +94,7 @@ export class BotMembershipHandler<C extends TelemetryContextFlavor<Context>> ext
   }
 
   private async fillRedis() {
-    const dbGroups = await api.tg.groups.getAll.query()
+    const dbGroups = await serviceBackend.tg.groups.getAll.query()
     await Promise.all(dbGroups.map((g) => this.TEMP_redis.write(g.telegramId.toString(), g.telegramId)))
   }
 
