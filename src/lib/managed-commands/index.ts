@@ -1,19 +1,20 @@
 export { CommandsCollection } from "./collection"
 export type { AccessControl, CommandScopedContext, DefaultAccessControl, PermissionCheck } from "./command"
-export { isAllowedInGroups, isAllowedInPrivateOnly } from "./command"
+export { isAllowedInGroups, isAllowedInPrivate, isAllowedInPrivateOnly } from "./command"
 export * from "./context"
+export type { CommandAvailability, GroupAvailability } from "./help"
 
 import type { ConversationData, ConversationStorage } from "@grammyjs/conversations"
 import { conversations, createConversation } from "@grammyjs/conversations"
 import { hydrate } from "@grammyjs/hydrate"
 import { hydrateReply, parseMode } from "@grammyjs/parse-mode"
-import type { CommandContext, Context, Middleware, MiddlewareObj } from "grammy"
+import type { Api, CommandContext, Context, Middleware, MiddlewareObj, StorageAdapter } from "grammy"
 import { Composer, MemorySessionStorage } from "grammy"
-import type { Message } from "grammy/types"
+import type { BotCommand, BotCommandScope, Chat, Message } from "grammy/types"
 import type { Result } from "neverthrow"
 import { err, ok } from "neverthrow"
 import z from "zod"
-import { isFromGroupChat, isFromPrivateChat } from "@/utils/chat"
+import { isFromPrivateChat } from "@/utils/chat"
 import { fmt } from "@/utils/format"
 import { ephemeral } from "@/utils/messages"
 import type { CommandsCollection } from "./collection"
@@ -32,8 +33,20 @@ import type {
   PermissionCheck,
   RepliedTo,
 } from "./command"
-import { isAllowedInGroups, isTypedArgumentOptions } from "./command"
+import { commandTriggers, isAllowedInGroups, isAllowedInPrivate, isTypedArgumentOptions } from "./command"
 import type { ManagedCommandsFlavor } from "./context"
+import {
+  type CommandAvailability,
+  formatHelpFromPrivate,
+  formatHelpInGroup,
+  formatUsageFromPrivate,
+  formatUsageInGroup,
+  type GroupAvailability,
+  HELP_TRIGGER,
+  type HelpSection,
+  isAvailable,
+  toMenu,
+} from "./help"
 
 export type Hook<C extends Context, Params = unknown, TAccess extends AccessControl = DefaultAccessControl> = (
   params: Params & {
@@ -78,7 +91,7 @@ export type ManagedCommandsHooks<
    * "administrator" or "creator" as group admins, but you can override this to implement your own logic,
    *  for example by checking an external database of admins
    */
-  overrideGroupAdminCheck?: (userId: number, chatId: number, context: CommandContext<OC>) => Promise<boolean>
+  overrideGroupAdminCheck?: (userId: number, chatId: number, context: OC) => Promise<boolean>
   /**
    * Called when a command is invoked, before any processing is done, can be used to implement custom logic that should
    * run before checking permissions or requirements, for example logging or analytics
@@ -91,10 +104,24 @@ export type ManagedCommandsHooks<
   commandMiddlewareEnd?: Hook<OC, unknown, TAccess>
 }
 
+/**
+ * Decides whether the sender of an update may run a command.
+ *
+ * The same function decides both whether a command runs and what `/help` and the commands menu show, so they cannot
+ * drift apart. To make that possible it must not look at the chat of the update to decide whether group admin
+ * privileges apply: `/help` in private chat asks it about running group commands, and answers `isGroupAdmin`
+ * hypothetically, since the bot cannot know in advance which groups the user administers.
+ */
 export type Authorize<OC extends Context, TAccess extends AccessControl = DefaultAccessControl> = (params: {
+  /** The update being handled, to identify the user */
   context: CommandContext<OC>
   command: AnyCommand<Context, TAccess>
-  /** The built-in group admin and group ID check */
+  /**
+   * Whether the user is an admin of the group where the command would run (see `overrideGroupAdminCheck`), always
+   * false outside of groups. Only call it when the answer matters: it may query Telegram.
+   */
+  isGroupAdmin: () => Promise<boolean>
+  /** The built-in group admin check */
   check: () => Promise<PermissionCheck>
 }) => Promise<TAccess["authorization"]>
 
@@ -119,7 +146,7 @@ export interface IManagedCommandsOptions<
    * - {@link https://grammy.dev/plugins/session sessions documentation}
    * @default MemorySessionStorage
    */
-  adapter: ConversationStorage<OC, ConversationData>
+  adapter?: ConversationStorage<OC, ConversationData>
 
   /**
    * Additional plugins to apply to the conversation inner composer.
@@ -129,7 +156,44 @@ export interface IManagedCommandsOptions<
   /**
    * Hooks to execute on specific events
    */
-  hooks: ManagedCommandsHooks<OC, C, TAccess>
+  hooks?: ManagedCommandsHooks<OC, C, TAccess>
+
+  /**
+   * Keeps the Telegram commands menu of each user in line with the commands they can run, or `false` to leave the
+   * menus alone. See {@link CommandsMenuOptions}.
+   */
+  menus?: CommandsMenuOptions | false
+}
+
+/** The menu last given to a user in a chat: their own commands, or `null` for the default menu of the chat type */
+export type StoredCommandsMenu = { commands: BotCommand[] | null; checkedAt: number }
+
+/**
+ * Every chat type gets a default menu with the commands anyone can run (the ones without `permissions`). When a user
+ * sends a message, the commands they can run in that chat are computed with the same checks that gate their
+ * execution, and if they differ from the default the user gets their own menu in that chat.
+ */
+export interface CommandsMenuOptions {
+  /**
+   * Remembers the menu last given to each user in each chat, so that it is sent to Telegram only when it changes.
+   *
+   * Keep entries for a long time (weeks): a missing entry is taken to mean the user has the default menu.
+   * @default MemorySessionStorage
+   */
+  storage?: StorageAdapter<StoredCommandsMenu>
+  /**
+   * How long a user's menu is trusted before it is computed again, to pick up changes in their permissions.
+   * @default 1 hour
+   */
+  refreshAfterMs?: number
+  /**
+   * Waits for the menu to be updated before handling the rest of the update, instead of doing it in the background.
+   * Meant for tests.
+   * @default false
+   */
+  blocking?: boolean
+  /** Called when updating a menu fails, the menu is retried the next time */
+  onError?: (error: unknown) => void
 }
 
 export type ManagedCommandsOptions<
@@ -174,6 +238,9 @@ export class ManagedCommands<
   private hooks: ManagedCommandsHooks<OC, C, TAccess>
   private adapter: ConversationStorage<OC, ConversationData>
   private registeredTriggers = new Set<string>()
+  private menus: Required<CommandsMenuOptions> | null
+  private defaultMenus: Promise<void> | null = null
+  private groupAdminChecks = new WeakMap<object, Promise<boolean>>()
 
   /**
    * Parses the `reply_to_message` field from the message object
@@ -265,38 +332,6 @@ export class ManagedCommands<
   }
 
   /**
-   * Creates a formatted message to display the usage of a command to the user
-   * @param cmd The command to print usage for
-   * @returns A markdown formatted string representing the usage of the command
-   */
-  private static formatCommandUsage<TAccess extends AccessControl>(cmd: AnyCommand<Context, TAccess>): string {
-    const args = cmd.args ?? []
-    const scope =
-      cmd.scope === "private" ? "Private Chat" : cmd.scope === "group" ? "Groups" : "Groups and Private Chat"
-
-    return fmt(({ n, b, i }) => [
-      typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | "),
-      ...args.map(({ key, optional }) => (optional ? n`[${i`${key}`}]` : n`<${i`${key}`}>`)),
-      i`\nDesc:`,
-      b`${cmd.description ?? "No description"}`,
-      i`\nScope:`,
-      b`${scope}`,
-      ...(cmd.reply ? [i`\nCall while replying to a message:`, b`${cmd.reply.toUpperCase()}`] : []),
-      args.length ? i`\nArgs:` : ``,
-      ...args.flatMap(({ key, description }) => [`\n-`, i`${key}:`, description ?? "No description"]),
-    ])
-  }
-
-  private static formatCommandShort<TAccess extends AccessControl>(cmd: AnyCommand<Context, TAccess>): string {
-    const args = cmd.args ?? []
-    return fmt(({ i, n }) => [
-      typeof cmd.trigger === "string" ? `/${cmd.trigger}` : cmd.trigger.map((t) => `/${t}`).join(" | "),
-      ...args.map(({ key, optional }) => (optional ? i` [${key}]` : i` <${key}>`)),
-      n`\n\t${cmd.description ?? "No description"}`,
-    ])
-  }
-
-  /**
    * Generate a unique ID for a command based on its trigger(s), used for conversation IDs.
    * @param cmd The command
    * @returns a unique ID for the command based on its trigger(s)
@@ -330,6 +365,27 @@ export class ManagedCommands<
     this.authorize = options?.authorize ?? ((({ check }) => check()) as Authorize<OC, TAccess>)
     this.hooks = options?.hooks ?? {}
     this.adapter = options?.adapter ?? new MemorySessionStorage()
+    this.menus =
+      options?.menus === false
+        ? null
+        : {
+            storage: options?.menus?.storage ?? new MemorySessionStorage<StoredCommandsMenu>(),
+            refreshAfterMs: options?.menus?.refreshAfterMs ?? 60 * 60 * 1000,
+            blocking: options?.menus?.blocking ?? false,
+            onError: options?.menus?.onError ?? (() => {}),
+          }
+    // /help is handled below, no command can take its trigger
+    this.registeredTriggers.add(HELP_TRIGGER)
+
+    if (this.menus) {
+      const { blocking } = this.menus
+      this.composer.use(async (ctx, next) => {
+        const defaults = this.setDefaultMenus(ctx.api)
+        const user = ctx.message ? this.syncUserMenu(ctx) : Promise.resolve()
+        if (blocking) await Promise.all([defaults, user])
+        return next()
+      })
+    }
 
     this.composer.use(
       conversations<OC, C>({
@@ -346,39 +402,7 @@ export class ManagedCommands<
       })
     )
 
-    this.composer.command("help", async (ctx) => {
-      if (ctx.chat.type !== "private")
-        return void ephemeral(
-          ctx,
-          fmt(({ n, code }) => n`You can only send ${code`/help`} in private chat with the bot.`)
-        )
-
-      const text = ctx.message?.text ?? ""
-
-      const [_, cmdArg] = text.replaceAll("/", "").split(" ")
-      if (cmdArg) {
-        const cmd = this.getCommands().find((c) =>
-          Array.isArray(c.trigger) ? c.trigger.includes(cmdArg) : c.trigger === cmdArg
-        )
-        if (!cmd) return ctx.reply(fmt(() => "Command not found. See /help for available commands."))
-
-        return ctx.reply(ManagedCommands.formatCommandUsage(cmd))
-      }
-
-      const reply = fmt(
-        ({ u, b, skip, n, code }) => [
-          b`Available commands:`,
-          ...Object.entries(this.commands).flatMap(([collection, cmds]) => [
-            collection === "default" ? "" : u`${b`\n${collection}:`}`,
-            ...cmds.flatMap((cmd) => [skip`${ManagedCommands.formatCommandShort(cmd)}`]),
-          ]),
-          n`\n\nType ${code`\/help <command>`} for more details on a specific command.`,
-        ],
-        { sep: "\n" }
-      )
-
-      return ctx.reply(reply)
-    })
+    this.composer.command(HELP_TRIGGER, (ctx) => this.help(ctx))
   }
 
   public getCommands() {
@@ -389,40 +413,261 @@ export class ManagedCommands<
     return cmds
   }
 
-  /** Group allow/deny lists: where a command may run, whoever runs it. */
-  private static isAllowedInChat<TAccess extends AccessControl>(
+  private findCommand(trigger: string): AnyCommand<Context, TAccess> | undefined {
+    return this.getCommands().find((cmd) => commandTriggers(cmd).includes(trigger))
+  }
+
+  /** Whether the command can run in this type of chat at all */
+  private static isInScope<TAccess extends AccessControl>(
     command: AnyCommand<Context, TAccess>,
-    ctx: CommandContext<Context>
+    chatType: Chat["type"]
   ): boolean {
-    if (!command.permissions || !isAllowedInGroups(command)) return true
-    if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") return true
-    const { allowedGroupsId, excludedGroupsId } = command.permissions
-    if (allowedGroupsId && !allowedGroupsId.includes(ctx.chatId)) return false
-    if (excludedGroupsId?.includes(ctx.chatId)) return false
+    if (chatType === "private") return isAllowedInPrivate(command)
+    if (chatType === "group" || chatType === "supergroup") return isAllowedInGroups(command)
+    return false
+  }
+
+  /** Group allow/deny lists: whether the command is enabled in a group, whoever runs it */
+  private static isEnabledInGroup<TAccess extends AccessControl>(
+    command: AnyCommand<Context, TAccess>,
+    chatId: number
+  ): boolean {
+    if (!isAllowedInGroups(command)) return false
+    const { allowedGroupsId, excludedGroupsId } = command.permissions ?? {}
+    if (allowedGroupsId && !allowedGroupsId.includes(chatId)) return false
+    if (excludedGroupsId?.includes(chatId)) return false
     return true
+  }
+
+  /** Group allow/deny lists: whether there is any group where the command is enabled */
+  private static isEnabledInSomeGroup<TAccess extends AccessControl>(command: AnyCommand<Context, TAccess>): boolean {
+    if (!isAllowedInGroups(command)) return false
+    const { allowedGroupsId, excludedGroupsId } = command.permissions ?? {}
+    if (!allowedGroupsId) return true
+    return allowedGroupsId.some((id) => !excludedGroupsId?.includes(id))
+  }
+
+  /** Whether the sender of the update is an admin of its group, asked to Telegram at most once per update */
+  private isGroupAdminHere(ctx: OC): () => Promise<boolean> {
+    return () => {
+      const from = ctx.from
+      const chat = ctx.chat
+      if (!from || !chat || (chat.type !== "group" && chat.type !== "supergroup")) return Promise.resolve(false)
+      let check = this.groupAdminChecks.get(ctx)
+      if (!check) {
+        check = this.hooks.overrideGroupAdminCheck
+          ? this.hooks.overrideGroupAdminCheck(from.id, chat.id, ctx)
+          : ctx.getChatMember(from.id).then(({ status }) => status === "administrator" || status === "creator")
+        this.groupAdminChecks.set(ctx, check)
+      }
+      return check
+    }
   }
 
   /** The built-in group admin check */
   private async checkPermissions(
     command: AnyCommand<Context, TAccess>,
-    ctx: CommandContext<OC>
+    ctx: CommandContext<OC>,
+    isGroupAdmin: () => Promise<boolean>
   ): Promise<PermissionCheck> {
     if (!command.permissions) return { allowed: true, via: "unrestricted" }
     if (!ctx.from) return { allowed: false }
+    if (isAllowedInGroups(command) && command.permissions.allowGroupAdmins && (await isGroupAdmin()))
+      return { allowed: true, via: "group_admin" }
+    return { allowed: true, via: "unrestricted" }
+  }
 
-    if (isAllowedInGroups(command) && (ctx.chat.type === "group" || ctx.chat.type === "supergroup")) {
-      if (command.permissions.allowGroupAdmins) {
-        if (this.hooks.overrideGroupAdminCheck) {
-          const isAdmin = await this.hooks.overrideGroupAdminCheck(ctx.from.id, ctx.chatId, ctx)
-          if (isAdmin) return { allowed: true, via: "group_admin" }
-        } else {
-          const { status: groupRole } = await ctx.getChatMember(ctx.from.id)
-          if (groupRole === "administrator" || groupRole === "creator") return { allowed: true, via: "group_admin" }
-        }
+  private authorizeWith(
+    command: AnyCommand<Context, TAccess>,
+    ctx: CommandContext<OC>,
+    isGroupAdmin: () => Promise<boolean>
+  ): Promise<TAccess["authorization"]> {
+    return this.authorize({
+      context: ctx,
+      command,
+      isGroupAdmin,
+      check: () => this.checkPermissions(command, ctx, isGroupAdmin),
+    })
+  }
+
+  /**
+   * The decision on running a command in the chat of the update, `null` when it is not enabled in that group.
+   * Scope is checked separately, see {@link ManagedCommands.isInScope}.
+   *
+   * This is the only path to running a command, and `/help` and the menus use it too.
+   */
+  private async decideHere(
+    command: AnyCommand<Context, TAccess>,
+    ctx: CommandContext<OC>
+  ): Promise<TAccess["authorization"] | null> {
+    const chat = ctx.chat
+    if ((chat.type === "group" || chat.type === "supergroup") && !ManagedCommands.isEnabledInGroup(command, chat.id))
+      return null
+    return this.authorizeWith(command, ctx, this.isGroupAdminHere(ctx))
+  }
+
+  /** Whether the sender of the update can run the command in the chat of the update, exactly as when invoking it */
+  private async isAvailableHere(command: AnyCommand<Context, TAccess>, ctx: CommandContext<OC>): Promise<boolean> {
+    if (!ManagedCommands.isInScope(command, ctx.chat.type)) return false
+    try {
+      return (await this.decideHere(command, ctx))?.allowed ?? false
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Whether the sender of the update could run the command in a group, from anywhere (e.g. a private chat).
+   *
+   * Runs the same decision as {@link ManagedCommands.decideHere}, but as the bot doesn't know which groups the user
+   * administers, it first decides as if they were not an admin, and if that is denied after asking, as if they were.
+   */
+  private async availabilityInGroups(
+    command: AnyCommand<Context, TAccess>,
+    ctx: CommandContext<OC>
+  ): Promise<GroupAvailability> {
+    if (!ManagedCommands.isEnabledInSomeGroup(command)) return "no"
+    try {
+      let asked = false
+      const notAdmin = async () => {
+        asked = true
+        return false
       }
+      if ((await this.authorizeWith(command, ctx, notAdmin)).allowed) return "yes"
+      if (!asked) return "no"
+      if ((await this.authorizeWith(command, ctx, async () => true)).allowed) return "if_group_admin"
+      return "no"
+    } catch {
+      return "no"
+    }
+  }
+
+  /** Where the sender of the update can run the command, as known from a private chat */
+  private async availabilityFromPrivate(
+    command: AnyCommand<Context, TAccess>,
+    ctx: CommandContext<OC>
+  ): Promise<CommandAvailability> {
+    const [inPrivate, groups] = await Promise.all([
+      isAllowedInPrivate(command) ? this.isAvailableHere(command, ctx) : false,
+      this.availabilityInGroups(command, ctx),
+    ])
+    return { private: inPrivate, groups }
+  }
+
+  /** Commands grouped by collection, keeping those for which `evaluate` gives a value */
+  private async sections<T>(
+    evaluate: (cmd: AnyCommand<Context, TAccess>) => Promise<T | null>
+  ): Promise<HelpSection<T>[]> {
+    const sections = await Promise.all(
+      Object.entries(this.commands).map(async ([collection, cmds]) => ({
+        collection,
+        entries: (await Promise.all(cmds.map(evaluate))).filter((e): e is Awaited<T> => e !== null),
+      }))
+    )
+    return sections.filter((s) => s.entries.length > 0)
+  }
+
+  /** The commands the sender of the update can run in the chat of the update */
+  private async commandsAvailableHere(ctx: CommandContext<OC>): Promise<AnyCommand<Context, TAccess>[]> {
+    const sections = await this.sections(async (cmd) => ((await this.isAvailableHere(cmd, ctx)) ? cmd : null))
+    return sections.flatMap((s) => s.entries)
+  }
+
+  private async help(ctx: CommandContext<OC>) {
+    const isPrivate = ctx.chat.type === "private"
+    if (!ctx.from || ctx.chat.type === "channel") return
+    // the user is looking for their commands, make sure their menu is up to date too
+    if (this.menus) {
+      const sync = this.syncUserMenu(ctx, true)
+      if (this.menus.blocking) await sync
     }
 
-    return { allowed: true, via: "unrestricted" }
+    const reply = (text: string) => (isPrivate ? ctx.reply(text) : ephemeral(ctx, text))
+    if (!isPrivate) await ctx.deleteMessage().catch(() => {})
+
+    const trigger = ctx.match.trim().split(/\s+/)[0]?.replace(/^\//, "").toLowerCase()
+    if (trigger) {
+      const cmd = this.findCommand(trigger)
+      const notFound = fmt(({ n, code }) => n`Command not found. See ${code`/help`} for the commands you can use.`)
+      if (!cmd) return reply(notFound)
+      if (isPrivate) {
+        const availability = await this.availabilityFromPrivate(cmd, ctx)
+        return reply(isAvailable(availability) ? formatUsageFromPrivate(cmd, availability) : notFound)
+      }
+      return reply((await this.isAvailableHere(cmd, ctx)) ? formatUsageInGroup(cmd) : notFound)
+    }
+
+    if (isPrivate) {
+      const sections = await this.sections(async (cmd) => {
+        const availability = await this.availabilityFromPrivate(cmd, ctx)
+        return isAvailable(availability) ? { cmd, availability } : null
+      })
+      return reply(formatHelpFromPrivate(sections))
+    }
+    const sections = await this.sections(async (cmd) => ((await this.isAvailableHere(cmd, ctx)) ? cmd : null))
+    return reply(formatHelpInGroup(sections))
+  }
+
+  /** The menu for users who can run only the commands that anyone can run (the ones without `permissions`) */
+  private defaultMenu(chatType: "private" | "group"): BotCommand[] {
+    return toMenu(
+      this.getCommands().filter(
+        (cmd) => !cmd.permissions && (chatType === "private" ? isAllowedInPrivate(cmd) : isAllowedInGroups(cmd))
+      )
+    )
+  }
+
+  /** Sets the default menus, once, retrying on the next update if it fails */
+  private setDefaultMenus(api: Api): Promise<void> {
+    this.defaultMenus ??= Promise.all([
+      api.setMyCommands(this.defaultMenu("private"), { scope: { type: "all_private_chats" } }),
+      api.setMyCommands(this.defaultMenu("group"), { scope: { type: "all_group_chats" } }),
+    ]).then(
+      () => {},
+      (error: unknown) => {
+        this.defaultMenus = null
+        this.menus?.onError(error)
+      }
+    )
+    return this.defaultMenus
+  }
+
+  /**
+   * Gives the sender of the update their own menu in its chat, if their commands differ from the default.
+   * Never throws.
+   * @param force recompute the menu even if it was checked recently
+   */
+  private async syncUserMenu(ctx: OC, force = false): Promise<void> {
+    const menus = this.menus
+    const { from, chat } = ctx
+    if (!menus || !from || from.is_bot || !chat) return
+    const chatType = chat.type === "private" ? "private" : chat.type === "channel" ? null : "group"
+    if (!chatType) return
+
+    try {
+      const key = `${chat.id}:${from.id}`
+      const now = Date.now()
+      const saved = await menus.storage.read(key)
+      if (!force && saved && now - saved.checkedAt < menus.refreshAfterMs) return
+
+      // the update may not be a command, but only its sender and chat are looked at
+      const available = await this.commandsAvailableHere(ctx as CommandContext<OC>)
+      const menu = toMenu(available)
+      const commands = JSON.stringify(menu) === JSON.stringify(this.defaultMenu(chatType)) ? null : menu
+
+      // without a saved menu, the user is assumed to have the default one
+      if (JSON.stringify(commands) !== JSON.stringify(saved?.commands ?? null)) {
+        const scope: BotCommandScope =
+          chatType === "private"
+            ? { type: "chat", chat_id: chat.id }
+            : { type: "chat_member", chat_id: chat.id, user_id: from.id }
+        if (commands) await ctx.api.setMyCommands(commands, { scope })
+        else await ctx.api.deleteMyCommands({ scope })
+      }
+      await menus.storage.write(key, { commands, checkedAt: now })
+    } catch (error) {
+      menus.onError(error)
+    }
   }
 
   /**
@@ -495,15 +740,13 @@ export class ManagedCommands<
 
       // silently delete the command call if the scope is invalid
       const isPrivate = isFromPrivateChat(ctx)
-      if ((cmd.scope === "private" && !isPrivate) || (cmd.scope === "group" && !isFromGroupChat(ctx))) {
+      if (!ManagedCommands.isInScope(cmd, ctx.chat.type)) {
         if (this.hooks.wrongScope) await this.hooks.wrongScope({ context: ctx, command: cmd })
         return
       }
 
       // delete the command call if the user is not allowed to use it
-      const authorization = ManagedCommands.isAllowedInChat(cmd, ctx)
-        ? await this.authorize({ context: ctx, command: cmd, check: () => this.checkPermissions(cmd, ctx) })
-        : null
+      const authorization = await this.decideHere(cmd, ctx)
       if (!authorization?.allowed) {
         if (this.hooks.missingPermissions) await this.hooks.missingPermissions({ context: ctx, command: cmd })
         return
