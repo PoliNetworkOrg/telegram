@@ -11,6 +11,7 @@ export const BANNED_DOMAINS = [
   "amazon.it/gp/student",
   "amazon.com/gp/student",
   "polinetwork.it",
+  "mateapp.it",
 ] as const
 
 export const MULTI_CHAT_SPAM = {
