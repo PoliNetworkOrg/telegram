@@ -10,9 +10,11 @@ import {
 } from "@/modules/post-regulation"
 
 const text = [
-  "📜 <b>Raccolta dei Regolamenti Interni</b>",
-  "Approvata dal Consiglio Direttivo il 08/10/2026.",
-  'Opposizioni e ricorsi entro il 28/10/2026. <a href="https://github.com/PoliNetworkOrg/legal/releases/tag/rri-v2026.10.08">Release</a>',
+  "📙 <b>Raccolta dei Regolamenti Interni</b>: nuova versione <code>rri-v2026.10.08</code>",
+  "Approvato dal Consiglio Direttivo il 08/10/2026.",
+  "Pareri contrari e ricorsi entro il 28/10/2026.",
+  "In allegato il testo ufficiale (RaccoltaRegolamentiInterni.pdf) e il documento delle differenze (differenze-rri-v2026.10.08.pdf), che non ha valore ufficiale.",
+  'Per chi ha accesso alla dashboard: <a href="https://dashboard.example.test/dashboard/regulations/drafts/d1/diff">le modifiche</a>.',
 ].join("\n")
 
 const b64 = (bytes: number[] | Uint8Array) => Buffer.from(bytes).toString("base64")
@@ -28,10 +30,10 @@ const payload = (overrides: Partial<PostRegulationPayload> = {}): PostRegulation
     deliberaDate: "2026-10-08",
     oppositionDeadline: "2026-10-28",
     tag: "rri-v2026.10.08",
-    releaseUrl: "https://github.com/PoliNetworkOrg/legal/releases/tag/rri-v2026.10.08",
+    dashboardUrl: "https://dashboard.example.test/dashboard/regulations/drafts/d1/diff",
   },
   files: [
-    { filename: "rri-v2026.10.08.pdf", contentType: "application/pdf", base64: b64([1, 2, 3]) },
+    { filename: "RaccoltaRegolamentiInterni.pdf", contentType: "application/pdf", base64: b64([1, 2, 3]) },
     { filename: "differenze-rri-v2026.10.08.pdf", contentType: "application/pdf", base64: b64([4, 5]) },
   ],
   idempotencyKey: "notification-1",
@@ -80,7 +82,7 @@ describe("postRegulation", () => {
     expect(other).toEqual({ message_thread_id: 42 })
     expect(media).toHaveLength(2)
     expect(media[0]).toEqual({ type: "document", media: expect.any(InputFile) })
-    expect((media[0].media as InputFile).filename).toBe("rri-v2026.10.08.pdf")
+    expect((media[0].media as InputFile).filename).toBe("RaccoltaRegolamentiInterni.pdf")
     expect(media[1]).toMatchObject({ type: "document", caption: text, parse_mode: "HTML" })
     expect((media[1].media as InputFile).filename).toBe("differenze-rri-v2026.10.08.pdf")
   })

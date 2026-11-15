@@ -23,7 +23,8 @@ export type PostRegulationPayload = {
     deliberaDate: string
     oppositionDeadline: string | null
     tag: string
-    releaseUrl: string
+    /** The draft's diff in the dashboard, for people with dashboard access; null when not configured. */
+    dashboardUrl: string | null
   }
   /**
    * In order: the new official PDF, then the differences PDF. Base64 rather than bytes: the backend's Bun engine does
